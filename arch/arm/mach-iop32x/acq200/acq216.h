@@ -1,0 +1,297 @@
+/* ------------------------------------------------------------------------- */
+/* acq216.h                                                                  */
+/* ------------------------------------------------------------------------- */
+/*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
+ *                      <Peter dot Milne at D hyphen TACQ dot com>
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of Version 2 of the GNU General Public License
+    as published by the Free Software Foundation;
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * acq216.h - acq216 REGDEFS
+ */
+
+
+#ifndef __ACQ216_H__
+#define __ACQ216_H__
+
+#define ACQ200_FPGA_REG_BAR  0
+#define ACQ200_FPGA_FIFO_BAR 1
+#define ACQ200_FPGA_EXTRA_BAR 2
+
+
+#ifdef __ASSEMBLER__
+#define FPGA_REG(offset)   offset
+#else
+#define FPGA_REG(offset) ((volatile u32*)((unsigned)ACQ200_FPGA_REGS+offset))
+#endif
+
+
+/*
+ * REGISTERS
+ */
+
+#define ACQ200_BDR      FPGA_REG( 0x00 )
+#define ACQ200_FIFCON   FPGA_REG( 0x08 )
+#define ACQ200_SYSCON   FPGA_REG( 0x10 )
+#define ACQ200_CLKCON   FPGA_REG( 0x18 )
+#define ACQ200_CLKDAT   FPGA_REG( 0x20 )
+/* 0x24 not used */
+#define ACQ200_DIOCON   FPGA_REG( 0x28 )
+/* 0x2c .. 0x3c not used */
+#define ACQ216_OFFSET_DACS FPGA_REG(0x40)
+/* 0x44 not used */
+
+#define ACQ216_TCR_IMM_OFFSET 0x48
+#define ACQ216_TCR_LAT_OFFSET 0x50
+#define ACQ216_BLOCKID_OFFSET 0x68
+
+#define ACQ216_TCR_IMM  FPGA_REG(ACQ216_TCR_IMM_OFFSET)
+#define ACQ216_TCR_LAT  FPGA_REG(0x50)
+#define ACQ216_TRANSLEN FPGA_REG(0x58)
+#define ACQ216_CCT_CON  FPGA_REG(0x60)
+/* 0x64 not used */
+#define ACQ216_BLOCKID  FPGA_REG(ACQ216_BLOCKID_OFFSET)
+
+#define ACQ200_ICR_OFFSET 0x80
+#define ACQ200_ICR     FPGA_REG( ACQ200_ICR_OFFSET )
+
+
+/*
+ * FIELDS
+ */
+
+#define ACQ200_BDR_DEFAULT 0xdeadbeef
+
+
+#define ACQ200_FIFCON_HOTPOINT  0xf0000000
+#define ACQ200_FIFCON_HOTFULL   0x08000000
+#define ACQ200_FIFCON_HOTEMPTY  0x04000000
+#define ACQ200_FIFCON_HOTOVER   0x02000000
+#define ACQ200_FIFCON_HOTUNDER  0x01000000
+
+#define ACQ200_FIFCON_COLDPOINT 0x00f00000
+#define ACQ200_FIFCON_COLDFULL  0x00080000
+#define ACQ200_FIFCON_COLDEMPTY 0x00040000
+#define ACQ200_FIFCON_COLDOVER  0x00020000
+#define ACQ200_FIFCON_COLDUNDER 0x00010000
+
+#define ACQ200_FIFCON_HITIDE    0x0000f000
+#define ACQ200_FIFCON_LOTIDE    0x00000f00
+#define ACQ200_FIFCON_HOTHITIDE 0x00000f00
+/*
+#define ACQ200_FIFCON_ABOVE_HT  0x00000080
+#define ACQ200_FIFCON_BELOW_LT  0x00000040
+*/
+#define ACQ200_FIFCON_EV1       0x00000080
+#define ACQ200_FIFCON_EV0       0x00000040
+#define ACQ200_FIFCON_TRG       0x00000020
+/* not used                     0x00000010 */
+#define ACQ200_FIFCON_HITIE     0x00000008
+#define ACQ200_FIFCON_LOTIE     0x00000004
+#define ACQ200_FIFCON_HOTHITIE  0x00000004
+#define ACQ200_FIFCON_HC_RESET  0x00000002
+#define ACQ200_FIFCON_HC_ENABLE 0x00000001
+
+#define ACQ200_FIFCON_EVX (ACQ200_FIFCON_EV1|ACQ200_FIFCON_EV0)
+#define ACQ200_FIFCON_EMPTY (ACQ200_FIFCON_COLDEMPTY|ACQ200_FIFCON_HOTEMPTY)
+
+#define ACQ200_FIFCON_HOTP_SHIFT  28
+#define ACQ200_FIFCON_COLDP_SHIFT 20
+#define ACQ200_FIFCON_HIT_SHIFT   12
+#define ACQ200_FIFCON_LOT_SHIFT    8
+
+#define ACQ200_FIFCON_MASK      0xf
+
+#define ACQ200_COLDFIFO_SZ      0x1000     /* 4K bytes */
+#define ACQ200_FIFCON_COLD_HALF 0x00800000
+#define ACQ200_FIFCON_HOT_HALF  0x80000000
+
+#define ACQ200_SYSCON_GATEMODE  0x00200000
+#define ACQ200_SYSCON_TRANSMODE 0x00100000
+#define ACQ200_SYSCON_TRG_EDGE  0x00080000
+#define ACQ200_SYSCON_TRG_DIO   0x00070000
+#define ACQ200_SYSCON_EV1_EDGE  0x00008000
+#define ACQ200_SYSCON_EV1_DIO   0x00007000
+#define ACQ200_SYSCON_EV0_EDGE  0x00000800
+#define ACQ200_SYSCON_EV0_DIO   0x00000700
+#define ACQ200_SYSCON_ANTIPHASE 0x00000080
+#define ACQ200_SYSCON_TR        0x00000040    /* DO NOT USE */
+#define ACQ200_SYSCON_CH_CONFIG 0x00000030 
+#define ACQ200_SYSCON_LOOPBACK  0x00000008
+#define ACQ200_SYSCON_SOFTTRG   0x00000004
+#define ACQ200_SYSCON_SIM_MODE  0x00000002
+#define ACQ200_SYSCON_DAQEN     0x00000001
+
+
+
+
+#define WAV232_SYSCON_NDACRESET 0x00000020 /* WAV232 */
+
+
+#define ACQ200_SYSCON_CH_CONFIG_16 0x00000000
+#define ACQ200_SYSCON_CH_CONFIG_12 0x00000010
+#define ACQ200_SYSCON_CH_CONFIG_08 0x00000020
+#define ACQ200_SYSCON_CH_CONFIG_04 0x00000030
+
+/* alternate channel masks apply for ACQ216HS - AP bit set */
+#define ACQ200_SYSCON_CH_CONFAP_12 0x00000000
+#define ACQ200_SYSCON_CH_CONFAP_08 0x00000010
+#define ACQ200_SYSCON_CH_CONFAP_04 0x00000020
+#define ACQ200_SYSCON_CH_CONFAP_02 0x00000030
+
+#define ACQ200_SYSCON_EV0_SHIFT 8
+#define ACQ200_SYSCON_EV1_SHIFT 12
+#define ACQ200_SYSCON_TRG_SHIFT 16
+
+#define ACQ200_SYSCON_EV_DISABLE 0x0
+#define ACQ200_SYSCON_EV_RISING  0x8
+#define ACQ200_SYSCON_EV_FALLING 0x0
+#define ACQ200_SYSCON_EV_MASK    0xf
+
+
+#define ACQ200_CLKCON_DLL_CS_MASK 0x000f0000
+
+#define ACQ200_CLKCON_DLL_CS_DI0  0x00080000
+#define ACQ200_CLKCON_DLL_CS_DI1  0x00090000
+#define ACQ200_CLKCON_DLL_CS_DI2  0x000a0000
+#define ACQ200_CLKCON_DLL_CS_DI3  0x000b0000
+#define ACQ200_CLKCON_DLL_CS_DI4  0x000c0000
+#define ACQ200_CLKCON_DLL_CS_DI5  0x000d0000
+#define ACQ200_CLKCON_DLL_CS_16M  0x000e0000
+
+#define ACQ200_CLKCON_CS_MASK   0x0000f000
+
+#define ACQ200_CLKCON_CS_DI0    0x00008000
+#define ACQ200_CLKCON_CS_DI1    0x00009000
+#define ACQ200_CLKCON_CS_DI2    0x0000a000
+#define ACQ200_CLKCON_CS_DI3    0x0000b000
+#define ACQ200_CLKCON_CS_DI4    0x0000c000
+#define ACQ200_CLKCON_CS_DI5    0x0000d000
+#define ACQ200_CLKCON_CS_OBC    0x0000e000
+#define ACQ200_CLKCON_CS_66M    0x0000f000
+
+#define ACQ200_CLKCON_CS_SHIFT  12
+
+#define ACQ200_CLKCON_CLKMAS    0x00000800
+
+#define ACQ200_CLKCON_OCS_MASK  0x00000700
+
+#define ACQ200_CLKCON_OCS_DO0   0x00000000
+#define ACQ200_CLKCON_OCS_DO1   0x00000100
+#define ACQ200_CLKCON_OCS_DO2   0x00000200
+#define ACQ200_CLKCON_OCS_DO3   0x00000300
+#define ACQ200_CLKCON_OCS_DO4   0x00000400
+#define ACQ200_CLKCON_OCS_DO5   0x00000500
+
+
+#define ACQ200_CLKCON_EC_RISING 0x00000080
+#define ACQ200_CLKCON_EC_MASK   0x00000070
+
+
+#define ACQ200_CLKCON_EC_MASK   0x00000070
+#define ACQ200_CLKCON_EC_DI0    0x00000000
+#define ACQ200_CLKCON_EC_DI1    0x00000010
+#define ACQ200_CLKCON_EC_DI2    0x00000020
+#define ACQ200_CLKCON_EC_DI3    0x00000030
+#define ACQ200_CLKCON_EC_DI4    0x00000040
+#define ACQ200_CLKCON_EC_DI5    0x00000050
+#define ACQ200_CLKCON_EC_OBC    0x00000060    /* On Board Clock */
+#define ACQ200_CLKCON_EC_SOFT   0x00000070
+
+
+#define ACQ200_CLKCON_EC_SHIFT  4
+#define ACQ200_CLKCON_OCS_SHIFT 8
+
+#define ACQ200_CLKCON_EC_STA    0x00000008
+#define ACQ200_CLKCON_SFTCLKS   0x00000004
+#define ACQ200_CLKCON_SFTCLKMD  0x00000002
+#define ACQ200_CLKCON_EXTCLK    0x00000001
+
+#define ACQ200_CLKDAT_CLC       0xc0000000   /* Crystal Load Capacitance */
+#define ACQ200_CLKDAT_CLC_DEF   0x80000000   /* default */
+#define ACQ200_CLKDAT_TTL       0x20000000   /* 1=default */
+#define ACQ200_CLKDAT_CLK2      0x18000000   /* CLK2 */
+#define ACQ200_CLKDAT_CLK2_DEF  0x10000000
+#define ACQ200_CLKDAT_OD        0x07000000   /* Output Divide */
+#define ACQ200_CLKDAT_VDW       0x00ff8000   /* Voltage Divider Word */
+#define ACQ200_CLKDAT_RDW       0x00007f00   /* Reference Divider Word */
+#define ACQ200_CLKDAT_CLKDIV    0x000000ff
+
+
+#define ACQ200_CLKDAT_FREQ      0x0000ff00   /* RO: Frequency reading */
+
+
+#define ACQ200_CLKDAT_DEFAULTS \
+        (ACQ200_CLKDAT_CLC_DEF|ACQ200_CLKDAT_TTL|ACQ200_CLKDAT_CLK2_DEF)
+
+#define ACQ200_CLKDAT_RDW_SHL  8
+#define ACQ200_CLKDAT_VDW_SHL  15
+#define ACQ200_CLKDAT_OD_SHL   24
+
+#define ACQ200_CLKDAT_FREQ_SHL 8
+
+
+#define ACQ200_DIOCON_SETOUT    0x00ff0000
+#define ACQ200_DIOCON_OUTDAT    0x0000ff00
+#define ACQ200_DIOCON_INPDAT    0x000000ff
+
+#define ACQ200_DIOCON_SETOUT_SHL 16
+#define ACQ200_DIOCON_OUTDAT_SHL 8
+#define ACQ200_DIOCON_INPDAT_SHL 0
+
+
+#define ACQ216_CCT_RUNNING  0x80000000
+#define ACQ216_CCT_UPDCTRL  0x18000000
+#define ACQ216_CCT_TCS_MASK 0x07000000
+#define ACQ216_CCT_CAPCOM   0x0000ffffU
+
+#define ACQ216_CCT_TCS_SHL 24
+#define ACQ216_CCT_UPDCTRL_SHL 27
+
+#define ACQ216_CCT_UPDCTRL_SC 0     /* update every sample clock */
+#define ACQ216_CCT_UPDCTRL_E0 1     /* update every Event 0      */
+#define ACQ216_CCT_UPDCTRL_E1 2     /* update every Event 1      */
+#define ACQ216_CCT_UPDCTRL_CC 3     /* update every CAPCOM event */
+
+#define COLD_FIFO_SZ         8192
+#define COLD_FIFO_ENTRIES    16
+#define COLD_FIFO_ENTRY_SIZE (COLD_FIFO_SZ/COLD_FIFO_ENTRIES)
+#define COLD_FIFO_ENT
+
+#define HOT_FIFO_SZ              4096
+#define HOT_FIFO_ENTRIES         16
+#define HOT_FIFO_ENTRY_SIZE      (FIFO_SZ/FIFO_ENTRIES)
+
+#define HOT_FIFO_SZK             (HOT_FIFO_SZ/1024)
+
+
+#define COLD_FIFO_HALF(fifcon) (fifcon&ACQ200_FIFCON_COLD_HALF)
+#define HOT_FIFO_HALF(fifcon)  (fifcon&ACQ200_FIFCON_HOT_HALF)
+#define HOT_FULL(fifcon)       (HOT_FIFO_FULL_ENTRIES(fifcon)==15)
+
+
+#define  acq216_lineCode(DIx) ((DIx) + 1)
+
+
+/** Event Signature ES
+ */
+
+#define ACQ216_ES_DATA_MASK 0xffff
+#define ACQ216_ES_COLD_QUADS(es) (((es)&ACQ216_ES_DATA_MASK)>>6)
+
+#define ACQ216_ES_PRELEVEL(es)  (((es)&0x0020) != 0)
+#define ACQ216_ES_LEVEL(es) (((es)&0x0010) != 0)
+#define ACQ216_ES_EVNUM(es) ((es)&0x000f)
+
+
+
+#endif /* acq216.h */

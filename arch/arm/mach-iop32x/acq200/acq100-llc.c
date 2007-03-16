@@ -1,0 +1,2100 @@
+/* ------------------------------------------------------------------------- */
+/* acq100-llc.c driver for acq100 lowlatency controller                      */
+/* ------------------------------------------------------------------------- */
+/*   Copyright (C) 2004 Peter Milne, D-TACQ Solutions Ltd
+ *                      <Peter dot Milne at D hyphen TACQ dot com>
+                                                                               
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of Version 2 of the GNU General Public License
+    as published by the Free Software Foundation;
+                                                                               
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+                                                                               
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
+/* ------------------------------------------------------------------------- */
+
+#define ACQ196
+
+#define WRITE_LAST_AO_SINGLE 0
+#define CHECK_DAC_UPDATE     0
+#define USE_GTSR             0
+#define COUNT_CLEARS_ON_TRIG 1
+#define AVOID_HOT_UNDERRUN   0
+#define USES_CLKDLY          1
+#define USE_DBG              0
+#define CHECK_DAC_DMA_ERRORS 0
+#define SYNC2V               1
+#define DMA_POLL_HOLDOFF     1
+#define FIFO_ONESAM          1
+#define DI_IN_1              1
+
+/** @file acq100-llc.c acq1xxx low latency control kernel module.
+ *  DMA should fire on HOT_NE, and it should be IMPOSSIBLE to get a 
+ *  HOT UNDERRUN. However, this does happen 1/1000 times
+ *  AVOID_HOT_UNDERRUN plays it safe by waiting for all COLD FIFOS to empty 1st
+ * Module Design
+ *
+ * This driver is the "low latency controller" 
+ * It builds on services provided by the acq100-fifo.c device driver
+ *
+
+- ECM:
+
+- TRIG : DI3 mezz
+
+- CLK : DI0 mezz => source for Internal Clock Gen, output on DO1
+
+ * sync2V : two chain sync mode - for maximum reprate, IO data is aggregated 
+ * so that there are only two DMA transfers 
+ * - One Input Vector:
+ *  - AI
+ *  - DI32
+ *  - TLATCH, DI6, STATUS, TLATCH
+ *
+ * - One Output Vector:
+ *  - AO
+ *  - DO32
+ *
+ * - NB DI32, DO32 are overlaid, the direction is configured externally
+ *
+
+ * @todo - can we do the marshalling and tee the DMA inside 2 usecs?.
+ * 
+ *
+ * - extensions: IODD may be applied.
+ */
+#include <linux/kernel.h>
+#include <linux/interrupt.h>
+#include <linux/platform_device.h>
+#include <linux/time.h>
+#include <linux/init.h>
+#include <linux/timex.h>
+#include <linux/mm.h>
+#include <linux/moduleparam.h>
+
+#include <asm/hardware.h>
+#include <asm/io.h>
+#include <asm/irq.h>
+#include <asm/uaccess.h>
+#include <asm/mach-types.h>
+#include <asm/mach/irq.h>
+
+#include <asm-arm/fiq.h>
+#include <linux/proc_fs.h>
+
+#ifndef EXPORT_SYMTAB
+#define EXPORT_SYMTAB
+#include <linux/module.h>
+#endif
+
+/* keep debug local to this module */
+#define acq200_debug acq100_llc_debug   
+
+#include "acq200_debug.h"
+#include "mask_iterator.h"
+
+#include "acq200-fifo-top.h"
+#include "acq200-fifo-local.h"     /* DG */
+
+#include "acq200-mu.h"
+
+
+#include "acq32busprot.h"          /* soft link to orig file */
+
+#include "acq196.h"
+
+#include "acq200-dmac.h"
+
+#define DIO_REG_TYPE (volatile u32*)
+#include "acqX00-rtm.h"
+
+
+#include "asm/arch/iop321-irqs.h"
+#define DMACINTMASK0 (IRQ_IOP321_DMA0_EOT|IRQ_IOP321_DMA0_EOC|IRQ_IOP321_DMA0_ERR)
+#define DMACINTMASK1 (IRQ_IOP321_DMA1_EOT|IRQ_IOP321_DMA1_EOC|IRQ_IOP321_DMA1_ERR)
+
+
+
+int acq100_llc_debug;
+module_param(acq100_llc_debug, int, 0666);
+
+int acq100_llc_dump_ao2bb;
+module_param(acq100_llc_dump_ao2bb, int , 0666);
+
+int disable_acq_debug = 0;         /* set 1 */
+module_param(disable_acq_debug, int, 0666);
+
+/** set to non-zero for 2V mode */
+int acq100_llc_sync2V = 0;
+
+#define ACQ100_LLC_SYNC2V         1
+#define ACQ100_LLC_SYNC2V_DI      2
+#define ACQ100_LLC_SYNC2V_DIDO    3
+#define ACQ100_LLC_SYNC2V_DIDOSTA 4
+
+module_param(acq100_llc_sync2V, int, 0666);
+
+
+int acq100_llc_sync2V_AO_len = 0;
+module_param(acq100_llc_sync2V_AO_len, int, 0666);
+
+/** one cycle "see how fast it can be mode" */
+int acq100_mem2mem = 0;
+module_param(acq100_mem2mem, int, 0666);
+
+int acq100_dropACQEN_on_exit;
+module_param(acq100_dropACQEN_on_exit, int, 0666);
+
+/** increment BUILD and VERID each build */
+#define BUILD 1069
+#define VERID "$Revision: 1.24 $ build B1069"
+
+char acq100_llc_driver_name[] = "acq100-llc";
+char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
+char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
+#if WRITE_LAST_AO_SINGLE
+"WRITE_LAST_AO_SINGLE "
+#endif
+#if USE_GTSR
+"GTSR "
+#else
+"TCR "
+#endif
+#if CHECK_DAC_UPDATE
+"CHECK_DAC_UPDATE "
+#endif
+#if (COUNT_CLEARS_ON_TRIG==0)
+"SOFTWARE_TO "
+#endif
+#if AVOID_HOT_UNDERRUN
+"AVOID_HOT_UNDERRUN "
+#endif
+#if COUNT_CLEARS_ON_TRIG
+"COUNT_CLEARS_ON_TRIG "
+#endif
+#if USE_DBG
+"USE DEBUG "
+#endif
+#if USES_CLKDLY
+"USES_CLKDLY "
+#endif
+#if CHECK_DAC_DMA_ERRORS
+"CHECK_DAC_DMA_ERRORS "
+#endif
+#if SYNC2V
+"** SYNC2V ** "
+#endif
+#if DMA_POLL_HOLDOFF
+"DMA_POLL_HOLDOFF "
+#endif
+#if FIFO_ONESAM
+"FIFO_ONESAM "
+#endif
+"\n";
+
+#define DBG dbg
+
+
+char acq100_llc_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
+
+
+/** size of fifo extension for sync2v */
+#define SCRATCHPAD_SIZE (32*sizeof(short)) 
+#define AO_SCRATCHPAD_SIZE (4)
+
+
+#define REPORT_ERROR(fmt, arg...) \
+    sprintf(dg.status.report, "%d " fmt, dg.status.errline = __LINE__, arg)
+
+#define REPORT_ERROR_AND_QUIT(fmt, arg...) \
+        REPORT_ERROR(fmt, arg); goto quit
+
+#define REPORT_AND_QUIT(fmt, arg...) \
+        sprintf(dg.status.report, "%d " fmt, __LINE__, arg); goto quit
+
+/**
+ *   @@todo WORKTODO
+ */
+
+#define FIFO_DATA          0
+#define LLC_CSR_IS_ARMED   1 
+
+
+#define AOCHAN 16
+
+#define CHANNEL_MASK (CAPDEF->channel_mask)
+
+static int getNumChan(u32 cmask){
+	int nchan = 0;
+
+	if (cmask&1) ++nchan;
+	if (cmask&2) ++nchan;
+	if (cmask&4) ++nchan;
+
+	return nchan * 32;
+}
+static struct LlcDevGlobs {
+	int emergency_stop;
+	struct LlcPrams {
+		enum { ECM = 1, SCM = 2 } m_mode;
+		int clkpos;
+		int trpos;
+		int intsoftclock;
+		int divisor;
+		int simulate;
+	} prams;
+	unsigned imask;
+	unsigned coldfifo_ne_mask;
+	int sample_size;
+	int dac_lowlat;
+	int sync_output;                  /* ao, do sync with ai */
+
+/* @@todo - publish SETTINGS thru /sys/.../settings (ro) */
+	struct SETTINGS {                /* user specified things */
+		int decim_base;               
+		unsigned PUAD;
+		unsigned AI_target;      /* current pci target addr */
+		unsigned auto_incr;
+
+		unsigned DI_target;      /* pci addr DI0-5 */
+		/* copy 4 mailbox status info to host if NZ */		
+		unsigned STATUS_target;      /* pci addr target status [4] */
+
+		unsigned AO_src;         /* pci addr AO (for fixed scenario) */
+		unsigned DO_src;         /* pci addr DO32 */
+		/* Interrupt on Dma Done */
+		int iodd; /* doorbell interrupt to host if set*/
+		int soft_trigger;
+		u32 dma_poll_holdoff; /* hold off dma poll 1 unit = 5nsec */
+	} settings;
+
+	u32 *llcv2_init_buf;
+	int ai_dma_index;
+
+	struct STATUS {
+		int is_triggered;
+		unsigned iter;
+		u32 t0;
+		u32 tinst;
+		u32 tlatch;
+		u32 sample_count;
+		char report[128];
+		int errline;
+		int waiting_for_permission_to_quit;
+		unsigned fifo_poll_count;
+		unsigned dmac_poll_count[2];
+		unsigned dma_holdoff_poll_count;
+		struct COMMANDS {
+			unsigned SETADDR, ARM, SOFTCLOCK, READCTR;
+		} cmd_counts;
+		unsigned hot_starts;
+	} status;
+
+	int shot;
+} dg = {
+	.settings.decim_base = 1,
+	.dac_lowlat = 1
+};
+
+#define DEADBAND ((volatile u32*)0xdeadbeef)
+
+static volatile u32 * MBOX[] = {
+	IOP321_IMR0,
+	IOP321_IMR1,
+	IOP321_OMR0,
+	IOP321_OMR1,
+	DEADBAND,
+	DEADBAND,
+	DEADBAND,
+	DEADBAND
+};
+
+
+#define AO_BC ((AOCHAN-2*WRITE_LAST_AO_SINGLE) * sizeof(short))
+
+static unsigned get_sample_size(unsigned mask)
+/* @@todo - surely there is a generic func for this? */
+{
+	unsigned nblocks = 0;
+
+	for(; mask != 0; mask >>= 1){
+		if ((mask &1) != 0){
+			++nblocks;
+		}
+	}
+	return nblocks * 32 * 2;
+}
+
+
+int llc_intsDisable(void)
+{
+	MASK_ITERATOR_INIT(it, dg.imask);
+
+	while ( mit_hasNext( &it ) ){
+		disable_irq_nosync( mit_getNext( &it ) );
+	}
+
+	return 0;
+}
+int llc_intsEnable(void)
+{
+	MASK_ITERATOR_INIT(it, dg.imask);
+
+	while ( mit_hasNext( &it ) ){
+		enable_irq( mit_getNext( &it ) );
+	}
+
+	return 0;
+}
+
+static void set_fifo_ne_mask(unsigned cmask)
+{
+	u32 coldfifo_ne_mask = 0;
+	if (cmask&1){
+		coldfifo_ne_mask |= ACQ196_FIFSTAT_ADC1_NE;
+	}
+	if (cmask&2){
+		coldfifo_ne_mask |= ACQ196_FIFSTAT_ADC2_NE;
+	}
+	if (cmask&4){
+		coldfifo_ne_mask |= ACQ196_FIFSTAT_ADC3_NE;
+	}
+	dg.coldfifo_ne_mask = coldfifo_ne_mask;
+}
+
+static int llc_onEntryEcm(int entry_code)
+/** customisation for ECM mode. */
+{
+	*ACQ200_CLKDAT = dg.prams.divisor;
+
+	*ACQ196_CLKCON = ACQ196_CLKCON_LLSYNC;
+
+	activateSignal(CAPDEF->int_clk_src);
+	activateSignal(CAPDEF->mas_clk);
+
+	*ACQ196_TCR_IMMEDIATE = CAPDEF->int_clk_src->DIx; /** index frm 0 */
+
+	acq196_syscon_clr_all(	
+		ACQ196_SYSCON_SIM_MODE  |
+		ACQ196_SYSCON_EC_RISING |
+		ACQ196_SYSCON_EC_MASK
+	);
+
+	activateSignal(CAPDEF->ext_clk);
+	acq196_syscon_set_all(
+		(dg.prams.simulate? ACQ196_SYSCON_SIM_MODE: 0) |
+		ACQ196_SYSCON_LOWLAT
+	);
+	if (dg.dac_lowlat){
+		acq196_syscon_dac_set(ACQ196_SYSCON_LOWLAT);
+	}else{
+		acq196_syscon_dac_clr(ACQ196_SYSCON_LOWLAT);
+	}
+
+	return 0;
+}
+
+static int llc_onEntryScm(int entry_code)
+/** customisation for SCM mode */
+{
+	return 0;
+}
+
+#define BLEN (LLCV2_INIT_LAST*sizeof(u32))
+
+static int checkLLCV2_INIT(void)
+/** if A4 is non zero, then it could be an init block. 
+ * reel it in and have a look.
+ */
+{
+	u32 remaddr = *MBOX[BP_MB_A4];
+	int rc = 0;
+	if (remaddr){
+		/** need to copy in via DMA. use a consistent map - not 
+		    speed critical
+		*/		
+		u32 *buf = dg.llcv2_init_buf;
+		dma_addr_t dmabuf = dma_map_single(NULL, buf, BLEN,
+						   PCI_DMA_FROMDEVICE);
+
+		acq200_post_dmac_request(1|DMA_CHANNEL_POLL, 
+					 dmabuf, 0, remaddr, BLEN, 1);
+
+		dma_unmap_single(NULL, dmabuf, BLEN, PCI_DMA_FROMDEVICE);
+					
+		if (buf[LLCV2_INIT_MARKER] == LLCV2_INIT_MAGIC_MARKER){
+			dg.settings.AI_target = buf[LLCV2_INIT_AI_HSBT];
+			dg.settings.AO_src    = buf[LLCV2_INIT_AO_HSBS];
+			dg.settings.DO_src    = buf[LLCV2_INIT_DO_HSBS];
+			dg.settings.STATUS_target = 
+				buf[LLCV2_INIT_STATUS_HSBT];
+		}else{
+			REPORT_ERROR("LLCV2_INIT not MAGIC 0x%08x\n",
+				     buf[LLCV2_INIT_MARKER]);
+			rc = -1;
+		}
+	}
+
+	return rc;
+}
+static int llc_onEntry(int entry_code)
+/**
+ * @returns 0 => OK to run
+ */
+{
+	int rc;
+
+	++dg.shot;
+	memset(&dg.status, 0, sizeof(dg.status));
+	sprintf(dg.status.report, "llc_onEntry()");
+
+	rc = checkLLCV2_INIT();
+	if (rc){
+		return rc;
+	}
+
+	llc_intsDisable();
+
+	dac_reset();
+	dac_arm();
+
+	disable_acq();
+
+	deactivateSignal(CAPDEF->ev[0]);
+	deactivateSignal(CAPDEF->ev[1]);
+
+	*ACQ200_ICR = 0;              /* polling only */
+	disable_fifo();
+	reset_fifo();
+	enable_fifo(CHANNEL_MASK);
+	set_fifo_ne_mask(CHANNEL_MASK);
+	dg.sample_size = get_sample_size(CHANNEL_MASK);
+	
+
+	/**
+	 * store FPGA state
+	 */
+
+	switch(dg.prams.m_mode){
+	case ECM:
+		llc_onEntryEcm(entry_code);
+		break;
+	case SCM:
+		llc_onEntryScm(entry_code);
+		break;
+	default:
+		return -1;
+	}
+
+	activateSignal(CAPDEF->trig);
+
+	return 0;
+}
+
+static void llc_onExit(void)
+{
+	/**
+	 * restore FPGA state
+	 */
+
+	llc_intsEnable();
+	reactivateSignal(CAPDEF->ev[0]);
+	reactivateSignal(CAPDEF->ev[1]);
+
+	if (dg.status.errline == 0){
+		sprintf(dg.status.report, "llc_onExit OK");
+	}
+}
+
+#include "acq200-inline-dma.h"
+
+
+DEFINE_DMA_CHANNEL(ai_dma, 0);
+DEFINE_DMA_CHANNEL(ao_dma, 1);
+
+#define TRADITIONAL 1
+
+static void initAIdma(void)
+/** initialise AI dma channel */
+{
+	dma_cleanup(&ai_dma);
+	/** messaging regs can be in flight during conversion .. */
+
+	if (dg.settings.STATUS_target){
+		struct iop321_dma_desc* status_dmad = acq200_dmad_alloc();
+
+		status_dmad->NDA = 0;
+		status_dmad->PDA = dg.settings.STATUS_target;
+		status_dmad->PUAD = dg.settings.PUAD;
+		status_dmad->LAD = IOP321_REG_PA(IOP321_IMR0);
+		status_dmad->BC = 16;
+		status_dmad->DC = DMA_DCR_PCI_MW;
+		dma_append_chain(&ai_dma, status_dmad, "mbox");
+	}
+
+	if (dg.settings.AI_target || TRADITIONAL){
+		struct iop321_dma_desc* ai_dmad = acq200_dmad_alloc();
+		ai_dmad->NDA = 0;
+        /** may also be set dynamically using traditional LLC_CSR_M_SETADDR */
+		ai_dmad->PDA = dg.settings.AI_target;  
+		ai_dmad->PUAD = dg.settings.PUAD;
+		ai_dmad->LAD = DG->fpga.fifo.pa;
+		ai_dmad->BC = dg.sample_size;
+		ai_dmad->DC = DMA_DCR_PCI_MW;
+
+		dg.ai_dma_index = ai_dma.nchain;
+		dma_append_chain(&ai_dma, ai_dmad, "AI");
+	}
+
+	/** signals end of transfer. */
+	if (dg.settings.DI_target || dg.settings.STATUS_target){
+		struct iop321_dma_desc* di_dmad = acq200_dmad_alloc();
+		u32 target = dg.settings.STATUS_target?
+			dg.settings.STATUS_target + (LLCV2_STATUS_DIO*4) :
+			dg.settings.DI_target;
+		di_dmad->NDA = 0;
+		di_dmad->PDA = target;
+		di_dmad->PUAD = dg.settings.PUAD;
+		di_dmad->LAD = DG->fpga.regs.pa + 0x40; /* DIOCON */
+		di_dmad->BC = 16;
+		di_dmad->DC = DMA_DCR_PCI_MW;
+		dma_append_chain(&ai_dma, di_dmad, "DI/STATUS");
+	}
+
+
+	if (dg.sync_output){
+		if (dg.settings.AO_src){
+			struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
+
+			ao_dmad->NDA = 0;
+			ao_dmad->PDA = dg.settings.AO_src;
+			ao_dmad->PUAD = dg.settings.PUAD;
+			ao_dmad->LAD = DG->fpga.fifo.pa;
+			ao_dmad->BC = AO_BC;
+			ao_dmad->DC = DMA_DCR_PCI_MR;
+			dma_append_chain(&ai_dma, ao_dmad, "AO");
+		}
+		if (dg.settings.DO_src){
+			struct iop321_dma_desc *do_dmad = acq200_dmad_alloc();
+			do_dmad->NDA = 0;
+			do_dmad->PDA = dg.settings.DO_src;
+			do_dmad->PUAD = dg.settings.PUAD;
+			do_dmad->LAD = 0xac00000c;
+			do_dmad->BC = 8;
+			do_dmad->DC = DMA_DCR_PCI_MR;
+			dma_append_chain(&ai_dma, do_dmad, "DO");
+		}
+	}
+	DMA_DISABLE(ai_dma);
+}
+
+static void initAOdma(void)
+/** initialise AO dma channel */
+{
+	struct iop321_dma_desc* ao_dmad = acq200_dmad_alloc();
+
+	dma_cleanup(&ao_dma);
+
+	if (dg.sync_output){
+		return;
+	}
+	ao_dmad->NDA = 0;
+	ao_dmad->PDA = 0;
+	ao_dmad->PUAD = 0;
+	ao_dmad->LAD = DG->fpga.fifo.pa;
+
+	ao_dmad->BC = AO_BC;
+	ao_dmad->DC = DMA_DCR_PCI_MR;
+
+	dma_append_chain(&ao_dma, ao_dmad, "AO");
+
+
+	if (dg.settings.DO_src){
+		struct iop321_dma_desc* do_dmad = acq200_dmad_alloc();
+
+		do_dmad->NDA = 0;
+		do_dmad->PDA = dg.settings.DO_src;
+		do_dmad->PUAD = 0;
+		do_dmad->LAD = 0xac00000c;
+
+		do_dmad->BC = 8;
+		do_dmad->DC = DMA_DCR_PCI_MR;
+		dma_append_chain(&ao_dma, do_dmad, "DO");
+	}
+
+	if (acq100_llc_dump_ao2bb){
+		ao_dmad->LAD = pa_buf(DG);
+
+		/** 
+		 * @todo ... WBN to chain a second descr to do both
+		 * but setting the PDA is a lemon, so leave it
+		 */
+	}
+
+	DMA_DISABLE(ao_dma);	
+}
+
+
+#if WRITE_LAST_AO_SINGLE
+#define DMA_PRECHARGE_AO(dmac, pci_addr)				      \
+        do {								      \
+	       dmac.dmad[0]->PDA = (pci_addr);				      \
+	       dmac.dmad[1]->PDA = (pci_addr)+AOCHAN*sizeof(u16)-sizeof(u32); \
+        } while(0)
+#else
+#define DMA_PRECHARGE_AO(dmac, pci_addr)	\
+        do {					\
+	       dmac.dmad[0]->PDA = (pci_addr);	\
+        } while(0)
+#endif
+
+
+
+
+
+static int dmacPollCompletion_pmmr(struct DmaChannel* dmac)
+{
+	u32 dmacsta;
+
+	while(!DMA_DONE(*dmac, dmacsta) && !dg.emergency_stop){
+		++dg.status.dmac_poll_count[dmac->id];	   /* @@todo idle?? */
+	}
+	if ((dmacsta & IOP321_CSR_ERR) != 0){
+		err("dma error 0x%08x", dmacsta);
+		return -1;
+	}else{
+		return 0;
+	}
+}
+
+
+#define COUNT_DOWN(x0, xx, limit) \
+	(((xx) < (x0))? (x0) - (xx): (xx) + ((limit) - (x0)))
+
+static int dmacPollCompletion_cp(struct DmaChannel* dmac)
+/* CP polling - maybe doesn't interfere with the bus?. */
+/* We poll TIMER0 until dma_poll_holdoff has expired */
+{
+	u32 preload;
+	u32 count0;
+	u32 count;
+	u32 total_ticks = 0;
+	int pollcat = 0;
+	u32 holdoff = dg.settings.dma_poll_holdoff;
+
+	asm volatile("mrc p6, 0, %0, c4, c1, 0" : "=r" (preload));
+
+	asm volatile("mrc p6, 0, %0, c2, c1, 0" : "=r" (count0));
+
+	do {
+		++pollcat;
+
+		asm volatile("mrc p6, 0, %0, c2, c1, 0" : "=r" (count));
+		total_ticks += COUNT_DOWN(count0, count, preload);
+		count0 = count;
+	} while (total_ticks < holdoff && !dg.emergency_stop);
+
+	dg.status.dma_holdoff_poll_count += pollcat;
+
+	return dmacPollCompletion_pmmr(dmac);
+}
+
+static int (* dmacPollCompletion)(struct DmaChannel* dmac) = 
+	dmacPollCompletion_pmmr;
+
+
+
+
+
+
+
+
+static void llPreamble(void)
+{
+	initAIdma();
+	initAOdma();
+
+	iop321_start_ppmu();  /* @@todo start timing */
+}
+
+
+static void llPreamble2V(void)
+{
+	int ireg;
+
+	dma_cleanup(&ai_dma);
+	dma_cleanup(&ao_dma);                 /** not used, clean up anyway */
+
+	for (ireg = 0; ireg != 16; ++ireg){
+		u32 marker;
+
+		switch(ireg){
+		case LLC_SYNC2V_IN_VERID:
+			marker = BUILD;
+			break;
+		case LLC_SYNC2V_IN_LASTE:
+			marker = 0;
+			break;
+		case LLC_SYNC2V_IN_BDR:
+			marker = 0xdeadbeef;    /* emulate FPGA BDR reg */
+			break;
+		default:
+			marker = LLC_SYNC2V_IDLE_PAT;
+			break;
+		}
+		ACQ196_LL_AI_SCRATCH[ireg] = marker;
+
+		dbg(2, "init scratch LLC_SYNC2V_xx [%02d] %p = 0x%08x",
+		    ireg, &ACQ196_LL_AI_SCRATCH[ireg], marker);
+	}
+	if (dg.settings.AI_target || TRADITIONAL){
+		struct iop321_dma_desc* ai_dmad = acq200_dmad_alloc();
+		ai_dmad->NDA = 0;
+        /** may also be set dynamically using traditional LLC_CSR_M_SETADDR */
+		ai_dmad->PDA = dg.settings.AI_target;  
+		ai_dmad->PUAD = dg.settings.PUAD;
+		ai_dmad->LAD = DG->fpga.fifo.pa;
+		ai_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
+		ai_dmad->DC = DMA_DCR_PCI_MW;
+
+		dg.ai_dma_index = ai_dma.nchain;
+		dma_append_chain(&ai_dma, ai_dmad, "AI");
+
+		if (acq100_mem2mem){
+			info("mem2mem - one shot test config. host will hang");
+			ai_dmad->PDA = DG->fpga.fifo.pa;
+			ai_dmad->LAD = pa_buf(DG);
+			ai_dmad->DC = DMA_DCR_MEM2MEM;
+		}
+
+	}
+
+	if (dg.settings.AO_src){
+		struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
+
+		ao_dmad->NDA = 0;
+		ao_dmad->PDA = dg.settings.AO_src;
+		ao_dmad->PUAD = dg.settings.PUAD;
+		ao_dmad->LAD = DG->fpga.fifo.pa;
+		ao_dmad->BC = acq100_llc_sync2V_AO_len == 0?
+			AO_BC + AO_SCRATCHPAD_SIZE:
+			acq100_llc_sync2V_AO_len;
+		ao_dmad->DC = DMA_DCR_PCI_MR;
+		dma_append_chain(&ai_dma, ao_dmad, "AO");
+
+		if (acq100_mem2mem){
+			ao_dmad->PDA = pa_buf(DG) + 0x100000;
+			ao_dmad->LAD = DG->fpga.fifo.pa;
+			ao_dmad->DC = DMA_DCR_MEM2MEM;			
+		}
+	}
+
+	if (dg.settings.dma_poll_holdoff > 0){
+		dbg(1, "dmacPollCompletion_cp() selected");
+		dmacPollCompletion = dmacPollCompletion_cp;
+	}else{
+		dmacPollCompletion = dmacPollCompletion_pmmr;
+	}
+
+	acq196_syscon_set_all(ACQ196_SYSCON_SP_ENABLE);
+	acq196_syscon_dac_set(ACQ196_SYSCON_SP_ENABLE);
+	DMA_DISABLE(ai_dma);
+	iop321_start_ppmu();  /* @@todo start timing */
+}
+
+static void llPostamble(void)
+{
+	iop321_stop_ppmu();
+	if (acq100_llc_sync2V){
+		acq196_syscon_clr_all(ACQ196_SYSCON_SP_ENABLE);
+		acq196_syscon_dac_clr(ACQ196_SYSCON_SP_ENABLE);
+	}
+	if (acq100_dropACQEN_on_exit){
+		acq196_syscon_clr_all(ACQ196_SYSCON_ACQEN);
+	}
+}
+
+
+
+
+#define IS_TRIGGERED(trig) \
+     ((trig) || ((trig) = (*ACQ196_SYSCON_ADC&ACQ196_SYSCON_TRIGGERED) != 0))
+
+
+#define CTR_RUN(run) \
+     ((run) || ((run) = (*ACQ196_TCR_IMMEDIATE&ACQ196_TCR_RUN) != 0))
+
+#if USE_GTSR
+/**
+ * timer doesn't work ... fake it for now.
+ */
+
+
+
+
+
+#define SERVICE_TIMER(t)			\
+do {						\
+	t = *IOP321_GTSR;			\
+} while (0)
+
+#define GTSRMHZ 50
+
+static u32 service_tlatch(u32 tl)
+{
+	u32 tn = *IOP321_GTSR;
+
+	if (tn > tl){
+		if (tn > tl + (GTSRMHZ * dg.prams.divisor)){   
+			return tn;
+		}else{
+			return tl;
+		}
+	}else{
+		return tn;            /* rollover */
+	}
+}
+
+#define SERVICE_TLATCH(tl) (tl = service_tlatch(tl))
+
+#else
+
+/*
+#define SERVICE_ROLLOVER(tim, reg, mask, temp)	\
+        while (CTR_RUN(ctr_run)) {	\
+                temp = *(reg) & (mask);		\
+                if (((tim) & (mask)) > temp){	\
+                        (tim) += (mask) + 1;	\
+                }				\
+                (tim) = ((tim) & ~(mask)) | temp; \
+                break;				\
+       }
+*/
+
+/*
+ * duplicate assignment statement adds a conditional bitop, but loses
+ * an expensive str/ldr. Way to go!
+ */
+#define SERVICE_ROLLOVER(tim, reg, mask, temp)				   \
+        if (CTR_RUN(ctr_run)) {						   \
+                temp = *(reg) & (mask);					   \
+                if (((tim) & (mask)) > (temp)){				   \
+                        (tim) = (((tim) & ~(mask)) | (temp)) + ((mask)+1); \
+                }else{							   \
+			(tim) = (((tim) & ~(mask)) | (temp));		   \
+	        }							   \
+       }
+  
+#define SERVICE_TIMER(t) \
+        SERVICE_ROLLOVER(t, ACQ196_TCR_IMMEDIATE, ACQ196_TCR_MASK, temp)
+
+#define SERVICE_TLATCH(t) \
+        SERVICE_ROLLOVER(t, ACQ196_TCR_LATCH, ACQ196_TCR_MASK, temp)
+#endif
+  
+#define UPDATE_TINST(tinst) SERVICE_TIMER(tinst)
+#define UPDATE_TLATCH(tlatch) SERVICE_TLATCH(tlatch)
+
+#if USES_CLKDLY
+#define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
+#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDLY)
+/* because it will be ready by the time we come to service it */
+#else
+#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE)
+#define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
+#endif
+#define AISAMPLE_CLOCKED(fifstat)     (((fifstat)&FIFO_CLOCKED) != 0)
+#define AIFIFO_NOT_EMPTY(fifstat)     (((fifstat)&FIFO_NE) != 0)
+#define COLDFIFO_EMPTY(fifstat)       (((fifstat)&dg.coldfifo_ne_mask)==0)
+
+#define AO_DATA_WAITING(mfa)          (((mfa) = acq200mu_get_ib()) != 0)
+
+/*
+ * 2NOV: ACQ196_FIFSTAT_HOTPOINT is HOT d2..d5
+ * HOTPOINT measures longwords.
+ */
+
+#define HOTSAM(fifstat)  (((fifstat)&ACQ196_FIFSTAT_HOTPOINT)*(1<<2)*2)
+
+#define KICKOFF(fifstat) (HOTSAM(fifstat) >= 1)
+#define OVERRUN(fifstat) (HOTSAM(fifstat) > dg.sample_size)
+#define ESTOP            (dg.emergency_stop)
+
+#if COUNT_CLEARS_ON_TRIG
+/**
+ * twere supposed to be thus :
+ */
+#define REPORT_TLATCH (*MBOX[BP_MB_LLC_TADC] = dg.status.tlatch)
+#define REPORT_TINST  (*MBOX[BP_MB_LLC_TINST] = dg.status.tinst)
+#else
+#define REPORT_TLATCH (*MBOX[BP_MB_LLC_TADC] = dg.status.tlatch - dg.status.t0)
+#define REPORT_TINST  (*MBOX[BP_MB_LLC_TINST] = dg.status.tinst - dg.status.t0)
+#endif
+
+
+#define SCHEDULE 1    /* mask to determine scheduled tasks */
+
+
+#define SACK  (*MBOX[BP_MB_LLC_CSR] = csr |= LLC_CSR_SACK)
+#define SNACK (*MBOX[BP_MB_LLC_CSR] = csr |= LLC_CSR_SNACK)
+#define XACK  (LLC_CSR_SACK|LLC_CSR_SNACK)
+#define COMMAND (((csr = *MBOX[BP_MB_LLC_CSR]) & XACK) == 0)
+
+#if USE_DBG
+#define DMAC_GO(dmac, fifstat)					\
+	do {							\
+		DMA_FIRE(dmac);				        \
+		DBG(2,"DMAC_GO fs:0x%08x %08x=>%08x %d", 	\
+		    fifstat, DG->fpga.fifo.pa, 			\
+		    dg.settings.AI_target, dg.sample_size);	\
+	} while(0)
+
+#else
+#define DMAC_GO(dmac, fifstat) 	DMA_FIRE(dmac)
+#endif
+
+
+static void llc_loop(int entry_code)
+{
+	u32 csr = 0;
+	int decim_count = 1;
+	u32 fifstat;
+	MFA ao_data;
+	u32 tcycle = 0;
+	u32 fifstat2;
+	u32 temp;
+	int ctr_run = 0;
+	int snack_on_quit = 1;
+
+	DBG(1, "ENTER %d", entry_code);
+
+	llPreamble();
+	csr |= LLC_CSR_READY;
+	SACK;
+
+	for (dg.status.iter = 0; !dg.emergency_stop; ){
+		/** @critical STARTS */
+		fifstat = *ACQ196_FIFSTAT;
+
+		if (AISAMPLE_CLOCKED(fifstat)){
+#if AVOID_HOT_UNDERRUN
+			if (!KICKOFF(fifstat)){
+				do {
+					fifstat2 = *ACQ196_FIFSTAT;
+					++dg.status.fifo_poll_count;
+				} while(!KICKOFF(fifstat2) && !ESTOP);
+			}
+#endif
+			DMAC_GO(ai_dma, fifstat);
+			/* @critical ENDS */
+
+			if (dg.status.sample_count == 0){
+				dg.status.t0 = dg.status.tlatch;
+			}
+			if ( csr&LLC_CSR_M_SOFTCLOCK ){
+				// @todo acq32_softClock( 0 );      
+			}
+			if (dmacPollCompletion(&ai_dma) != 0){
+				REPORT_ERROR_AND_QUIT(
+					"ERROR:DMAC status bad 0x%08x\n",
+					DMA_STA(ai_dma));
+			}
+			UPDATE_TLATCH(dg.status.tlatch);
+			REPORT_TLATCH;
+
+			/** Interrupt on DMA DONE */
+			if (dg.settings.iodd){
+				*IOP321_ODR |= BP_INT_LLC_DMA_DONE;
+			}
+
+			UPDATE_TINST(dg.status.tinst);
+			REPORT_TINST;
+
+			tcycle = dg.status.tinst - dg.status.tlatch;
+
+			fifstat2 = *ACQ196_FIFSTAT;
+
+			if (OVERRUN(fifstat)) goto onOverrun;
+			if (AIFIFO_NOT_EMPTY(fifstat2)) goto onFifoNotEmpty;
+#if USE_DBG
+			DBG(2, "status 0x%08x, sent data to 0x%08x %d %d %d\n",
+			    csr, dg.settings.AI_target, 
+			    dg.status.tlatch, 
+			    dg.status.tinst, tcycle);
+#endif
+			DMA_ARM(ai_dma);
+			dg.status.sample_count++;
+		}
+		if (AO_DATA_WAITING(ao_data)){
+#if CHECK_DAC_DMA_ERRORS
+			u32 dmacsta;
+#endif
+			/**
+			 * @critical - kick off DMAC with AO data
+			 */
+#if CHECK_DAC_UPDATE
+			u32 syscon_dac = *ACQ196_SYSCON_DAC;
+
+			if ((syscon_dac & ACQ196_SYSCON_DAC_UPD) != 0){
+				err("WARNING: DAC update bit already set");
+			}
+#endif
+#if CHECK_DAC_DMA_ERRORS
+/** ERROR if still busy from last time */
+			if (!(DMA_DONE(ao_dma, dmacsta))){
+				REPORT_ERROR_AND_QUIT(
+					"ERROR aodma NOT idle %08x\n",
+					dmacsta);
+			}else if ((dmacsta & IOP321_CSR_ERR) != 0){
+				REPORT_ERROR_AND_QUIT(
+					"ERROR aodma ERROR %08x\n",
+					dmacsta);
+			}
+#endif
+#if USE_DBG
+			DBG(1, "AO DATA 0x%08x", ao_data);
+#endif
+			DMA_PRECHARGE_AO(ao_dma, 
+			        (dg.settings.AI_target&0xff000000)|ao_data);
+			DMA_ARM(ao_dma);
+			DMA_FIRE(ao_dma);
+				      
+			/* DMA from mfa2pa(mfa); */
+			acq200mu_return_free_ib(ao_data);
+
+#if CHECK_DAC_UPDATE
+			if (dmacPollCompletion(&ao_dma) != 0){
+				REPORT_ERROR_AND_QUIT(
+					"ERROR:DMAC status bad 0x%08x\n",
+					DMA_STA(ao_dma));
+			}else{
+				syscon_dac = *ACQ196_SYSCON_DAC;
+
+				if ((syscon_dac & ACQ196_SYSCON_DAC_UPD) == 0){
+					REPORT_ERROR_AND_QUIT(
+						"ERROR DAC FAILED to update "
+						" 0x%08x\n", syscon_dac);
+				}
+				*ACQ196_SYSCON_DAC = syscon_dac;
+			}
+#endif
+		}
+		
+/** schedule the rest to reduce loading */
+
+		switch((++dg.status.iter)&SCHEDULE){
+		case 1:
+		if (COMMAND){
+#if USE_DBG
+			DBG(3, "%8s 0x%08x", "COMMAND", csr);
+#endif
+			if ((csr & LLC_CSR_M_ESC) != 0){
+				SACK;
+				snack_on_quit = 0;
+				REPORT_AND_QUIT("QUIT on remote 0x%08x\n",csr);
+			}else{
+				if ((csr & LLC_CSR_M_SETADDR) != 0){
+					csr &= ~LLC_CSR_M_SETADDR;
+					dg.settings.AI_target = 
+						*MBOX[BP_MB_LLC_DATA_ADDR];
+					DMA_PRECHARGEN(
+						ai_dma, 
+						dg.ai_dma_index,
+						dg.settings.AI_target);
+				}
+				if ((csr & LLC_CSR_M_ARM) != 0){
+					dg.settings.auto_incr = 
+						(csr&LLC_CSR_M_AUTOINCR) != 0;
+
+					csr &= ~LLC_CSR_M_ARM;
+					dg.settings.AI_target = 
+						*MBOX[BP_MB_LLC_DATA_ADDR];
+					decim_count = dg.settings.decim_base =
+						LLC_GET_DECIM(csr);
+					DMA_PRECHARGEN(
+						ai_dma, 
+						dg.ai_dma_index,
+						dg.settings.AI_target);
+					DMA_ARM(ai_dma);
+					
+					enable_acq();
+					if (dg.settings.soft_trigger){
+						soft_trig_all();
+					}
+					csr |= LLC_CSR_IS_ARMED;
+				}
+
+				if ((csr&LLC_CSR_M_SOFTCLOCK) != 0){
+					/* @@todo SOFTCLOCK */
+					csr &= ~LLC_CSR_M_SOFTCLOCK;
+				}
+
+				if ((csr&LLC_CSR_M_READCTR) != 0){
+					csr &= ~LLC_CSR_M_READCTR;
+					UPDATE_TINST(dg.status.tinst);
+					if (ctr_run){
+						csr |= LLC_CSR_S_CTR_RUN;
+					}
+					REPORT_TINST;
+				}
+
+				csr &= ~LLC_CSR_S_TCYCLE;
+				csr |= LLC_MAKE_TCYCLE(tcycle);
+
+				SACK;
+#if USE_DBG
+ 				DBG(3, "%8s 0x%08x", "SACK", csr);
+#endif
+			}
+			break;
+		}
+
+		case 0:
+			UPDATE_TINST(dg.status.tinst);
+			break;
+		default:
+			;
+		}
+	}
+
+ quit:
+	if (snack_on_quit){
+		long j1 = jiffies;
+
+		if (dg.settings.iodd){
+			*IOP321_ODR |= BP_INT_LLC_ERROR;
+		}
+
+		SNACK;
+		while (!COMMAND){
+			++dg.status.waiting_for_permission_to_quit;
+			if (jiffies - j1 > 10*HZ){
+				err("TIMEOUT on host handshake");
+				break;
+			}
+		}
+		SACK;
+	}
+
+	DBG(1, "QUITTING %s", dg.emergency_stop? "ESTOP": "");
+	dg.emergency_stop = 0;
+
+	llPostamble();
+	return;
+
+
+onOverrun: 
+onFifoNotEmpty: {
+		u32 tl2 = *ACQ196_TCR_LATCH;
+		u32 ti2 = *ACQ196_TCR_IMMEDIATE;
+
+		err("status 0x%08x, sent data to 0x%08x "
+		    "%d %d %d TI 0x%08x TL 0x%08x\n",
+		    csr, dg.settings.AI_target, dg.status.tlatch, 
+		    dg.status.tinst, tcycle, ti2, tl2);
+
+		if (OVERRUN(fifstat)){
+			REPORT_ERROR(
+			"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
+			fifstat, fifstat2, tcycle);
+		}
+		if (AIFIFO_NOT_EMPTY(fifstat2)){
+			REPORT_ERROR(
+			"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
+			fifstat, fifstat2, tcycle);
+		}
+		goto quit;
+	}
+}
+
+
+/* project MBOXES into SCRATCHPAD ... */
+/** @todo maybe drop writes to phys mbox altogether? */
+
+#define SACK2V  do {							\
+		SACK;							\
+		ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_MBOX0] = csr;	\
+	} while(0)
+
+#define REPORT_TLATCH2V do {						\
+		REPORT_TLATCH;						\
+		ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_MBOX2] = dg.status.tlatch; \
+	} while(0)							\
+
+#define REPORT_TINST2V do {						\
+		REPORT_TINST;						\
+		ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_MBOX3] = dg.status.tinst; \
+	} while(0)
+
+
+/***********************************************************************************************
+ *
+ *
+ *
+ *  S Y N C 2 V
+ *
+ *
+ **********************************************************************************************/
+
+
+#define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
+#define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+1]
+#define I_SCRATCH_FSTA ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+2]
+#if DI_IN_1
+#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[1]
+#else
+#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DI32]
+#endif
+#define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
+
+#define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
+
+static void llc_loop_sync2V(int entry_code)
+/**< llc_loop_sync2V 2Vectors syncronised loop, optimized for max reprate. 
+ *
+ * Sequence: 
+ * - Detect incoming AI Clock
+ * - local housekeeping:
+ *  - read and store DI32, 
+ *  - (fpga does DI6), 
+ *  - STATUS (iter, !overrun), 
+ *  - 32 bit TLATCH
+ * - trigger DMA on AI data ready (maybe trimmed in)
+ *  - 2 element DMA chain runs, VIN, VOUT.
+ * -  On end of chain, update DO
+ * - Check mailboxes
+ * -Check for overrun
+ *
+*/
+{
+	u32 csr = 0;
+	int decim_count = 1;
+	u32 fifstat;
+	u32 tcycle = 0;
+	u32 fifstat2;
+	u32 temp;
+	int ctr_run = 0;
+	int snack_on_quit = 1;
+	unsigned iter1 = 0;
+	u32 dmacsta;
+	u32 command = 0;
+#if FIFO_ONESAM
+	unsigned fifo_onesam = 
+		getNumChan(CHANNEL_MASK) == 32? 2:
+		getNumChan(CHANNEL_MASK) == 64? 3: 4;
+#endif		
+	DBG(1, "ENTER %d", entry_code);
+	dg.status.sample_count = 0;
+	llPreamble2V();
+	csr |= LLC_CSR_READY;
+	SACK2V;
+
+	for (iter1 = dg.status.iter = 0; !dg.emergency_stop;  ++dg.status.iter){
+		/** @critical STARTS */
+		fifstat = *ACQ196_FIFSTAT;
+
+		if (AISAMPLE_CLOCKED(fifstat) != 0){
+			/* @todo HOUSKEEPING - were we fast enough? */
+			
+/* we assume it doesn't matter if this stuff makes this transfer or not.. 
+ * We set CLKDLY short to give time for something useful ..
+ */
+	hot_start:
+			DMAC_GO(ai_dma, fifstat);
+			/* @critical ENDS */
+
+			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
+				I_SCRATCH_DI32 = getDI32();
+
+				if (acq100_llc_sync2V >=
+				    ACQ100_LLC_SYNC2V_DIDOSTA ){
+#if 0
+					I_SCRATCH_ITER = dg.status.iter;
+					I_SCRATCH_SC = dg.status.sample_count;
+#endif
+					I_SCRATCH_FSTA = fifstat;
+				}
+			}
+			
+
+			if (++dg.status.sample_count == 1){
+				dg.status.iter = 1;
+			}
+#if 0
+			if ( csr&LLC_CSR_M_SOFTCLOCK ){
+				// @todo acq32_softClock( 0 );      
+			}
+#endif
+			while(!DMA_DONE(ai_dma, dmacsta) && !dg.emergency_stop){
+				if (!command) {
+					command = COMMAND;                 /* maybe a mailbox cmd? */
+				}
+				++dg.status.dmac_poll_count[ai_dma.id];	   /* @@todo idle?? */
+			}
+			if ((dmacsta & IOP321_CSR_ERR) != 0){
+				REPORT_ERROR_AND_QUIT(
+					"ERROR:DMAC status bad 0x%08x\n",
+					DMA_STA(ai_dma));
+			}
+
+			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
+				setDO32(O_SCRATCH_DO32);
+			}
+
+			/** Interrupt on DMA DONE */
+			if (dg.settings.iodd){
+				*IOP321_ODR |= BP_INT_LLC_DMA_DONE;
+			}
+
+			/** housekeeping - error if zero polls */
+			if (dg.status.iter - iter1 < 1){
+				I_SCRATCH_LASTE	= dg.status.sample_count;
+			}
+			iter1 = dg.status.iter;
+
+			DMA_ARM(ai_dma);
+
+			/** @todo check overruns */
+			fifstat2 = *ACQ196_FIFSTAT;
+
+			if (OVERRUN(fifstat)) goto onOverrun;
+#if FIFO_ONESAM
+			if ((fifstat2&ACQ196_FIFSTAT_HOTPOINT) > fifo_onesam){
+				goto onFifoNotEmpty;
+			}
+#else
+			if (AIFIFO_NOT_EMPTY(fifstat2)) goto onFifoNotEmpty;
+#endif
+			if (!command && AISAMPLE_CLOCKED(fifstat2)){
+				++dg.status.hot_starts;
+				fifstat = fifstat2;
+				goto hot_start;       /** skip fifstat poll */
+			}
+		}
+
+		if (command || COMMAND){
+			command = 0;
+#if USE_DBG
+			DBG(3, "%8s 0x%08x", "COMMAND", csr);
+#endif
+			if ((csr & LLC_CSR_M_ESC) != 0){
+				SACK;
+				snack_on_quit = 0;
+				REPORT_AND_QUIT("QUIT on remote 0x%08x\n",csr);
+			}else{
+				if ((csr & LLC_CSR_M_SETADDR) != 0){
+					csr &= ~LLC_CSR_M_SETADDR;
+					dg.settings.AI_target = 
+						*MBOX[BP_MB_LLC_DATA_ADDR];
+					DMA_PRECHARGEN(
+						ai_dma, 
+						dg.ai_dma_index,
+						dg.settings.AI_target);
+					dg.status.cmd_counts.SETADDR++;
+				}
+				if ((csr & LLC_CSR_M_ARM) != 0){
+					dg.settings.auto_incr = 
+						(csr&LLC_CSR_M_AUTOINCR) != 0;
+
+					csr &= ~LLC_CSR_M_ARM;
+					dg.settings.AI_target = 
+						*MBOX[BP_MB_LLC_DATA_ADDR];
+					decim_count = dg.settings.decim_base =
+						LLC_GET_DECIM(csr);
+					DMA_PRECHARGEN(
+						ai_dma, 
+						dg.ai_dma_index,
+						dg.settings.AI_target);
+					DMA_ARM(ai_dma);
+					
+					enable_acq();
+					if (dg.settings.soft_trigger){
+						soft_trig_all();
+					}
+					csr |= LLC_CSR_IS_ARMED;
+					dg.status.cmd_counts.ARM++;
+				}
+				if ((csr&LLC_CSR_M_SOFTCLOCK) != 0){
+					/* @@todo SOFTCLOCK */
+					csr &= ~LLC_CSR_M_SOFTCLOCK;
+					dg.status.cmd_counts.SETADDR++;
+				}
+
+				if ((csr&LLC_CSR_M_READCTR) != 0){
+					csr &= ~LLC_CSR_M_READCTR;
+					UPDATE_TINST(dg.status.tinst);
+					if (ctr_run){
+						csr |= LLC_CSR_S_CTR_RUN;
+					}
+					REPORT_TINST2V;
+					dg.status.cmd_counts.READCTR++;
+				}
+
+				csr &= ~LLC_CSR_S_TCYCLE;
+				csr |= LLC_MAKE_TCYCLE(tcycle);
+				SACK2V;
+#if USE_DBG
+ 				DBG(3, "%8s 0x%08x", "SACK", csr);
+#endif
+			}
+		}
+	}
+
+ quit:
+	if (snack_on_quit){
+		long j1 = jiffies;
+
+		if (dg.settings.iodd){
+			*IOP321_ODR |= BP_INT_LLC_ERROR;
+		}
+
+		SNACK;
+		while (!COMMAND){
+			++dg.status.waiting_for_permission_to_quit;
+			if (jiffies - j1 > 10*HZ){
+				err("TIMEOUT on host handshake");
+				break;
+			}
+		}
+		SACK;
+	}
+
+	DBG(1, "QUITTING %s", dg.emergency_stop? "ESTOP": "");
+	dg.emergency_stop = 0;
+
+	llPostamble();
+	return;
+
+
+onOverrun: 
+onFifoNotEmpty: {
+		u32 tl2 = *ACQ196_TCR_LATCH;
+		u32 ti2 = *ACQ196_TCR_IMMEDIATE;
+
+		err("status 0x%08x, sent data to 0x%08x "
+		    "%d %d %d TI 0x%08x TL 0x%08x\n",
+		    csr, dg.settings.AI_target, dg.status.tlatch, 
+		    dg.status.tinst, tcycle, ti2, tl2);
+
+		if (OVERRUN(fifstat)){
+			REPORT_ERROR(
+			"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
+			fifstat, fifstat2, tcycle);
+		}
+		if (AIFIFO_NOT_EMPTY(fifstat2)){
+			REPORT_ERROR(
+			"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
+			fifstat, fifstat2, tcycle);
+		}
+		goto quit;
+	}
+}
+
+
+
+static void acq100_llc_loop(int entry_code)
+/**
+ * acq100_llc_loop
+ * @entry_code - possible enhancements
+ *
+ */
+{
+	if (llc_onEntry(entry_code) == 0){
+		if (acq100_llc_sync2V){
+			llc_loop_sync2V(entry_code);
+		}else{
+			llc_loop(entry_code);
+		}
+		llc_onExit();
+	}
+}
+
+
+
+
+
+
+
+static ssize_t set_mode(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+/** mode {SCM|ECM} clkpos trpos intsoftclock [divisor] */
+{
+	struct LlcPrams prams = {
+		.divisor = 40
+	};
+	char modestr[80];
+	int nscan = sscanf(buf, "%s %d %d %d %d",
+			   modestr, 
+			   &prams.clkpos,
+			   &prams.trpos,
+			   &prams.intsoftclock,
+			   &prams.divisor);
+
+	switch(nscan){
+	case 5:	case 4:
+		if (strcmp(modestr, "ECM") == 0){
+			prams.m_mode = ECM;
+		}else if (strcmp(modestr, "SCM") == 0){
+			prams.m_mode = SCM;
+		}else{
+			err("BAD mode %s", modestr);
+			break;
+		}
+		memcpy(&dg.prams, &prams, sizeof(prams));
+	default:
+		break;
+	}
+	return strlen(buf);
+}
+static ssize_t show_mode(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%s %d %d %d %d\n",
+		       dg.prams.m_mode==ECM? "ECM":
+		       dg.prams.m_mode==SCM? "SCM": "no mode",
+		       dg.prams.clkpos,
+		       dg.prams.trpos,
+		       dg.prams.intsoftclock,
+		       dg.prams.divisor
+		);
+}
+
+static DEVICE_ATTR(mode, S_IWUGO|S_IRUGO, show_mode, set_mode);
+
+
+static ssize_t show_settings(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "decim:%d target:0x%08x auto_inc:%d \n",
+		       dg.settings.decim_base,
+		       dg.settings.AI_target,
+		       dg.settings.auto_incr );
+}
+
+static DEVICE_ATTR(settings, S_IRUGO, show_settings, 0);
+
+
+static ssize_t show_version(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%s\n%s\n%s\n%s\n",
+		       acq100_llc_driver_name,
+		       acq100_llc_driver_string,
+		       acq100_llc_driver_version,
+		       acq100_llc_copyright
+		);
+}
+
+static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
+
+
+static ssize_t set_llc_mask(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "0x%x", &dg.imask) || sscanf(buf, "%x", &dg.imask);
+
+	return strlen(buf);
+}
+static ssize_t show_llc_mask(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "0x%08X\n", dg.imask);
+}
+
+static DEVICE_ATTR(imask, S_IWUGO|S_IRUGO, show_llc_mask, set_llc_mask);
+
+#define DECLARE_HOST_BUF(id)					\
+static ssize_t set_##id (					\
+	struct device *dev,					\
+	struct device_attribute *attr,				\
+	const char * buf, size_t count)				\
+{								\
+	sscanf(buf, "0x%x", &dg.settings.id) ||			\
+	sscanf(buf, "%x", &dg.settings.id);			\
+								\
+	return strlen(buf);					\
+}								\
+static ssize_t show_##id (					\
+	struct device *dev,					\
+	struct device_attribute *attr,				\
+	char * buf)						\
+{								\
+        return sprintf(buf, "0x%08x\n", dg.settings.id);	\
+}								\
+static DEVICE_ATTR(id, S_IWUGO|S_IRUGO, show_##id, set_##id)
+
+DECLARE_HOST_BUF(DO_src);
+DECLARE_HOST_BUF(AO_src);
+DECLARE_HOST_BUF(AI_target);
+DECLARE_HOST_BUF(DI_target);
+DECLARE_HOST_BUF(STATUS_target);
+DECLARE_HOST_BUF(PUAD);
+
+#define DEVICE_CREATE_HOST_BUF(dev, id)		\
+device_create_file(dev, &dev_attr_##id)
+
+static ssize_t set_iodd(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.iodd);
+	return strlen(buf);
+}
+static ssize_t show_iodd(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.iodd);
+}
+
+static DEVICE_ATTR(IODD, S_IWUGO|S_IRUGO, show_iodd, set_iodd);
+
+
+
+static ssize_t set_soft_trigger(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.soft_trigger);
+	return strlen(buf);
+}
+static ssize_t show_soft_trigger(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.soft_trigger);
+}
+
+static DEVICE_ATTR(soft_trigger, S_IWUGO|S_IRUGO, show_soft_trigger, set_soft_trigger);
+
+
+
+
+static ssize_t set_sync_output(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.sync_output);
+	return strlen(buf);
+}
+static ssize_t show_sync_output(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.sync_output);
+}
+
+static DEVICE_ATTR(sync_output, S_IWUGO|S_IRUGO, show_sync_output, set_sync_output);
+
+
+
+
+static ssize_t set_llc_debug(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &acq100_llc_debug);
+	return strlen(buf);
+}
+static ssize_t show_llc_debug(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", acq100_llc_debug);
+}
+static DEVICE_ATTR(debug, S_IWUGO|S_IRUGO, show_llc_debug, set_llc_debug);
+
+static ssize_t show_status(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	int len = 0;
+#define STAPRINT(fmt, field) \
+        len += sprintf(buf+len, "%20s: " fmt "\n", #field, dg.status.field)
+
+	len += sprintf(buf+len, "%20s: %d %10s %d\n", 
+		       "channels", getNumChan(CHANNEL_MASK),
+		       "shot", dg.shot);
+
+	STAPRINT("%d", is_triggered);
+	STAPRINT("%u", sample_count);
+	STAPRINT("%u", t0);
+	STAPRINT("%u", tlatch);
+	STAPRINT("%u", tinst);
+	len += sprintf(buf+len, "%20s: %d\n", "tprocess", 
+		       dg.status.tinst - dg.status.tlatch);
+	STAPRINT("\"%s\"", report);
+	STAPRINT("%d", errline);
+	STAPRINT("%u", iter);
+	STAPRINT("%u", fifo_poll_count);
+	STAPRINT("%u", dmac_poll_count[0]);
+	STAPRINT("%u", dmac_poll_count[1]);
+	STAPRINT("%u", dma_holdoff_poll_count);
+	STAPRINT("%u", hot_starts);
+	STAPRINT("%d", waiting_for_permission_to_quit);
+	STAPRINT("%d", cmd_counts.SETADDR);
+	STAPRINT("%d", cmd_counts.ARM);
+	STAPRINT("%d", cmd_counts.SOFTCLOCK);
+	STAPRINT("%d", cmd_counts.READCTR);
+
+	return len;
+#undef STAPRINT
+}
+
+static DEVICE_ATTR(status, S_IRUGO, show_status, 0);
+
+
+
+static int print_chain(struct DmaChannel* channel, char* buf)
+{
+	int ic;
+	int len = 0;
+	struct iop321_dma_desc* desc = channel->dmad[0];
+	
+	len += sprintf(buf+len, "[ ] %8s %8s %8s %8s %8s %8s\n",
+		       "NDA", "PDA", "PUAD", "LAD", "BC", "DC");
+
+	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
+		len += sprintf(buf+len, 
+			       "[%d] %08x %08x %08x %08x %08x %08x %s\n",
+			       ic, 
+			       desc->NDA, desc->PDA, desc->PUAD,
+			       desc->LAD, desc->BC, desc->DC,
+			       channel->description[ic]);
+	}	
+	return len;
+}
+static ssize_t show_show_dma(
+	struct device* dev, 
+	struct device_attribute *attr,
+	char* buf)
+{
+	int len = 0;
+
+	len += sprintf(buf+len, "ai_dma\n");
+	len += print_chain(&ai_dma, buf+len);
+	len += sprintf(buf+len, "ao_dma\n");
+	len += print_chain(&ao_dma, buf+len);
+
+	return len;
+}
+
+static DEVICE_ATTR(show_dma, S_IRUGO, show_show_dma, 0);
+
+static ssize_t set_llc(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int entry_code = 0;
+
+	if (sscanf(buf, "%d", &entry_code) == 1 && entry_code > 0){
+		acq100_llc_loop(entry_code);
+	}
+	return strlen(buf);
+}
+static DEVICE_ATTR(run, S_IWUGO, 0, set_llc);
+
+static ssize_t set_emergency_stop(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.emergency_stop);
+	return strlen(buf);
+}
+static ssize_t show_emergency_stop(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.emergency_stop);
+}
+
+static DEVICE_ATTR(emergency_stop, S_IWUGO|S_IRUGO, 
+		   show_emergency_stop, set_emergency_stop);
+
+
+
+static ssize_t show_llc(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%s\n", "WORKTODO");
+}
+
+static DEVICE_ATTR(stats, S_IRUGO, show_llc, 0);
+
+static ssize_t show_channel_mask(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%d\n", CHANNEL_MASK);
+}
+static DEVICE_ATTR(channel_mask, S_IRUGO, show_channel_mask, 0);
+
+static ssize_t set_dac_lowlat(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.dac_lowlat);
+	return strlen(buf);
+}
+static ssize_t show_dac_lowlat(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.dac_lowlat != 0);
+}
+
+static DEVICE_ATTR(dac_lowlat, S_IWUGO|S_IRUGO, 
+		   show_dac_lowlat, set_dac_lowlat);
+
+
+static ssize_t set_adc_clkdly(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int clkdly;
+
+	sscanf(buf, "%d", &clkdly);
+	acq196_set_adc_clkdly(clkdly);
+	return strlen(buf);
+}
+
+static ssize_t show_adc_clkdly(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	int clkdly = acq196_get_adc_clkdly();
+        return sprintf(buf, "%d\n", clkdly);
+}
+
+static DEVICE_ATTR(adc_clkdly, S_IWUGO|S_IRUGO, 
+		   show_adc_clkdly, set_adc_clkdly);
+
+
+static ssize_t set_dma_poll_holdoff(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int nsecs;
+
+	if (sscanf(buf, "%d", &nsecs)){
+		dg.settings.dma_poll_holdoff = nsecs/5;
+	}
+	return strlen(buf);
+}
+
+static ssize_t show_dma_poll_holdoff(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d nsecs\n",dg.settings.dma_poll_holdoff*5);
+}
+
+static DEVICE_ATTR(dma_poll_holdoff, S_IWUGO|S_IRUGO, 
+		   show_dma_poll_holdoff, set_dma_poll_holdoff);
+
+
+/** test my ARM ASM! */
+static ssize_t show_timer0_count(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	u32 preload;
+	u32 count0;
+	u32 count;
+
+	u32 pcount0;
+	u32 pcount;
+
+	asm volatile("mrc p6, 0, %0, c4, c1, 0" : "=r" (preload));
+	asm volatile("mrc p6, 0, %0, c2, c1, 0" : "=r" (count0));
+	asm volatile("mrc p6, 0, %0, c2, c1, 0" : "=r" (count));
+
+	pcount0 = *IOP321_TU_TCR0;
+	pcount  = *IOP321_TU_TCR0;
+	       
+        return sprintf(buf, 
+		       "%8s: %08x\n"
+		       "%8s:%08x %08x delta %u\n"
+		       "%8s:%08x %08x delta %u\n", 
+		       "preload", preload,
+		       "mrc", count0, count, COUNT_DOWN(count0,count,preload),
+		       "pmmr", pcount0, pcount, 
+		       COUNT_DOWN(pcount0, pcount,preload));
+}
+
+static DEVICE_ATTR(timer0_count, S_IRUGO, 
+		   show_timer0_count, 0);
+
+
+
+
+
+
+static int mk_llc_sysfs(struct device *dev)
+{
+	device_create_file(dev, &dev_attr_run);
+	device_create_file(dev, &dev_attr_stats);
+	device_create_file(dev, &dev_attr_mode);
+	device_create_file(dev, &dev_attr_version);
+	device_create_file(dev, &dev_attr_imask);
+	device_create_file(dev, &dev_attr_debug);
+	device_create_file(dev, &dev_attr_settings);
+	device_create_file(dev, &dev_attr_emergency_stop);
+	device_create_file(dev, &dev_attr_status);
+	device_create_file(dev, &dev_attr_channel_mask);
+	device_create_file(dev, &dev_attr_dac_lowlat);
+	device_create_file(dev, &dev_attr_adc_clkdly);
+	device_create_file(dev, &dev_attr_dma_poll_holdoff);
+	device_create_file(dev, &dev_attr_show_dma);
+	device_create_file(dev, &dev_attr_timer0_count);
+
+	device_create_file(dev, &dev_attr_soft_trigger);
+	device_create_file(dev, &dev_attr_IODD);
+	device_create_file(dev, &dev_attr_sync_output);
+
+	DEVICE_CREATE_HOST_BUF(dev, DO_src);
+	DEVICE_CREATE_HOST_BUF(dev, AO_src);
+
+	DEVICE_CREATE_HOST_BUF(dev, AI_target);
+	DEVICE_CREATE_HOST_BUF(dev, DI_target);
+	DEVICE_CREATE_HOST_BUF(dev, STATUS_target);
+	DEVICE_CREATE_HOST_BUF(dev, PUAD);
+	return 0;
+}
+
+
+extern struct proc_dir_entry *proc_acq200;
+
+static void mk_llc_procfs(struct device *dev)
+{
+#define CPRE( name, func ) \
+        create_proc_read_entry( name, 0, proc_acq200, func, 0 )
+
+	
+#undef CPRE
+}
+
+static void rm_llc_procfs(struct device *dev)
+{
+#define RMP( name ) remove_proc_entry( name, proc_acq200 )
+
+#undef RMP
+}
+
+
+static void acq100_llc_dev_release(struct device * dev)
+{
+	info("");
+}
+
+
+static struct device_driver acq100_llc_driver;
+
+static int acq100_llc_probe(struct device *dev)
+{
+	info("");
+	dg.llcv2_init_buf = kmalloc(BLEN, GFP_KERNEL); 
+	mk_llc_sysfs(dev);
+	mk_llc_procfs(dev);
+	acq196_set_adc_clkdly(100);
+	return 0;
+}
+
+static int acq100_llc_remove(struct device *dev)
+{
+	kfree(dg.llcv2_init_buf);
+	rm_llc_procfs(dev);
+	return 0;
+}
+
+
+static struct device_driver acq100_llc_driver = {
+	.name     = "acq100_llc",
+	.probe    = acq100_llc_probe,
+	.remove   = acq100_llc_remove,
+	.bus	  = &platform_bus_type,	
+};
+
+
+static u64 dma_mask = 0x00000000ffffffff;
+
+static struct platform_device acq100_llc_device = {
+	.name = "acq100_llc",
+	.id   = 0,
+	.dev = {
+		.release    = acq100_llc_dev_release,
+		.dma_mask   = &dma_mask
+	}
+
+};
+
+
+
+static int __init acq100_llc_init( void )
+{
+	acq200_debug = acq100_llc_debug;
+
+	driver_register(&acq100_llc_driver);
+	return platform_device_register(&acq100_llc_device);
+}
+
+
+static void __exit
+acq100_llc_exit_module(void)
+{
+	info("");
+	dma_cleanup(&ai_dma);
+	dma_cleanup(&ao_dma);
+
+	platform_device_unregister(&acq100_llc_device);
+	driver_unregister(&acq100_llc_driver);
+}
+
+module_init(acq100_llc_init);
+module_exit(acq100_llc_exit_module);
+
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Peter.Milne@d-tacq.com");
+MODULE_DESCRIPTION("Driver for ACQ100 Low Latency Control");
+
+
