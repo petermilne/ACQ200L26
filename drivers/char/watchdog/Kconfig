@@ -118,6 +118,22 @@ config IXP4XX_WATCHDOG
 
 	  Say N if you are unsure.
 
+config IOP3XX_WATCHDOG
+	tristate "IOP3xx Watchdog"
+	depends on WATCHDOG && (ARCH_IOP32X || ARCH_IOP33X)
+	help
+	  Say Y here if to include support for the watchdog timer
+	  in the Intel IOP3xx IO processors. This driver can
+	  be built as a module by choosing M. The module will
+	  be called iop3xx_wdt.
+
+	  Note: The internal iop3xx watchdog does a soft CPU reset
+	  which doesn't reset any peripherals. There are circumstances
+	  where the watchdog will fail to reset the board correctly
+	  (e.g., if the boot ROM is in an unreadable state).
+
+	  Say N if you are unsure.
+	
 config S3C2410_WATCHDOG
 	tristate "S3C2410 Watchdog"
 	depends on WATCHDOG && ARCH_S3C2410

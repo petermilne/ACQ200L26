@@ -40,5 +40,6 @@ void iop32x_init_irq(void);
 #include "iq31244.h"
 #include "n2100.h"
 
+#include "acq200.h"
 
 #endif

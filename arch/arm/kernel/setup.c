@@ -117,6 +117,7 @@ DEFINE_PER_CPU(struct cpuinfo_arm, cpu_data);
 /*
  * Standard memory resources
  */
+#ifndef CONFIG_ARCH_ACQ200
 static struct resource mem_res[] = {
 	{
 		.name = "Video RAM",
@@ -166,6 +167,8 @@ static struct resource io_res[] = {
 #define lp0 io_res[0]
 #define lp1 io_res[1]
 #define lp2 io_res[2]
+
+#endif /* CONFIG_ARCH_ACQ200 */
 
 static const char *cache_types[16] = {
 	"write-through",
@@ -532,6 +535,12 @@ setup_ramdisk(int doload, int prompt, int image_start, unsigned int rd_sz)
 #endif
 }
 
+#ifdef CONFIG_ARCH_ACQ200
+extern void __init
+acq200_request_standard_resources(
+	struct meminfo *mi, struct machine_desc *mdesc);
+#define request_standard_resources acq200_request_standard_resources
+#else
 static void __init
 request_standard_resources(struct meminfo *mi, struct machine_desc *mdesc)
 {
@@ -585,6 +594,8 @@ request_standard_resources(struct meminfo *mi, struct machine_desc *mdesc)
 	if (mdesc->reserve_lp2)
 		request_resource(&ioport_resource, &lp2);
 }
+
+#endif /* ACQ200 */
 
 /*
  *  Tag parsing.

@@ -25,6 +25,8 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
 
+#ifndef CONFIG_ARCH_ACQ200
+
 #ifdef CONFIG_ARCH_IOP32X
 #define IRQ_IOP3XX_TIMER0	IRQ_IOP32X_TIMER0
 #else
@@ -96,3 +98,6 @@ void __init iop3xx_init_time(unsigned long tick_rate)
 
 	setup_irq(IRQ_IOP3XX_TIMER0, &iop3xx_timer_irq);
 }
+#else
+#warning ACQ200 flavor - DIY timers are us.
+#endif /* CONFIG_ARCH_ACQ200 */

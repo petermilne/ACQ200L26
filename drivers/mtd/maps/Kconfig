@@ -605,5 +605,13 @@ config MTD_PLATRAM
 
 	  This selection automatically selects the map_ram driver.
 
+config MTD_ACQ200
+        tristate "CFI Flash device mapped on the D-TACQ ACQ200 arch"
+        depends on ARM && MTD_CFI && ARCH_ACQ200
+        help
+          This enables access routines for the flash chips on the 
+	  D-TACQ ACQ200, ACQ100 intelligent data acqusition arch. 
+	  If you have one of these boards say 'Y'.
+
 endmenu
 

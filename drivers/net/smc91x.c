@@ -65,6 +65,7 @@ static const char version[] =
 #define SMC_DEBUG		0
 #endif
 
+#define SMC_USE_ACQX00_DMA      1
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -307,6 +308,359 @@ static void PRINT_PKT(u_char *buf, int length)
 		}							\
 	}								\
 } while (0)
+
+
+
+
+
+/** D-TACQ acq100 ***/
+#ifdef SMC_USE_ACQX00_DMA
+
+#define ACQ100_TWEAK_D16 1
+#define ACQ100_TWEAK_D32 2
+#define ACQ100_TWEAK_SINGLES 4
+#define ACQ100_TWEAK_DMA 8
+#define ACQ100_TWEAK_DEBUG 0xf0
+#define ACQ100_TWEAK_DMA_NOBLOCK 0x100
+#define ACQ100_DUMP_PUSH 16
+
+static int _acq200_wait_dma_done(void);
+
+
+static int acq100_tweaks = ACQ100_TWEAK_D32;
+module_param(acq100_tweaks, int, 0600);
+
+#define ACQ100_USE_D16 ((acq100_tweaks&ACQ100_TWEAK_D16) != 0)
+#define ACQ100_USE_D32 (!ACQ100_USE_D16)
+#define ACQ100_USE_SINGLES ((acq100_tweaks&ACQ100_TWEAK_SINGLES) != 0)
+#define ACQ100_USE_DMA  ((acq100_tweaks&ACQ100_TWEAK_DMA) != 0)
+#define ACQ100_DO_DMA_NOBLOCK ((acq100_tweaks&ACQ100_TWEAK_DMA_NOBLOCK) != 0)
+
+static void smc91x_acq100_dmac_init(void);
+static int acq100_debug;
+module_param(acq100_debug, int, 0666);
+
+#define ACQX00_DMA_REG 0x0
+#define ACQ100_SMC_BLOCK (ACQ200_LOCALIO_P+0x400)
+
+
+static void acq100_do_dma_push_skb(void* ioaddr, struct sk_buff *skb);
+
+#define MAXBLT 0x400                         /* address limit on SMC */
+
+
+#include "../../arch/arm/mach-iop32x/acq200/acq200-dmac.h"
+
+#include <linux/pci.h>
+#include <asm/dma.h>
+
+
+
+
+#if SMC_DEBUG > 1
+static void ptr_debug(int line, int bc)
+{
+	static unsigned wanted;
+	static unsigned long ioaddr;
+	unsigned ptr;
+
+	if (line == 0){
+		ioaddr = bc; wanted = 0; return;
+	}
+
+	ptr = SMC_GET_PTR();
+
+	char buf[60];
+	if (wanted){
+		snprintf(buf, sizeof(buf), "WANTED 0x%04x %s", 
+			wanted, ptr==wanted? "OK":"FAULT");
+	}else{
+		buf[0] = '\0';
+	}
+	if (bc){
+		snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), 
+			 " next bc %d", bc);
+	}
+	DBG(2, "%d GET_PTR 0x%04x %s\n", line, ptr, buf);
+
+	wanted = ptr + bc;
+}
+
+
+#define PTR_DEBUG_INIT(ioaddr) ptr_debug(0, ioaddr)
+#define PTR_DEBUG(bc)  ptr_debug(__LINE__, bc)
+#else
+#define PTR_DEBUG_INIT(ioaddr)
+#define PTR_DEBUG(bc)
+#endif   /* SMC_DEBUG > 0 */
+
+
+
+/**
+ *  rules: DMA MUST be long word aligned.
+ *         DMA MUST NOT cross a 1K boundary.
+ *
+ * strategy: use short SMC_outsw to achieve init long word align
+ *           then transmit with DMA to next 1K boundary, repeat
+ *           last DMA is rounded UP
+ * boost1:   DMA does not block, but will block on subsequent
+ *          this is to free the stack for further processing where possible
+ *         hmmm, but is it a good idea?. No more DMA, but may be other things
+ *         really depends if ACQ100_SMC_BLOCK is a clear channel or not.
+ * boost2: assuming boost1 OK, chain the blocks
+ */
+
+#define ONEK (0x400)
+#define OB   0                /* outbound */
+
+#define CHANNEL1 1
+
+/*
+ * DMAC hiccup on 1K local buffer boundary Xin. 
+ * So stop on 1K boundary Xings.
+ */
+
+
+static int _acq200_post_dmac_request(
+	u32 laddr,
+	u32 offset,
+	u32 remaddr, 
+	u32 bc);
+
+
+
+
+static void acq100_do_dma_push_skb(void* ioaddr, struct sk_buff* skb)
+{
+
+	unsigned char* buf = skb->data;
+	int len = skb->len;
+	dma_addr_t dmabuf;
+	dma_addr_t dma_base;
+	int len4;
+	int rc;
+
+	if (skb_tailroom(skb) < 3){ BUG(); }
+
+	PTR_DEBUG_INIT(ioaddr);
+	DBG(2, "acq100_do_dma_push len:%d\n", len);
+
+
+	if (len&1){
+		buf[len] = 0x20;
+	}
+
+
+	dmabuf = dma_map_single(NULL, buf, len+4, PCI_DMA_TODEVICE);	
+	dma_base = dmabuf;
+
+	if (dmabuf&0x1) BUG();
+
+	if (dmabuf&0x2){
+		PTR_DEBUG(2);
+		SMC_outsw(ioaddr, DATA_REG, buf, 1);
+		PTR_DEBUG(0);
+		dma_base += 2;
+		len -= 2;
+	}
+
+	len4 = (len & 3)? (len & ~3) + 4: len;
+
+	PTR_DEBUG(len4);
+
+	rc = _acq200_post_dmac_request(
+		       dma_base, 0, ACQ100_SMC_BLOCK, len4);
+	if (rc != 0){
+		PRINTK("ERROR:dmac returned %d\n", rc);
+	}
+
+	PTR_DEBUG(0);
+
+	dma_unmap_single(NULL, dmabuf, len+4, PCI_DMA_TODEVICE);
+	DBG(2, "acq100_do_dma_push 99\n");
+}
+
+#include <asm/arch-iop32x/iop321.h>
+#include <asm/arch/iop321-dma.h>
+#include "../../arch/arm/mach-iop32x/acq200/acq200-dmac.h"
+#include "../../arch/arm/mach-iop32x/acq200/acq200-inline-dma.h"
+
+
+/*
+ * only one channel, but operated in swinging buffer - so we don't
+ * overwrite a descriptor chain while still in use
+ */
+static struct DmaChannel channels[2] = {
+	{ .regs = IOP321_DMA1_CCR, .id = 1 },
+	{ .regs = IOP321_DMA1_CCR, .id = 1 }
+};
+
+
+/**
+ *   report complete on end of first block - ollows possibility
+ *   of overlapped DMA while kernel gets on with other stuff.
+ *
+ *   max degree of overlap~ 30% (block1 max 1K, block2 .. 400b).
+ */
+
+static void smc91x_acq100_dmac_init(void)
+{
+	int ich, iblock;
+	
+	for (ich = 0; ich != 2; ++ich){
+		for (iblock = 0; iblock != MAXCHAIN; ++iblock){
+			struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+			dmad->PUAD = 0;
+			dmad->LAD = ACQ100_SMC_BLOCK;
+			dmad->DC = DMA_DCR_MEM2MEM; /* | IOP321_DCR_IE; */
+			channels[ich].dmad[iblock] = dmad;
+		}
+		channels[ich].nchain = MAXCHAIN;
+	}
+}
+
+static int ich;
+
+
+int pollcat = 0;
+int eot_pollcat = 0;
+int waits = 0;
+
+
+static int _acq200_wait_dma_done(void)
+{
+	struct DmaChannel *channel = &channels[ich];
+	int npolls = 0;
+	u32 stat;
+	while(!DMA_DONE(*channel, stat)){
+		++npolls;
+	}	
+	DMA_STA(*channel) = EOX;
+	return pollcat += npolls;
+}
+
+
+static int _acq200_wait_dma_eot(struct DmaChannel *channel)
+{
+	u32 stat;
+	int npolls = 0;
+
+	++waits;
+
+	while(dma_eox(channel, stat) /* (stat = DMA_STA(*channel)) */ == 0){
+		++npolls;
+		if ((npolls&0xfff) == 0){
+			DBG(2,"pollcat %5d 0x%08x\n", 
+			       pollcat, DMA_STA(*channel));
+		}
+		if (npolls > 0x10000){
+			DBG(2, "pollcat dropout\n");
+			break;
+		}
+	}
+	return eot_pollcat += npolls;
+}
+static int _acq200_post_dmac_request(
+	u32 laddr,
+	u32 offset,
+	u32 remaddr, 
+	u32 bc)
+{
+	u32 bc_total = bc;		
+	u32 rob;             /* rest of block (to 1K bdry) */
+	u32 src = laddr + offset;
+	int rc = 0;
+	int ichain;
+
+	struct DmaChannel* channel = &channels[ich = !ich];
+	struct iop321_dma_desc* dmad = channel->dmad[0];
+	struct iop321_dma_desc* dmad1 = 0;
+
+	DBG(3, "%d BC %d\n", __LINE__, bc);
+
+#if SMC_DEBUG > 0
+	SMC_LP->pstats.tx_size[bc/64]++;
+#endif
+
+	for (ichain = 0; bc_total; dmad = channel->dmad[++ichain] ){
+		if (!(ichain < MAXCHAIN)) BUG();
+		
+		rob = (src &~(ONEK-1)) + ONEK - src;
+
+		bc = min(bc_total, rob);
+		if (ichain == 0){
+		        bc = min(bc, 32U);
+		}else{
+			dmad1->NDA = dmad->pa;
+		}
+
+		dmad->PDA = src;
+		dmad->BC  = bc;
+
+		bc_total -= bc;
+		src += bc;
+		dmad1 = dmad;
+	}
+
+	if (!dmad1){
+		return -1;
+	}
+	dmad1->NDA = 0;
+
+	DBG(3, "%d ichain %d NDAR 0x%08x\n", __LINE__, ichain, dmad->pa);
+
+	DMA_ARM(*channel);
+	DMA_FIRE(*channel);
+
+	DBG(3, "%d return %d \n", __LINE__, rc);
+
+#if SMC_DEBUG > 0
+	SMC_LP->pstats.dma_block_count[ichain]++;
+#endif
+
+#ifdef PGMTERMINATED_IT
+	_acq200_wait_dma_eot(channel);
+#endif
+	return rc;
+}
+
+#if 0
+static ssize_t show_dma_structs(
+	struct device * dev, 
+	char * buf)
+{
+	int ich, iblock;
+	int len = 0;
+#define PRINTF(fmt...) len += sprintf(buf+len, ## fmt)
+	for (ich = 0; ich != 2; ++ich){
+		for (iblock = 0; iblock != MAXCHAIN; ++iblock){
+			struct iop321_dma_desc* dmad = 
+				channels[ich].dmad[iblock];
+			PRINTF("%08x %08x %08x %08x\n",
+			       dmad->LAD, dmad->PDA, dmad->BC, dmad->DC);
+		}
+	}
+	PRINTF("waits:%d pollcat:%d eot_pollcat %d p/w:%d\n", 
+	       waits, pollcat, eot_pollcat,
+	       waits? (eot_pollcat + pollcat)/waits: 0);
+
+	return len;
+}
+static DEVICE_ATTR(dma_structs, S_IRUGO, show_dma_structs, 0);
+
+
+static void mk_dma_hooks(struct device* dev)
+{
+	device_create_file(dev, &dev_attr_dma_structs);
+}
+
+static void rm_dma_hooks(struct device* dev)
+{
+	device_remove_file(dev, &dev_attr_dma_structs);
+}
+#endif
+
+#endif  /* SMC_USE_ACQX00_DMA */
 
 
 /*
@@ -642,6 +996,11 @@ static void smc_hardware_send_pkt(unsigned long data)
 	}
 	lp->pending_tx_skb = NULL;
 
+#if SMC_USE_ACQX00_DMA  
+	if (ACQ100_USE_DMA){
+		_acq200_wait_dma_done();	
+	}
+#endif
 	packet_no = SMC_GET_AR();
 	if (unlikely(packet_no & AR_FAILED)) {
 		printk("%s: Memory allocation failed.\n", dev->name);
@@ -667,12 +1026,19 @@ static void smc_hardware_send_pkt(unsigned long data)
 	 */
 	SMC_PUT_PKT_HDR(0, len + 6);
 
+#if SMC_USE_ACQX00_DMA  
+	if (ACQ100_USE_DMA && skb_tailroom(skb) > 1){
+		acq100_do_dma_push_skb(ioaddr, skb);
+	}else{
+#endif /* SMC_USE_ACQX00_DMA */
 	/* send the actual data */
 	SMC_PUSH_DATA(buf, len & ~1);
 
 	/* Send final ctl word with the last byte if there is one */
 	SMC_outw(((len & 1) ? (0x2000 | buf[len-1]) : 0), ioaddr, DATA_REG);
-
+#if SMC_USE_ACQX00_DMA  
+	}
+#endif
 	/*
 	 * If THROTTLE_TX_PKTS is set, we stop the queue here. This will
 	 * have the effect of having at most one packet queued for TX
@@ -2017,6 +2383,9 @@ static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr)
 			dev->dma = dma;
 	}
 #endif
+#ifdef SMC_USE_ACQX00_DMA
+	smc91x_acq100_dmac_init();
+#endif
 
 	retval = register_netdev(dev);
 	if (retval == 0) {
@@ -2192,6 +2561,7 @@ static int smc_drv_probe(struct platform_device *pdev)
 	struct resource *res;
 	unsigned int __iomem *addr;
 	int ret;
+	unsigned base;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "smc91x-regs");
 	if (!res)
@@ -2233,11 +2603,23 @@ static int smc_drv_probe(struct platform_device *pdev)
 	if (ret)
 		goto out_release_attrib;
 
-	addr = ioremap(res->start, SMC_IO_EXTENT);
+	base = res->start;
+#if defined(CONFIG_MACH_ACQ100)
+	/* ACQ196 specs resources as VADDR - convert back to PHYSADDR 
+	 * it appears we can't use the VA directly ...
+	*/
+	base &= ~ACQ200_PBI_START;
+	base |= ACQ200_PBI_START_P;
+#endif
+	addr = ioremap(base, SMC_IO_EXTENT);
 	if (!addr) {
 		ret = -ENOMEM;
 		goto out_release_attrib;
 	}
+
+#if defined(CONFIG_MACH_ACQ100)
+	PRINTK("[%d] ioremap(0x%08x) returned %p\n", __LINE__, base, addr);
+#endif
 
 	platform_set_drvdata(pdev, ndev);
 	ret = smc_probe(ndev, addr);

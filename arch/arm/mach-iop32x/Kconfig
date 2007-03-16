@@ -13,6 +13,7 @@ config MACH_GLANTANK
 
 config ARCH_IQ80321
 	bool "Enable support for IQ80321"
+	select ARCH_IOP321
 	help
 	  Say Y here if you want to run your kernel on the Intel IQ80321
 	  evaluation kit for the IOP321 processor.
@@ -29,6 +30,39 @@ config MACH_N2100
 	help
 	  Say Y here if you want to run your kernel on the Thecus n2100
 	  NAS appliance.
+
+# should have been a MACH
+config ARCH_ACQ200
+	bool "Enable support for ACQ200"
+	select ARCH_ACQX00
+	help
+	  Say Y here to run kernel on the D-TACQ ACQ200 intelligent
+	  data acquisition blades. (use IOP321) www.d-tacq.com
+
+config MACH_ACQ100
+	bool "Enable support for ACQ100"
+	select ARCH_ACQX00
+	help
+	  Say Y here to run kernel on the D-TACQ ACQ100 intelligent
+	  data acquisition blades. (use IOP321) www.d-tacq.com
+	
+config ARCH_ACQX00
+	bool
+	depends on ARCH_ACQ200	|| MACH_ACQ100
+	default y
+	select ARCH_IOP321
+	select FIQ
+	select LEDS
+	select LEDS_TIMER
+	select LEDS_CPU
+	select MTD_ACQ200
+
+config ARCH_IOP321
+	bool
+	default y
+	depends on ARCH_ACQX00
+	help
+	  Hidden option
 
 endmenu
 
