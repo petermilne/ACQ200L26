@@ -1,0 +1,198 @@
+/* acq200.h */
+
+
+
+#ifndef __ACQ200_HML_H__
+#define __ACQ200_HML_H__
+
+#ifndef __ASSEMBLER__
+#ifdef __KERNEL__
+int acq200_get_bigbuf_resource(struct resource *resource);
+int acq200_get_mumem_resource(struct resource *resource);
+int acq200_get_tblock_resource(struct resource *resource);
+#endif
+#endif
+
+
+
+/*
+ * device minor #'s (nothing to do with h/w => remove
+ */
+#define FIFO_DIAGS_DEVICE 0
+#define FIFO_RO_DEVICE 1
+#define FIFO_WO_DEVICE 2
+#define FIFO_RW_DEVICE 3
+#define FIFO_RO_DEVBUF 5    /* Read only, fill bigbuf first */
+#define FIFO_WO_DEVBUF 6    /* Write only, fill bigbuf first */
+#define FIFO_RO_DEVBUF_TEST 15
+#define FIFO_WO_DEVBUF_TEST 16
+
+/*
+ * main module should define ACQ200_FPGA_REGS, void* regs mapping
+ */
+
+#define ACQ200_FPGA_REG_BAR  0
+#define ACQ200_FPGA_FIFO_BAR 1
+
+
+#ifdef __ASSEMBLER__
+#define FPGA_REG(offset)   offset
+#else
+#define FPGA_REG(offset) ((volatile u32*)((unsigned)ACQ200_FPGA_REGS+offset))
+#endif
+
+
+/*
+ * REGISTERS
+ */
+
+#define ACQ200_BDR      FPGA_REG( 0x00 )
+#define ACQ200_FIFCON   FPGA_REG( 0x08 )
+#define ACQ200_SYSCON   FPGA_REG( 0x10 )
+#define ACQ200_CLKCON   FPGA_REG( 0x18 )
+#define ACQ200_CLKDAT   FPGA_REG( 0x20 )
+#define ACQ200_DIOCON   FPGA_REG( 0x28 )
+#define ACQ200_DIOSFR   FPGA_REG( 0x30 )
+
+#define ACQ200_ICR_OFFSET 0x80
+#define ACQ200_ICR     FPGA_REG( ACQ200_ICR_OFFSET )
+
+
+/*
+ * FIELDS
+ */
+
+#define ACQ200_BDR_DEFAULT 0xdeadbeef
+
+
+#define ACQ200_FIFCON_HOTPOINT  0xf0000000
+#define ACQ200_FIFCON_HOTFULL   0x08000000
+#define ACQ200_FIFCON_HOTEMPTY  0x04000000
+#define ACQ200_FIFCON_HOTOVER   0x02000000
+#define ACQ200_FIFCON_HOTUNDER  0x01000000
+
+#define ACQ200_FIFCON_COLDPOINT 0x00f00000
+#define ACQ200_FIFCON_COLDFULL  0x00080000
+#define ACQ200_FIFCON_COLDEMPTY 0x00040000
+#define ACQ200_FIFCON_COLDOVER  0x00020000
+#define ACQ200_FIFCON_COLDUNDER 0x00010000
+
+#define ACQ200_FIFCON_HITIDE    0x0000f000
+#define ACQ200_FIFCON_LOTIDE    0x00000f00
+#define ACQ200_FIFCON_ABOVE_HT  0x00000080
+#define ACQ200_FIFCON_BELOW_LT  0x00000040
+/* not used                     0x00000030 */
+#define ACQ200_FIFCON_HITIE     0x00000008
+#define ACQ200_FIFCON_LOTIE     0x00000004
+#define ACQ200_FIFCON_HC_RESET  0x00000002
+#define ACQ200_FIFCON_HC_ENABLE 0x00000001
+
+
+#define ACQ200_FIFCON_HOTP_SHIFT  28
+#define ACQ200_FIFCON_COLDP_SHIFT 20
+#define ACQ200_FIFCON_HIT_SHIFT   12
+#define ACQ200_FIFCON_LOT_SHIFT    8
+
+#define ACQ200_FIFCON_MASK      0xf
+
+#define ACQ200_COLDFIFO_SZ      0x1000     /* 4K bytes */
+#define ACQ200_FIFCON_COLD_HALF 0x00800000
+
+#define ACQ200_FIFCON_COLD_HLFE 0x00900000 /* AND to compare below half */
+
+
+#define ACQ200_SYSCON_LOOPBACK  0x00000040
+#define ACQ200_SYSCON_NDACRESET 0x00000020 /* WAV232 */
+#define ACQ200_SYSCON_SOFTCLKMD 0x00000010
+#define ACQ200_SYSCON_SOFTCLKS  0x00000008
+#define ACQ200_SYSCON_SOFTTRG   0x00000004
+#define ACQ200_SYSCON_EXTCLK    0x00000002
+#define ACQ200_SYSCON_DAQEN     0x00000001
+
+
+#define ACQ200_CLKCON_CS_MASK   0x000000f0
+
+#define ACQ200_CLKCON_CS_DI0    0x00000080
+#define ACQ200_CLKCON_CS_DI1    0x00000090
+#define ACQ200_CLKCON_CS_DI2    0x000000a0
+#define ACQ200_CLKCON_CS_DI3    0x000000b0
+#define ACQ200_CLKCON_CS_DI4    0x000000c0
+#define ACQ200_CLKCON_CS_DI5    0x000000d0
+#define ACQ200_CLKCON_CS_44M    0x000000e0
+#define ACQ200_CLKCON_CS_66M    0x000000f0
+
+#define ACQ200_CLKCON_CLKMAS    0x00000008
+
+#define ACQ200_CLKCON_OCS_MASK  0x00000007
+
+#define ACQ200_CLKCON_OCS_DO0   0x00000000
+#define ACQ200_CLKCON_OCS_DO1   0x00000001
+#define ACQ200_CLKCON_OCS_DO2   0x00000002
+#define ACQ200_CLKCON_OCS_DO3   0x00000003
+#define ACQ200_CLKCON_OCS_DO4   0x00000004
+#define ACQ200_CLKCON_OCS_DO5   0x00000005
+
+
+#define ACQ200_DIOCON_SETOUT    0x00ff0000
+#define ACQ200_DIOCON_OUTDAT    0x0000ff00
+#define ACQ200_DIOCON_INPDAT    0x000000ff
+
+
+#define ACQ200_DIOSFR_ET_EN     0x00002000
+#define ACQ200_DIOSFR_ET_STA    0x00001000
+#define ACQ200_DIOSFR_ET_RISING 0x00000800
+
+#define ACQ200_DIOSFR_ET_MASK   0x00000700
+#define ACQ200_DIOSFR_ET_DI0    0x00000000
+#define ACQ200_DIOSFR_ET_DI1    0x00000100
+#define ACQ200_DIOSFR_ET_DI2    0x00000200
+#define ACQ200_DIOSFR_ET_DI3    0x00000300
+#define ACQ200_DIOSFR_ET_DI4    0x00000400
+#define ACQ200_DIOSFR_ET_DI5    0x00000500
+
+/* notused                      0x000000e0 */
+
+#define ACQ200_DIOSFR_EC_STA    0x00000010
+#define ACQ200_DIOSFR_EC_RISING 0x00000008
+
+#define ACQ200_DIOSFR_EC_MASK   0x00000007
+#define ACQ200_DIOSFR_EC_DI0    0x00000000
+#define ACQ200_DIOSFR_EC_DI1    0x00000001
+#define ACQ200_DIOSFR_EC_DI2    0x00000002
+#define ACQ200_DIOSFR_EC_DI3    0x00000003
+#define ACQ200_DIOSFR_EC_DI4    0x00000004
+#define ACQ200_DIOSFR_EC_DI5    0x00000005
+
+
+
+#define COLD_FIFO_SZ         8192
+#define COLD_FIFO_ENTRIES    16
+#define COLD_FIFO_ENTRY_SIZE (COLD_FIFO_SZ/COLD_FIFO_ENTRIES)
+#define COLD_FIFO_ENT
+
+#define HOT_FIFO_SZ              4096
+#define HOT_FIFO_ENTRIES         16
+#define HOT_FIFO_ENTRY_SIZE      (FIFO_SZ/FIFO_ENTRIES)
+
+#define HOT_FIFO_SZK             (HOT_FIFO_SZ/1024)
+
+
+#ifndef __ASSEMBLER__
+struct PCI_DMA_BUFFER {
+	u32 *va;
+	dma_addr_t laddr;
+	int direction;
+	int mapped;
+};
+
+int acq200_post_dmac_request( 
+	int channel, 
+	u32 laddr,
+	u32 offset,
+	u32 remaddr, 
+	u32 bc, 
+	int incoming
+);
+#endif
+
+#endif /* #define __ACQ200_HML_H__ */
