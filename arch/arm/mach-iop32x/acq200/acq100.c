@@ -13,7 +13,7 @@
  * include/asm-arm/arch-iop3xx.  This keeps the code much cleaner.
  *
  */
-#include <linux/config.h>
+
 #include <linux/platform_device.h>
 #include <linux/init.h>
 #include <linux/major.h>

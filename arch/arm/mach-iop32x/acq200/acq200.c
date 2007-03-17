@@ -13,8 +13,6 @@
  */
 #include <linux/mm.h>
 #include <linux/init.h>
-#include <linux/config.h>
-#include <linux/init.h>
 #include <linux/major.h>
 #include <linux/fs.h>
 #include <linux/device.h>
