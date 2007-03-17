@@ -42,8 +42,7 @@
 #define ISR_ADDS_ENDSTOP 1
 #elif defined(ACQ196F)
 #warning DMA_BLOCK_LEN set to 1024 for FIR
-#warning ACQ196F set to 4K for DMA experiment - change me now
-#define DMA_BLOCK_LEN 4096
+#define DMA_BLOCK_LEN 1024
 /* #define DMA_BLOCK_LEN 1024 */
 #define ISR_ADDS_ENDSTOP 0
 #else

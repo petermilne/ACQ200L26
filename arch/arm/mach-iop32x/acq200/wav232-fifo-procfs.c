@@ -834,19 +834,19 @@ static DEVICE_ATTR(fill_to_end0,S_IRUGO | S_IWUGO,
 
 static void wav232_mk_dev_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_tracksel);
-	device_create_file(dev, &dev_attr_tracksel_sim);
-	device_create_file(dev, &dev_attr_nchannels);
-	device_create_file(dev, &dev_attr_int_clk_src);
-	device_create_file(dev, &dev_attr_ext_trg_status);
-	device_create_file(dev, &dev_attr_ext_clk_status);
-	device_create_file(dev, &dev_attr_ntracks);
-	device_create_file(dev, &dev_attr_fill_to_end);
-	device_create_file(dev, &dev_attr_copy_to_end);
-	device_create_file(dev, &dev_attr_swap_alt_len);
-	device_create_file(dev, &dev_attr_fill_to_end0);
-	device_create_file(dev, &dev_attr_buffer_maxlen);
-	device_create_file(dev, &dev_attr_clear_all_tracks);
+	DEVICE_CREATE_FILE(dev, &dev_attr_tracksel);
+	DEVICE_CREATE_FILE(dev, &dev_attr_tracksel_sim);
+	DEVICE_CREATE_FILE(dev, &dev_attr_nchannels);
+	DEVICE_CREATE_FILE(dev, &dev_attr_int_clk_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ext_trg_status);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ext_clk_status);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ntracks);
+	DEVICE_CREATE_FILE(dev, &dev_attr_fill_to_end);
+	DEVICE_CREATE_FILE(dev, &dev_attr_copy_to_end);
+	DEVICE_CREATE_FILE(dev, &dev_attr_swap_alt_len);
+	DEVICE_CREATE_FILE(dev, &dev_attr_fill_to_end0);
+	DEVICE_CREATE_FILE(dev, &dev_attr_buffer_maxlen);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clear_all_tracks);
 }
 
 
