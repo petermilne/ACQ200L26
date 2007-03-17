@@ -63,7 +63,7 @@ unsigned long iop3xx_gettimeoffset(void)
 extern void iop321_auxtimer_func(void);
 
 static irqreturn_t
-iop3xx_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+iop3xx_timer_interrupt(int irq, void *dev_id)
 {
 	int tick_insert = 0;
         write_seqlock(&xtime_lock);
@@ -77,7 +77,7 @@ iop3xx_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
         while ((signed long)(next_jiffy_time - *IOP3XX_TU_TCR1)
                                                         >= ticks_per_jiffy) {
-		timer_tick(regs);
+		timer_tick();
 		if (++tick_insert > 2){
                        next_jiffy_time = *IOP3XX_TU_TCR1 - ticks_per_jiffy;
                        break;
