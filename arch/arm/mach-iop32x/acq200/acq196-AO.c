@@ -167,7 +167,7 @@ struct Globs {
 DEFINE_DMA_CHANNEL(dmac1, 1);
 
 int fawg_debug = 0;
-module_param(fawg_debug, int, 0666);
+module_param(fawg_debug, int, 0664);
 
 int fawg_max_samples = SAWG_MAX_SAMPLES;
 module_param(fawg_max_samples, int, 0444);

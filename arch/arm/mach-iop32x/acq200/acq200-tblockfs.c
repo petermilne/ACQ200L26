@@ -62,7 +62,7 @@
 #include "acq32busprot.h"          /* soft link to orig file */
 
 int acq200_tblockfs_debug;
-module_param(acq200_tblockfs_debug, int, 0666);
+module_param(acq200_tblockfs_debug, int, 0664);
 
 
 #define VERID "$Revision: 1.3 $ build B1000 "
@@ -96,7 +96,7 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 
 static int mk_tblock_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
 	return 0;
 }
 
@@ -297,9 +297,13 @@ static struct platform_device acq200_tblockfs_device = {
 
 static int __init acq200_tblockfs_init( void )
 {
+	int rc;
 	acq200_debug = acq200_tblockfs_debug;
 
-	driver_register(&acq200_tblockfs_driver);
+	rc = driver_register(&acq200_tblockfs_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&acq200_tblockfs_device);
 }
 

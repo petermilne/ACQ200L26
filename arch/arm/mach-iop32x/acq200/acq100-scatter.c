@@ -104,7 +104,7 @@
 #include "acq200-inline-dma.h"
 
 int acq100_scatter_debug;
-module_param(acq100_scatter_debug, int, 0666);
+module_param(acq100_scatter_debug, int, 0664);
 
 
 #define MAXDEST 6             
@@ -120,7 +120,7 @@ char acq100_scatter_driver_version[] = VERID __DATE__ " Features:\n";
 char acq100_scatter_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 
 int disable_acq_debug = 0;         /* set 1 */
-module_param(disable_acq_debug, int, 0666);
+module_param(disable_acq_debug, int, 0664);
 
 
 #define CHANNEL_MASK (CAPDEF->channel_mask)
@@ -1046,22 +1046,22 @@ static int mk_scatter_sysfs(struct device *dev)
 	int id;
 
 	for (id = 0; id != MAXDEST; ++id){
-		device_create_file(dev, &dg.dest_attr[id]);
+		DEVICE_CREATE_FILE(dev, &dg.dest_attr[id]);
 	}
 
-	device_create_file(dev, &dev_attr_epc);
-	device_create_file(dev, &dev_attr_build_list);
-	device_create_file(dev, &dev_attr_globs);
-	device_create_file(dev, &dev_attr_stats);
-	device_create_file(dev, &dev_attr_run);
-	device_create_file(dev, &dev_attr_stop);
-	device_create_file(dev, &dev_attr_yield);
-	device_create_file(dev, &dev_attr_fifo_th);
-	device_create_file(dev, &dev_attr_imask);
-	device_create_file(dev, &dev_attr_FIFERR);
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_max_cycles);
-	device_create_file(dev, &dev_attr_soft_trig);
+	DEVICE_CREATE_FILE(dev, &dev_attr_epc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_build_list);
+	DEVICE_CREATE_FILE(dev, &dev_attr_globs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_stats);
+	DEVICE_CREATE_FILE(dev, &dev_attr_run);
+	DEVICE_CREATE_FILE(dev, &dev_attr_stop);
+	DEVICE_CREATE_FILE(dev, &dev_attr_yield);
+	DEVICE_CREATE_FILE(dev, &dev_attr_fifo_th);
+	DEVICE_CREATE_FILE(dev, &dev_attr_imask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_FIFERR);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_max_cycles);
+	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trig);
 	return 0;
 }
 
@@ -1111,9 +1111,13 @@ static struct platform_device acq100_scatter_device = {
 
 static int __init acq100_scatter_init( void )
 {
+	int rc;
 	acq200_debug = acq100_scatter_debug;
 
-	driver_register(&acq100_scatter_driver);
+	rc = driver_register(&acq100_scatter_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&acq100_scatter_device);
 }
 

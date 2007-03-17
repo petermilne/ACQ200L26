@@ -62,7 +62,7 @@
 #include "acq196.h"
 
 int acq100_skel_debug;
-module_param(acq100_skel_debug, int, 0666);
+module_param(acq100_skel_debug, int, 0664);
 
 #define VERID "$Revision: 1.4 $ build B1000 "
 
@@ -169,9 +169,13 @@ static struct platform_device acq100_skel_device = {
 
 static int __init acq100_skel_init( void )
 {
+	int rc;
 	acq200_debug = acq100_skel_debug;
 
-	driver_register(&acq100_skel_driver);
+	rc = driver_register(&acq100_skel_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&acq100_skel_device);
 }
 

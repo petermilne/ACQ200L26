@@ -50,7 +50,7 @@
 #include <linux/module.h>
 #endif
 
-
+#include "acq200.h"
 
 static int mode;
 static int is_running;
@@ -257,10 +257,10 @@ static DRIVER_ATTR(version,S_IRUGO,show_version,0);
 
 static void mk_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_mode);
-	device_create_file(dev, &dev_attr_results);
-	device_create_file(dev, &dev_attr_running);
-	device_create_file(dev, &dev_attr_gtsr_us);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_results);
+	DEVICE_CREATE_FILE(dev, &dev_attr_running);
+	DEVICE_CREATE_FILE(dev, &dev_attr_gtsr_us);
 	driver_create_file(dev->driver, &driver_attr_version);
 }
 static void rm_sysfs(struct device *dev)
@@ -304,11 +304,10 @@ static struct platform_device ppmu_device = {
 
 static int __init iop321_ppmu_init( void )
 {
-	driver_register(&ppmu_device_driver);
-/*
- * missing form 2.5.70 ...
-	return platform_add_devices(devices, ARRAY_SIZE(devices));
-*/
+	int rc = driver_register(&ppmu_device_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&ppmu_device);
 }
 

@@ -229,7 +229,7 @@ static DEVICE_ATTR(							\
 #define DECL_FIRK_GROUP DECL_FIRQ(0); DECL_FIRQ(1); DECL_FIRQ(2)
 
 #define DEVICE_CREATE_FIRK(dev, bank) \
-        device_create_file(dev, &dev_attr_FIRK##bank)
+        DEVICE_CREATE_FILE(dev, &dev_attr_FIRK##bank)
 
 #define DEVICE_CREATE_FIRK_GROUP(dev) do {	\
 	DEVICE_CREATE_FIRK(dev, 0);		\
@@ -357,18 +357,18 @@ DEFINE_SIGNAL_ATTR(sync_trig_mas);
 
 static void acq196_mk_dev_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_coding);
-	device_create_file(dev, &dev_attr_FAWG_div);
-	device_create_file(dev, &dev_attr_slow_clock);
-	device_create_file(dev, &dev_attr_AO_coding);
-	device_create_file(dev, &dev_attr_AO_clock_mode);
-	device_create_file(dev, &dev_attr_event1);
-	device_create_file(dev, &dev_attr_channel_mapping);
-	device_create_file(dev, &dev_attr_channel_mapping_bin);
-	device_create_file(dev, &dev_attr_ao_trig);
-	device_create_file(dev, &dev_attr_ao_clk);
-	device_create_file(dev, &dev_attr_sync_trig_src);
-	device_create_file(dev, &dev_attr_sync_trig_mas);
+	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
+	DEVICE_CREATE_FILE(dev, &dev_attr_FAWG_div);
+	DEVICE_CREATE_FILE(dev, &dev_attr_slow_clock);
+	DEVICE_CREATE_FILE(dev, &dev_attr_AO_coding);
+	DEVICE_CREATE_FILE(dev, &dev_attr_AO_clock_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ao_trig);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ao_clk);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
 #ifdef ACQ196F
 	DEVICE_CREATE_FIRK_GROUP(dev);
 #endif

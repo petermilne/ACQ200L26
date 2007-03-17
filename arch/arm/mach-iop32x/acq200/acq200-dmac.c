@@ -56,7 +56,6 @@
 #include <asm/arch-iop32x/acq200.h>
 
 #include "acq200.h"
-#include "acq200_debug.h"
 #include "acq200_minors.h"
 
 
@@ -125,7 +124,7 @@ void acq200_init_interrupt_hook(
 int acq200_dma_init_interrupt_hook(
 	struct InterruptSync* is,
 	unsigned int irq,
-	irqreturn_t (*handler)(int, void *, struct pt_regs *),
+	irq_handler_t handler,
 	const char * devname,
 	volatile u32 *regs
 	)
@@ -404,7 +403,7 @@ static char* dumpDCRbits(u32 regval)
 
 #define _DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 
-static irqreturn_t dma_irq_err(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t dma_irq_err(int irq, void *dev_id)
 {
 	struct InterruptSync* is = (struct InterruptSync*)dev_id;
 	u32 flags = _DMA_REG(is->regs,DMA_CSR);
@@ -661,10 +660,10 @@ DECLARE_CHANNEL_ACCESS(channel##_I_pci, channel, 1, 0);	\
 DECLARE_CHANNEL_ACCESS(channel##_O_pci, channel, 0, 0);
 
 #define DEVICE_CREATE_CHANNEL_ACCESS_GROUP(dev, channel)	\
-device_create_file(dev, &dev_attr_oneshot_##channel##_I_m2m);		\
-device_create_file(dev, &dev_attr_oneshot_##channel##_O_m2m);		\
-device_create_file(dev, &dev_attr_oneshot_##channel##_I_pci);		\
-device_create_file(dev, &dev_attr_oneshot_##channel##_O_pci);
+DEVICE_CREATE_FILE(dev, &dev_attr_oneshot_##channel##_I_m2m);		\
+DEVICE_CREATE_FILE(dev, &dev_attr_oneshot_##channel##_O_m2m);		\
+DEVICE_CREATE_FILE(dev, &dev_attr_oneshot_##channel##_I_pci);		\
+DEVICE_CREATE_FILE(dev, &dev_attr_oneshot_##channel##_O_pci);
 
 #define DEVICE_REMOVE_CHANNEL_ACCESS_GROUP(dev, channel)	\
 device_remove_file(dev, &dev_attr_oneshot_##channel##_I_m2m);		\
@@ -677,19 +676,19 @@ DECLARE_CHANNEL_ACCESS_GROUP(1);
 
 static void mk_sysfs(struct device *dev)
 {
-	dbg(1,  "calling device_create_file dev %p", dev );
+	dbg(1,  "calling DEVICE_CREATE_FILE dev %p", dev );
 
-	device_create_file(dev, &dev_attr_dmac_state);
-	device_create_file(dev, &dev_attr_dmac0_regs);
-	device_create_file(dev, &dev_attr_dmac1_regs);
-	device_create_file(dev, &dev_attr_rb_state);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmac_state);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmac0_regs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmac1_regs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_rb_state);
 
 	DEVICE_CREATE_CHANNEL_ACCESS_GROUP(dev, 0);
 	DEVICE_CREATE_CHANNEL_ACCESS_GROUP(dev, 1);
-	device_create_file(dev, &dev_attr_oneshot_result);
+	DEVICE_CREATE_FILE(dev, &dev_attr_oneshot_result);
 
-	device_create_file(dev, &dev_attr_dmac0_errs);
-	device_create_file(dev, &dev_attr_dmac1_errs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmac0_errs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmac1_errs);
 }
 
 static void rm_sysfs(struct device *dev)
@@ -757,7 +756,11 @@ static struct platform_device dmac_device = {
 
 static int __init acq200_dmac_init( void )
 {
-	driver_register(&dmac_device_driver);
+	int rc = driver_register(&dmac_device_driver);
+
+	if (rc != 0){
+		return rc;
+	}
 
 	DMA_REQUEST_IRQ(acq200_is_dma, ERR, 0, err);
 	DMA_REQUEST_IRQ(acq200_is_dma, ERR, 1, err);

@@ -40,9 +40,9 @@ char eb_ppcustom_driver_string[] =
 	"D-TACQ Low Latency Control Device";
 char eb_ppcustom_driver_version[] = VERID __DATE__ "\n";
 char eb_ppcustom_copyright[] = 
-	"Copyright (c) 2004 D-TACQ Solutions Ltd\n";
+	"Copyright (c) 2006 D-TACQ Solutions Ltd\n";
 
-
+#include <linux/blkdev.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>
@@ -85,46 +85,46 @@ char eb_ppcustom_copyright[] =
 #include "acq32busprot.h"          /* soft link to orig file */
 
 int eb_ppcustom_debug;
-module_param(eb_ppcustom_debug, int, 0666);
+module_param(eb_ppcustom_debug, int, 0664);
 
 
 int NSAMPLES = 32;
-module_param(NSAMPLES, int, 0666);
+module_param(NSAMPLES, int, 0664);
 
 /** NCHANNELS in output. NCHANNELS <= NCHANNELS_SAMPLE */
 int NCHANNELS = 32;
-module_param(NCHANNELS, int, 0666);
+module_param(NCHANNELS, int, 0664);
 
 int PRETRIG = 8;
-module_param(PRETRIG, int, 0666);
+module_param(PRETRIG, int, 0664);
 
 int TRIG_CHAN = 32;
-module_param(TRIG_CHAN, int, 0666);
+module_param(TRIG_CHAN, int, 0664);
 
 int TRIG_RISING = 1;
-module_param(TRIG_RISING, int, 0666);
+module_param(TRIG_RISING, int, 0664);
 
 int TRIG_LO_BELOW = 100;		/* ~0 */
-module_param(TRIG_LO_BELOW, int, 0666);
+module_param(TRIG_LO_BELOW, int, 0664);
 
 int TRIG_HI_ABOVE = 32768/100  * 25;		/* 2.5V */
-module_param(TRIG_HI_ABOVE, int, 0666);
+module_param(TRIG_HI_ABOVE, int, 0664);
 
 int S_pulse_count = 0;
 module_param(S_pulse_count, int, 0444);
 
 int S_search_limit = 1024;		/* samples */
-module_param(S_search_limit, int, 0666);
+module_param(S_search_limit, int, 0664);
 
 int S_stubber = 0;
-module_param(S_stubber, int, 0666);
+module_param(S_stubber, int, 0664);
 
 int debug_debug = 0;
-module_param(debug_debug, int, 0666);
+module_param(debug_debug, int, 0664);
 
 
-int MAX_PULSES = 400*8;				/* 400Hz, 8s .. avoid running out of memory */
-module_param(MAX_PULSES, int, 0666);
+int MAX_PULSES = 400*8;	      /* 400Hz, 8s .. avoid running out of memory */
+module_param(MAX_PULSES, int, 0664);
 
 int S_first_time = 1;
 
@@ -981,8 +981,8 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 
 static int mk_ppcustom_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_clear);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clear);
 	return 0;
 }
 
@@ -991,9 +991,9 @@ static int mk_ppcustom_sysfs(struct device *dev)
 
 static int eb_data_open(struct inode *inode, struct file *filp)
 {
-	struct EventLocator *elp = (struct EventLocator *)inode->u.generic_ip;
+	struct EventLocator *elp = (struct EventLocator *)inode->i_private;
 
-	filp->private_data = (void*)inode->u.generic_ip;
+	filp->private_data = (void*)inode->i_private;
 
 	{
 		int index = -1;
@@ -1071,7 +1071,7 @@ static struct inode *ebfs_make_inode(struct super_block *sb, int mode)
 	if (ret) {
 		ret->i_mode = mode;
 		ret->i_uid = ret->i_gid = 0;
-		ret->i_blksize = PAGE_CACHE_SIZE;
+		ret->i_blkbits = blksize_bits(PAGE_CACHE_SIZE);
 		ret->i_blocks = 0;
 		ret->i_atime = ret->i_mtime = ret->i_ctime = CURRENT_TIME;
 	}
@@ -1083,7 +1083,7 @@ static int ebfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	if (inode){
 		dbg(1, "free my data %p", inode);
-		ebfs_onUnlink(inode->u.generic_ip);
+		ebfs_onUnlink(inode->i_private);
 	}else{
 		err("WOT? no inode?");
 	}
@@ -1118,7 +1118,7 @@ static struct dentry *ebfs_create_file (
 	if (! inode)
 		goto out_dput;
 	inode->i_fop = fops;
-	inode->u.generic_ip = clidata;
+	inode->i_private = clidata;
 /*
  * Put it all into the dentry cache and we're done.
  */
@@ -1387,9 +1387,13 @@ static struct platform_device eb_ppcustom_device = {
 
 static int __init eb_ppcustom_init( void )
 {
+	int rc;
 	acq200_debug = eb_ppcustom_debug;
 
-	driver_register(&eb_ppcustom_driver);
+	rc = driver_register(&eb_ppcustom_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&eb_ppcustom_device);
 }
 

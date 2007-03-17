@@ -51,7 +51,7 @@
 
 
 int acq200_threshold_debug;
-module_param(acq200_threshold_debug, int, 0666);
+module_param(acq200_threshold_debug, int, 0664);
 
 int cskip = 0;
 module_param(cskip, int, 0444);
@@ -60,7 +60,7 @@ int nskips = 0;
 module_param(nskips, int, 0444);
 
 int stub = 0;
-module_param(stub, int, 0666);
+module_param(stub, int, 0664);
 
 int trigger_count = 0;
 module_param(trigger_count, int, 0444);

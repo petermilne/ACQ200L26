@@ -83,10 +83,10 @@
 #include "../../../../drivers/i2c/chips/ad539x.h"
 
 int acq200_llc_debug;
-module_param(acq200_llc_debug, int, 0666);
+module_param(acq200_llc_debug, int, 0664);
 
 int acq200_llc_dump_ao2bb;
-module_param(acq200_llc_dump_ao2bb, int , 0666);
+module_param(acq200_llc_dump_ao2bb, int , 0664);
 
 char* verid = VERID;
 module_param(verid, charp, 0444);
@@ -1253,20 +1253,20 @@ static DEVICE_ATTR(IODD, S_IWUGO|S_IRUGO, show_iodd, set_iodd);
 
 static int mk_llc_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_run);
-	device_create_file(dev, &dev_attr_stats);
-	device_create_file(dev, &dev_attr_mode);
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_imask);
-	device_create_file(dev, &dev_attr_debug);
-	device_create_file(dev, &dev_attr_settings);
-	device_create_file(dev, &dev_attr_emergency_stop);
-	device_create_file(dev, &dev_attr_block_len);
-	device_create_file(dev, &dev_attr_status);
-	device_create_file(dev, &dev_attr_channel_mask);
-	device_create_file(dev, &dev_attr_LLC200_INIT_size);
-	device_create_file(dev, &dev_attr_IODD);
-	device_create_file(dev, &dev_attr_fifo_th);
+	DEVICE_CREATE_FILE(dev, &dev_attr_run);
+	DEVICE_CREATE_FILE(dev, &dev_attr_stats);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_imask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_debug);
+	DEVICE_CREATE_FILE(dev, &dev_attr_settings);
+	DEVICE_CREATE_FILE(dev, &dev_attr_emergency_stop);
+	DEVICE_CREATE_FILE(dev, &dev_attr_block_len);
+	DEVICE_CREATE_FILE(dev, &dev_attr_status);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_LLC200_INIT_size);
+	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
+	DEVICE_CREATE_FILE(dev, &dev_attr_fifo_th);
 	return 0;
 }
 
@@ -1379,9 +1379,13 @@ static struct platform_device acq200_llc_device = {
 
 static int __init acq200_llc_init( void )
 {
+	int rc;
 	acq200_debug = acq200_llc_debug;
 
-	driver_register(&acq200_llc_driver);
+	rc = driver_register(&acq200_llc_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&acq200_llc_device);
 }
 

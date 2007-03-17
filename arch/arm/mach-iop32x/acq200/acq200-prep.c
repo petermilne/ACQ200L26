@@ -47,6 +47,7 @@ close: nothing
  * This file may be redistributed under the terms of the GNU GPL.
 */
 
+#include <linux/blkdev.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
@@ -89,7 +90,7 @@ close: nothing
 #include "acq32busprot.h"          /* soft link to orig file */
 
 int acq200_prep_debug;
-module_param(acq200_prep_debug, int, 0666);
+module_param(acq200_prep_debug, int, 0664);
 
 
 #define VERID "$Revision: 1.3 $ build B1000 "
@@ -367,7 +368,7 @@ static int xxp_open(struct inode *inode, struct file *file)
 	dbg(1, "");
 	acq200_fifo_bigbuf_xx_open (inode, file);
 
-	DCI(file)->phase = (struct Phase*)inode->u.generic_ip;
+	DCI(file)->phase = (struct Phase*)inode->i_private;
 
 	dbg(1, "phase %s tb %d ssize %d", DCI(file)->phase->name,
 	    getPhaseTblockCount(DCI(file)->phase),
@@ -492,7 +493,7 @@ static void prep_on_new_phase(struct Phase* phase)
 {
 	struct dentry *dir = prepfs_create_dir(PFG.sb, PFG.data, phase->name);
 
-	dir->d_inode->u.generic_ip = phase;
+	dir->d_inode->i_private = phase;
 
 	if (dir){
 		prep_gather_blocks(phase);
@@ -609,7 +610,9 @@ static ssize_t spec_write(struct file *file, const char *buf,
 	int ncopy = txtAddData(&sfb->source_text, count);
 
 	dbg(1, "count %d ncopy %d", count, ncopy);
-	copy_from_user(bp, buf, ncopy);
+	if (copy_from_user(bp, buf, ncopy)){
+		return -EFAULT;
+	}
 
 	*offset += ncopy;
 	return ncopy;
@@ -637,10 +640,14 @@ static ssize_t spec_read(struct file *file, char *buf,
 				dbg(1, "%12s %s", specShowFlags(spec),
 				    spec->def);
 				ncopy = strlen(spec->def);
-				copy_to_user(buf, spec->def, ncopy);
+				if (copy_to_user(buf, spec->def, ncopy)){
+					return -EFAULT;
+				}
 				buf += ncopy;
 			}
-			copy_to_user(buf, "\n", 1);
+			if (copy_to_user(buf, "\n", 1)){
+				return -EFAULT;
+			}
 
 			*offset += 1;
 			return msg_len;
@@ -737,7 +744,9 @@ static ssize_t sum_read(struct file *file, char *buf,
 					  ps);
 
 			if (len <= count){
-				copy_to_user(buf, lb, len);
+				if (copy_to_user(buf, lb, len)){
+					return -EFAULT;
+				}
 				*offset += 1;
 				return len;
 			}else{
@@ -803,7 +812,9 @@ static ssize_t stat_read(struct file *file, char *buf,
 				       phase->prep_start_time.tv_sec, 
 				       phase->prep_start_time.tv_usec);
 
-			copy_to_user(buf, lb, len);
+			if (copy_to_user(buf, lb, len)){
+				return -EFAULT;
+			}
 			*offset += 1;
 			return len;
 		}
@@ -996,7 +1007,7 @@ int pgm_unlink(struct inode *dir, struct dentry *dentry)
 int pgm_rmdir(struct inode *dir, struct dentry *dentry)
 /* recycle the Phase on data directory deletion */
 {
-	struct Phase* phase = (struct Phase*)dentry->d_inode->u.generic_ip;
+	struct Phase* phase = (struct Phase*)dentry->d_inode->i_private;
 	int rc = simple_rmdir(dir, dentry);
 
 	if (rc == 0 && phase != 0){
@@ -1032,7 +1043,7 @@ static struct dentry *prepfs_create_file (
 	if (! inode)
 		goto out_dput;
 	inode->i_fop = fops;
-	inode->u.generic_ip = clidata;
+	inode->i_private = clidata;
 /*
  * Put it all into the dentry cache and we're done.
  */
@@ -1061,7 +1072,7 @@ static struct inode *prepfs_make_inode(struct super_block *sb, int mode)
 	if (ret) {
 		ret->i_mode = mode;
 		ret->i_uid = ret->i_gid = 0;
-		ret->i_blksize = PAGE_CACHE_SIZE;
+		ret->i_blkbits = blksize_bits(PAGE_CACHE_SIZE);
 		ret->i_blocks = 0;
 		ret->i_atime = ret->i_mtime = ret->i_ctime = CURRENT_TIME;
 	}

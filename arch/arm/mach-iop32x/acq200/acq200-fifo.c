@@ -98,53 +98,53 @@ extern void acq200_set_user_led(int led4, int on);
 int acq200_timeout = 10000;
 
 int acq200_fifo_debug = 0;
-module_param(acq200_fifo_debug, int, 0666);
+module_param(acq200_fifo_debug, int, 0664);
 
 
 int acq200_dmad_debug = 0;
-module_param(acq200_dmad_debug, int, 0666);
+module_param(acq200_dmad_debug, int, 0664);
 
 #define ACQ200_DMAD_DEBUG (acq200_dmad_debug==0? 16: 0)
 
 int acq200_clk_hz = 1000000;
-module_param(acq200_clk_hz, int, 0666);
+module_param(acq200_clk_hz, int, 0664);
 
 int fastforward = 0;
-module_param(fastforward, int, 0666);
+module_param(fastforward, int, 0664);
 
 int disable_acq_debug = 0;         /* set 1 */
-module_param(disable_acq_debug, int, 0666);
+module_param(disable_acq_debug, int, 0664);
 
 
 
 #ifdef ACQ216
 /** repeated transient mode. */
 int live_one_frame_per_dcb;
-module_param(live_one_frame_per_dcb, int, 0666);
+module_param(live_one_frame_per_dcb, int, 0664);
 #endif
 
 int transient_dma_blocklimit;
-module_param(transient_dma_blocklimit, int, 0666);
+module_param(transient_dma_blocklimit, int, 0664);
 
 int uses_ST_CAPDONE = 1;
-module_param(uses_ST_CAPDONE, int, 0666);
+module_param(uses_ST_CAPDONE, int, 0664);
 
 #ifndef AICHAN_DEFAULT
 #define AICHAN_DEFAULT 0
 #endif
 int acq200_aichan = AICHAN_DEFAULT;
-module_param(acq200_aichan, int, 0666);
+module_param(acq200_aichan, int, 0664);
 
 int acq200_data_word_size = 0;
-module_param(acq200_data_word_size, int, 0666);
+module_param(acq200_data_word_size, int, 0664);
 
 int blt_dma_using_interrupt = 0;
-module_param(blt_dma_using_interrupt, int, 0666);
+module_param(blt_dma_using_interrupt, int, 0664);
 
 
 /** pgm 20050513 - desperate diags */
 int init_dmac_count = 0;
-module_param(init_dmac_count, int, 0666);
+module_param(init_dmac_count, int, 0664);
 
 #define DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 #define DMA_ERROR IOP321_CSR_ERR
@@ -1060,7 +1060,7 @@ static void tee_empties(int max_empties)
 }
 
 
-static irqreturn_t dma_irq_eot(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t dma_irq_eot(int irq, void *dev_id)
 {
 	struct InterruptSync* is = (struct InterruptSync*)dev_id;
 	u32 flags = DMA_REG(is->regs,DMA_CSR);
@@ -1249,7 +1249,7 @@ static void regular_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 
 
 
-static irqreturn_t dma_irq_eoc(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t dma_irq_eoc(int irq, void *dev_id)
 {
 	struct InterruptSync* is = (struct InterruptSync*)dev_id;
 	u32 flags = DMA_REG(is->regs,DMA_CSR);
@@ -1688,7 +1688,9 @@ static ssize_t acq200_fpga_fifo_write_buf_read (
 
 	dbg( 2, "len %d *offset %d", len, (int)*offset );
 
-	copy_to_user( buf, va_buf_offset( DG, *offset ), len );
+	if (copy_to_user(buf, va_buf_offset(DG, *offset), len )){
+		return -EFAULT;
+	}
 	*offset += len;
 
 	return len;
@@ -2019,7 +2021,7 @@ int acq200_mmap_bigbuf( struct file* filp, struct vm_area_struct* vma )
 
 
 int acq200_early_action_count = 0;
-module_param(acq200_early_action_count, int, 0666);
+module_param(acq200_early_action_count, int, 0664);
 
 #if defined (ACQ196) && CFG_LOW_JITTER_BURST_START == 1
 static void pulse_start_early_action(
@@ -2741,7 +2743,9 @@ static ssize_t acq200_fpga_fifo_live_read_data(
 				dbg(2, "{%d} copy +%d %p %d", 
 				    dcb->state, idst, esig, ESIG_LEN);
 
-				copy_to_user(buf+idst, esig, ESIG_LEN);
+				if (copy_to_user(buf+idst, esig, ESIG_LEN)){
+					return -EFAULT;
+				}
 				idst += ESIG_LEN;	
 				goto finish_up;
 			}
@@ -2770,7 +2774,9 @@ static ssize_t acq200_fpga_fifo_live_read_data(
 			}else{
 				dcb->continuous_frame_start_offset = *offset;
 			}
-			copy_to_user(buf, esig, ESIG_LEN);
+			if (copy_to_user(buf, esig, ESIG_LEN)){
+				return -EFAULT;
+			}
 			idst = ESIG_LEN;
 			goto finish_up;
 		default:
@@ -2813,8 +2819,10 @@ static ssize_t acq200_fpga_fifo_live_read_data(
 			    dcb->state, idst, base+dcb->last_start, ncp);
 /** stub here to test overhead of copy_to_user */
 			if (!DG->stub_live_copy_to_user){
-				copy_to_user(buf+idst, 
-					     base+dcb->last_start, ncp);
+				if(copy_to_user(buf+idst, 
+						base+dcb->last_start, ncp)){
+					return -EFAULT;
+				}
 			}
 			dcb->last_start += ncp;
 			idst += ncp;
@@ -3300,7 +3308,9 @@ static ssize_t acq200_tblock_read (
 	int maxread = min(len, tblock->length - boffset);
 	char *bs = va_buf(DG) + tblock->offset + *offset;
 
-	copy_to_user(buf, bs, maxread);
+	if (copy_to_user(buf, bs, maxread)){
+		return -EFAULT;
+	}	
 	*offset += maxread;
 	return maxread;
 }
@@ -3399,7 +3409,7 @@ int init_arbiter(void)
 }
 
 
-static irqreturn_t fpga_fifo_isr(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t fpga_fifo_isr(int irq, void *dev_id)
 /*
  * ISR
 */
@@ -3441,7 +3451,7 @@ acqX00_fpga_probe(struct device *dev, int irq)
 	}
 
 	mk_dev_sysfs(dev);
-	device_create_file(dev, &dev_attr_streaming_tblock);	
+	DEVICE_CREATE_FILE(dev, &dev_attr_streaming_tblock);
 
 	if (acq200_aichan){
 		acq200_fifo_create_AIfs(dev, acq200_aichan);

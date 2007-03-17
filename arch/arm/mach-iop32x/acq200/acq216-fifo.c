@@ -1563,8 +1563,8 @@ EXPORT_SYMBOL_GPL(acq216_setAntiPhase);
 int poll_dma_done_calls = 0;
 int poll_dma_done_maxpolls = 0;
 
-module_param(poll_dma_done_calls, int, 0666);
-module_param(poll_dma_done_maxpolls, int, 0666);
+module_param(poll_dma_done_calls, int, 0664);
+module_param(poll_dma_done_maxpolls, int, 0664);
 
 
 
