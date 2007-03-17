@@ -77,12 +77,12 @@ extern struct sys_timer acqX00_timer;
 
 MACHINE_START(ACQ100, "D-TACQ ACQ100")
 	/* Maintainer: D-TACQ Solutions Ltd */
-	.phys_io = ACQ200_UART_P,
-	.io_pg_offst = ((ACQ200_UART) >> 18) & 0xfffc,
-	.boot_params = ACQ200_PARAMS,
-	.fixup = fixup_acq200,
+	.phys_io	= ACQ200_UART_P,
+	.io_pg_offst	= ((ACQ200_UART) >> 18) & 0xfffc,
+	.boot_params	= ACQ200_PARAMS,
+	.fixup		= fixup_acq200,
         .timer		= &acqX00_timer,
-	.map_io(acq100_map_io),
-	.init_irq = acq100_init_irq,
-        .init_machine = acq100_init_machine,
+	.map_io		= acq100_map_io,
+	.init_irq	= acq100_init_irq,
+        .init_machine	= acq100_init_machine,
 MACHINE_END

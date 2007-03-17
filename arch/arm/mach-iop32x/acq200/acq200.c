@@ -45,12 +45,12 @@ void __init acq200_init_machine(void)
 
 MACHINE_START(ACQ200, "D-TACQ ACQ200")
 	/* Maintainer: D-TACQ Solutions Ltd */
-	.phys_io = ACQ200_UART_P,
-	.io_pg_offst = ((ACQ200_UART) >> 18) & 0xfffc,
-	.boot_params = ACQ200_PARAMS,
-	.fixup = fixup_acq200,
+	.phys_io	= ACQ200_UART_P,
+	.io_pg_offst	= ((ACQ200_UART) >> 18) & 0xfffc,
+	.boot_params	= ACQ200_PARAMS,
+	.fixup		= fixup_acq200,
         .timer		= &acqX00_timer,
-	.map_io(acq200_map_io),
-	.init_irq = acq200_init_irq,
-        .init_machine = acq200_init_machine,
+	.map_io		= acq200_map_io,
+	.init_irq	= acq200_init_irq,
+        .init_machine	= acq200_init_machine,
 MACHINE_END

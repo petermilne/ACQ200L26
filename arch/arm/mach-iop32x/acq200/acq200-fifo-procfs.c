@@ -679,6 +679,13 @@ static ssize_t store_pulse_def(
 static DEVICE_ATTR(pulse_def, S_IRUGO|S_IWUGO,
 		   show_pulse_def, store_pulse_def);
 
+/*
+#include <asm/div64.h>
+unsigned long long x, y, result;
+unsigned long mod;
+mod = do_div(x, y);
+result = x;
+*/
 
 static int _show_measured_sample_rate(
 	char *buf, 
@@ -688,14 +695,20 @@ static int _show_measured_sample_rate(
 
 	if (process_us>1000){
 		unsigned long long tot_samples = ELAPSED_SAMPLES;
-		unsigned srate = tot_samples/(process_us/10);
+		unsigned long long xx = tot_samples;
+		unsigned srate;
+
+		do_div(xx, process_us/10);
+		srate = xx;
 
 		if (srate > 10 ){
 			return snprintf(buf, maxbuf, "%2d.%d MHz\n", 
 						srate/10, srate%10);
 		}else{
 			if (process_us > 1000){
-				srate = tot_samples/(process_us/1000);
+				xx = tot_samples;
+				do_div(xx, process_us/1000);
+				srate = xx;
 			}else{
 				srate = 0;
 			}

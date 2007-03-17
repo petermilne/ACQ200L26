@@ -261,7 +261,7 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_results);
 	DEVICE_CREATE_FILE(dev, &dev_attr_running);
 	DEVICE_CREATE_FILE(dev, &dev_attr_gtsr_us);
-	driver_create_file(dev->driver, &driver_attr_version);
+	DRIVER_CREATE_FILE(dev->driver, &driver_attr_version);
 }
 static void rm_sysfs(struct device *dev)
 {
