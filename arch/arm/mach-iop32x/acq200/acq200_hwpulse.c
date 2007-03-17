@@ -45,14 +45,14 @@
 #include "acq196.h"
 
 int acq200_pulse_debug;
-module_param(acq200_pulse_debug, int, 0666);
+module_param(acq200_pulse_debug, int, 0664);
 
 
 int acq200_pulse_on_time_ms = 10;
-module_param(acq200_pulse_on_time_ms, int, 0666);
+module_param(acq200_pulse_on_time_ms, int, 0664);
 
 int stub = 0;
-module_param(stub, int, 0666);
+module_param(stub, int, 0664);
 
 #define VERID "$Revision: 1.1 $ build B1000 "
 

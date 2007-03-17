@@ -5,6 +5,10 @@
 #ifndef __ACQ200_H__
 #define __ACQ200_H__
 
+#include <linux/device.h>
+
+#include "acq200_debug.h"
+
 #ifdef __KERNEL__
 int acq200_get_bigbuf_resource(struct resource *resource);
 int acq200_get_mumem_resource(struct resource *resource);
@@ -32,5 +36,22 @@ int acq200_post_dmac_request(
 	u32 bc, 
 	int incoming
 );
+
+struct device_attribute;
+
+extern void acq200_device_create_file(
+	struct device * dev, struct device_attribute * attr,
+	const char *file, int line);
+
+#define DEVICE_CREATE_FILE(dev, attr) \
+	acq200_device_create_file(dev, attr, __FILE__, __LINE__)
+
+
+extern void acq200_driver_create_file(
+	struct device_driver *drv, struct driver_attribute * attr,
+	const char* file, int line);
+
+#define DRIVER_CREATE_FILE(drv, attr) \
+	acq200_driver_create_file(drv, attr, __FILE__, __LINE__)
 
 #endif /* #define __ACQ200_H__ */

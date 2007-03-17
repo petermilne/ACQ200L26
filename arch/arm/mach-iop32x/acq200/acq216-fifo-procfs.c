@@ -399,17 +399,17 @@ static DEVICE_ATTR(translen, S_IRUGO|S_IWUGO, show_translen, store_translen);
 
 static void acq216_mk_dev_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_clock_freq);
-	device_create_file(dev, &dev_attr_ob_clock_word);
-	device_create_file(dev, &dev_attr_event1);
-	device_create_file(dev, &dev_attr_channel_mapping);
-	device_create_file(dev, &dev_attr_channel_mapping_bin);
-	device_create_file(dev, &dev_attr_ob_clk_src);
-	device_create_file(dev, &dev_attr_pipeline_offset);
-	device_create_file(dev, &dev_attr_gate);
-	device_create_file(dev, &dev_attr_antiphase);
-	device_create_file(dev, &dev_attr_translen);
-	device_create_file(dev, &dev_attr_capcom);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clock_freq);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock_word);
+	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clk_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pipeline_offset);
+	DEVICE_CREATE_FILE(dev, &dev_attr_gate);
+	DEVICE_CREATE_FILE(dev, &dev_attr_antiphase);
+	DEVICE_CREATE_FILE(dev, &dev_attr_translen);
+	DEVICE_CREATE_FILE(dev, &dev_attr_capcom);
 }
 
 void acq200_setChannelMask(unsigned mask)

@@ -22,6 +22,7 @@
 #ifndef __ACQ200_DMAC_H__
 #define __ACQ200_DMAC_H__
 
+#include <linux/interrupt.h>
 
 struct iop321_dma_desc
 {
@@ -139,7 +140,7 @@ void acq200_init_interrupt_hook(
 int acq200_dma_init_interrupt_hook(
 	struct InterruptSync* is,
 	unsigned int irq,
-	irqreturn_t (*handler)(int, void *, struct pt_regs *),
+	irq_handler_t handler,
 	const char * devname,
 	volatile u32 *regs
 	);

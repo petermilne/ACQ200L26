@@ -64,10 +64,10 @@
 #include "acq32busprot.h"          /* soft link to orig file */
 
 int macustom_debug;
-module_param(macustom_debug, int, 0666);
+module_param(macustom_debug, int, 0664);
 
 int malength = 32;
-module_param(malength, int, 0666);
+module_param(malength, int, 0664);
 
 #define VERID "$Revision: 1.3 $ build B1000 "
 

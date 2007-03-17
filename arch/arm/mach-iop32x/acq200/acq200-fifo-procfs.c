@@ -59,19 +59,6 @@ static int calc_process_us(void)
 #define ARCH_FIFERR_DESCRIPTION(flags) "..."
 #endif
 
-#ifndef WAV232
-static int getNumTblocks(void)
-{
-	int len;
-
-	if ((len = DG->bigbuf.tblocks.blocklen)){
-		int data_len = SAMPLES*sample_size();
-		return data_len/len + (data_len%len? 1: 0);
-	}else{
-		return -1;
-	}
-}
-#endif
 
 static inline unsigned long long elapsed_samples(void) 
 {
@@ -1351,59 +1338,59 @@ static DEVICE_ATTR(post_shot_hook, S_IRUGO|S_IWUGO,
 
 void mk_dev_sysfs(struct device* dev)
 {
-	device_create_file(dev, &dev_attr_sample_read_start);
-	device_create_file(dev, &dev_attr_sample_read_stride);
-	device_create_file(dev, &dev_attr_sample_read_length);
-	device_create_file(dev, &dev_attr_sample_read_ssl);
-	device_create_file(dev, &dev_attr_show_event);
-	device_create_file(dev, &dev_attr_channel_mask);
-	device_create_file(dev, &dev_attr_event_magic);
-	device_create_file(dev, &dev_attr_event_magic_mask);
-	device_create_file(dev, &dev_attr_state);
-	device_create_file(dev, &dev_attr_measured_sample_rate);
-	device_create_file(dev, &dev_attr_mode);
-	device_create_file(dev, &dev_attr_dio);
-	device_create_file(dev, &dev_attr_dio_bit);
-	device_create_file(dev, &dev_attr_dio_raw);
-	device_create_file(dev, &dev_attr_poll_dio);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sample_read_start);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sample_read_stride);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sample_read_length);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sample_read_ssl);
+	DEVICE_CREATE_FILE(dev, &dev_attr_show_event);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_event_magic);
+	DEVICE_CREATE_FILE(dev, &dev_attr_event_magic_mask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_state);
+	DEVICE_CREATE_FILE(dev, &dev_attr_measured_sample_rate);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_raw);
+	DEVICE_CREATE_FILE(dev, &dev_attr_poll_dio);
 #ifndef WAV232
-	device_create_file(dev, &dev_attr_event0);
-	device_create_file(dev, &dev_attr_int_clk_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_event0);
+	DEVICE_CREATE_FILE(dev, &dev_attr_int_clk_src);
 
-	device_create_file(dev, &dev_attr_scc);
-	device_create_file(dev, &dev_attr_ecc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_scc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ecc);
 
-	device_create_file(dev, &dev_attr_dcb_max_backlog);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dcb_max_backlog);
 
-	device_create_file(dev, &dev_attr_counter_src);
-	device_create_file(dev, &dev_attr_counter_update);
+	DEVICE_CREATE_FILE(dev, &dev_attr_counter_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_counter_update);
 #endif
-	device_create_file(dev, &dev_attr_simulate);
-	device_create_file(dev, &dev_attr_oneshot);
-	device_create_file(dev, &dev_attr_user_abort);
-	device_create_file(dev, &dev_attr_pit_stop);
-	device_create_file(dev, &dev_attr_burst_delay);
-	device_create_file(dev, &dev_attr_burst_len);
-	device_create_file(dev, &dev_attr_burst_es_channel);
+	DEVICE_CREATE_FILE(dev, &dev_attr_simulate);
+	DEVICE_CREATE_FILE(dev, &dev_attr_oneshot);
+	DEVICE_CREATE_FILE(dev, &dev_attr_user_abort);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pit_stop);
+	DEVICE_CREATE_FILE(dev, &dev_attr_burst_delay);
+	DEVICE_CREATE_FILE(dev, &dev_attr_burst_len);
+	DEVICE_CREATE_FILE(dev, &dev_attr_burst_es_channel);
 
-	device_create_file(dev, &dev_attr_pulse_def);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_def);
 
-	device_create_file(dev, &dev_attr_trig);
-	device_create_file(dev, &dev_attr_ext_clk);
-	device_create_file(dev, &dev_attr_mas_clk);
-	device_create_file(dev, &dev_attr_sample_size);
-	device_create_file(dev, &dev_attr_activate_event_on_arm);
-	device_create_file(dev, &dev_attr_stub_live_copy_to_user);
+	DEVICE_CREATE_FILE(dev, &dev_attr_trig);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ext_clk);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mas_clk);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sample_size);
+	DEVICE_CREATE_FILE(dev, &dev_attr_activate_event_on_arm);
+	DEVICE_CREATE_FILE(dev, &dev_attr_stub_live_copy_to_user);
 
-	device_create_file(dev, &dev_attr_clock_count_immediate);
-	device_create_file(dev, &dev_attr_clock_count_latched);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clock_count_immediate);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clock_count_latched);
 #ifndef WAV232
-	device_create_file(dev, &dev_attr_BeforeDuringAfter);
-	device_create_file(dev, &dev_attr_ControlTarget);
+	DEVICE_CREATE_FILE(dev, &dev_attr_BeforeDuringAfter);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ControlTarget);
 #endif
-	device_create_file(dev, &dev_attr_pre_arm_hook);
-	device_create_file(dev, &dev_attr_post_arm_hook);
-	device_create_file(dev, &dev_attr_post_shot_hook);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pre_arm_hook);
+	DEVICE_CREATE_FILE(dev, &dev_attr_post_arm_hook);
+	DEVICE_CREATE_FILE(dev, &dev_attr_post_shot_hook);
 	DEVICE_MK_DEV_SYSFS(dev);
 }
 
@@ -2443,58 +2430,58 @@ static DRIVER_ATTR(testpattern,S_IWUGO, 0, set_testpattern_bigbuf);
 
 int mk_sysfs(struct device_driver *driver)
 {
-	driver_create_file(driver, &driver_attr_debug);
-	driver_create_file(driver, &driver_attr_pipe_fiq);
-	driver_create_file(driver, &driver_attr_busywait);
-	driver_create_file(driver, &driver_attr_data_structs);
-	driver_create_file(driver, &driver_attr_int_clk);
-	driver_create_file(driver, &driver_attr_int_clk_div);
-	driver_create_file(driver, &driver_attr_length);
-	driver_create_file(driver, &driver_attr_post_length);
-	driver_create_file(driver, &driver_attr_reset_fifo);
-	driver_create_file(driver, &driver_attr_use_fiq);
-	driver_create_file(driver, &driver_attr_version);
-	driver_create_file(driver, &driver_attr_asm_consts);
-	driver_create_file(driver, &driver_attr_hitide);
-	driver_create_file(driver, &driver_attr_lotide);
-	driver_create_file(driver, &driver_attr_max_alloc);
-	driver_create_file(driver, &driver_attr_clear_bigbuf);
-	driver_create_file(driver, &driver_attr_ramp_bigbuf);
-	driver_create_file(driver, &driver_attr_daq_enable);
-	driver_create_file(driver, &driver_attr_bb_len);
-	driver_create_file(driver, &driver_attr_shot);
-	driver_create_file(driver, &driver_attr_btype);
-	driver_create_file(driver, &driver_attr_bh_unmasks_eoc);
-	driver_create_file(driver, &driver_attr_pci_abort);
-	driver_create_file(driver, &driver_attr_debug_read_raw);
+	DRIVER_CREATE_FILE(driver, &driver_attr_debug);
+	DRIVER_CREATE_FILE(driver, &driver_attr_pipe_fiq);
+	DRIVER_CREATE_FILE(driver, &driver_attr_busywait);
+	DRIVER_CREATE_FILE(driver, &driver_attr_data_structs);
+	DRIVER_CREATE_FILE(driver, &driver_attr_int_clk);
+	DRIVER_CREATE_FILE(driver, &driver_attr_int_clk_div);
+	DRIVER_CREATE_FILE(driver, &driver_attr_length);
+	DRIVER_CREATE_FILE(driver, &driver_attr_post_length);
+	DRIVER_CREATE_FILE(driver, &driver_attr_reset_fifo);
+	DRIVER_CREATE_FILE(driver, &driver_attr_use_fiq);
+	DRIVER_CREATE_FILE(driver, &driver_attr_version);
+	DRIVER_CREATE_FILE(driver, &driver_attr_asm_consts);
+	DRIVER_CREATE_FILE(driver, &driver_attr_hitide);
+	DRIVER_CREATE_FILE(driver, &driver_attr_lotide);
+	DRIVER_CREATE_FILE(driver, &driver_attr_max_alloc);
+	DRIVER_CREATE_FILE(driver, &driver_attr_clear_bigbuf);
+	DRIVER_CREATE_FILE(driver, &driver_attr_ramp_bigbuf);
+	DRIVER_CREATE_FILE(driver, &driver_attr_daq_enable);
+	DRIVER_CREATE_FILE(driver, &driver_attr_bb_len);
+	DRIVER_CREATE_FILE(driver, &driver_attr_shot);
+	DRIVER_CREATE_FILE(driver, &driver_attr_btype);
+	DRIVER_CREATE_FILE(driver, &driver_attr_bh_unmasks_eoc);
+	DRIVER_CREATE_FILE(driver, &driver_attr_pci_abort);
+	DRIVER_CREATE_FILE(driver, &driver_attr_debug_read_raw);
 #if defined(ACQ216) || defined(ACQ196)
-	driver_create_file(driver, &driver_attr_epos);
-	driver_create_file(driver, &driver_attr_es_search);
-	driver_create_file(driver, &driver_attr_finalize_phases);
-	driver_create_file(driver, &driver_attr_pit_count);
+	DRIVER_CREATE_FILE(driver, &driver_attr_epos);
+	DRIVER_CREATE_FILE(driver, &driver_attr_es_search);
+	DRIVER_CREATE_FILE(driver, &driver_attr_finalize_phases);
+	DRIVER_CREATE_FILE(driver, &driver_attr_pit_count);
 #endif
-	driver_create_file(driver, &driver_attr_transformer_bs);
-	driver_create_file(driver, &driver_attr_transformer);
-	driver_create_file(driver, &driver_attr_transformer_blt);
-	driver_create_file(driver, &driver_attr_use_ob_clock);
-	driver_create_file(driver, &driver_attr_testpattern);
+	DRIVER_CREATE_FILE(driver, &driver_attr_transformer_bs);
+	DRIVER_CREATE_FILE(driver, &driver_attr_transformer);
+	DRIVER_CREATE_FILE(driver, &driver_attr_transformer_blt);
+	DRIVER_CREATE_FILE(driver, &driver_attr_use_ob_clock);
+	DRIVER_CREATE_FILE(driver, &driver_attr_testpattern);
 	
-	driver_create_file(driver, &driver_attr_dma_test_setup);
-	driver_create_file(driver, &driver_attr_run_dma_test);
+	DRIVER_CREATE_FILE(driver, &driver_attr_dma_test_setup);
+	DRIVER_CREATE_FILE(driver, &driver_attr_run_dma_test);
 
-	driver_create_file(driver, &driver_attr_global_irq_mask);
-	driver_create_file(driver, &driver_attr_FIFERR);
-	driver_create_file(driver, &driver_attr_cdog_max_jiffies);
-	driver_create_file(driver, &driver_attr_jiffies);
-	driver_create_file(driver, &driver_attr_pulse_number);
+	DRIVER_CREATE_FILE(driver, &driver_attr_global_irq_mask);
+	DRIVER_CREATE_FILE(driver, &driver_attr_FIFERR);
+	DRIVER_CREATE_FILE(driver, &driver_attr_cdog_max_jiffies);
+	DRIVER_CREATE_FILE(driver, &driver_attr_jiffies);
+	DRIVER_CREATE_FILE(driver, &driver_attr_pulse_number);
 
-	driver_create_file(driver, &driver_attr_empty_fill_threshold);
-	driver_create_file(driver, &driver_attr_put_max_empties);
-	driver_create_file(driver, &driver_attr_get_max_active);
-	driver_create_file(driver, &driver_attr_active_batch_threshold);
-	driver_create_file(driver, &driver_attr_init_endstops);
-	driver_create_file(driver, &driver_attr_eoc_int_modulo_mask);
-	driver_create_file(driver, &driver_attr_DMA_BLOCK_LEN_bytes);
+	DRIVER_CREATE_FILE(driver, &driver_attr_empty_fill_threshold);
+	DRIVER_CREATE_FILE(driver, &driver_attr_put_max_empties);
+	DRIVER_CREATE_FILE(driver, &driver_attr_get_max_active);
+	DRIVER_CREATE_FILE(driver, &driver_attr_active_batch_threshold);
+	DRIVER_CREATE_FILE(driver, &driver_attr_init_endstops);
+	DRIVER_CREATE_FILE(driver, &driver_attr_eoc_int_modulo_mask);
+	DRIVER_CREATE_FILE(driver, &driver_attr_DMA_BLOCK_LEN_bytes);
 
 	acq200_transform_mk_sysfs(driver);
 	return 0;
@@ -2545,7 +2532,7 @@ void rm_sysfs(struct device_driver *driver)
 
 	driver_remove_file(driver, &driver_attr_empty_fill_threshold);
 	driver_remove_file(driver, &driver_attr_put_max_empties);
-	driver_create_file(driver, &driver_attr_get_max_active);
+	driver_remove_file(driver, &driver_attr_get_max_active);
 	driver_remove_file(driver, &driver_attr_active_batch_threshold);
 	driver_remove_file(driver, &driver_attr_init_endstops);
 	driver_remove_file(driver, &driver_attr_eoc_int_modulo_mask);

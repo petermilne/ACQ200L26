@@ -90,7 +90,9 @@ static inline int u32rb_get_user(struct u32_ringbuffer* rb, u32 *px)
 /* returns > 0 on data, 0 on no data */
 {
 	if (!u32rb_is_empty(rb)){
-		copy_to_user(px, rb->buffer+rb->iget, sizeof(u32));
+		if (copy_to_user(px, rb->buffer+rb->iget, sizeof(u32))){
+			return -EFAULT;
+		}
 		rb->iget = u32rb_incr(rb, rb->iget);
 		rb->nget++;
 		return 1;

@@ -28,7 +28,6 @@ Check for DONE at end - bit 0 at address 18h
 
 */
 
-#include <linux/config.h>
 #include <asm/uaccess.h>
 
 #ifndef CONFIG_ARCH_ACQ200
@@ -67,7 +66,6 @@ Check for DONE at end - bit 0 at address 18h
 #endif
 
 #include "acq200.h"
-#include "acq200_debug.h"
 #include "acq200_minors.h"
 
 #include "acq196.h"
@@ -438,7 +436,9 @@ static int acq200_debug_map_read(
 		
 		dbg( 2, "len %d *offset %d", len, (int)*offset );
 
-		copy_to_user( buf,  &src[*offset], len );
+		if (copy_to_user( buf,  &src[*offset], len )){
+			return -EFAULT;
+		}
 		*offset += len;
 		return len;
 	}
@@ -702,7 +702,7 @@ static ssize_t show_##reg(						\
 static DEVICE_ATTR(reg, S_IRUGO, show_##reg, 0)
 
 
-#define MK_DEV_FILE(reg) device_create_file(dev, &dev_attr_##reg)
+#define MK_DEV_FILE(reg) DEVICE_CREATE_FILE(dev, &dev_attr_##reg)
 
 DEF_DEV_ATTR_PMMR(ATUVID);
 DEF_DEV_ATTR_PMMR(ATUCMD);
@@ -711,20 +711,20 @@ DEF_DEV_ATTR_PMMR(PCSR);
  
 static void mk_dev_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_dio_route_d0);
-	device_create_file(dev, &dev_attr_dio_route_d1);
-	device_create_file(dev, &dev_attr_dio_route_d2);
-	device_create_file(dev, &dev_attr_dio_route_d3);
-	device_create_file(dev, &dev_attr_dio_route_d4);
-	device_create_file(dev, &dev_attr_dio_route_d5);
-	device_create_file(dev, &dev_attr_led3);
-	device_create_file(dev, &dev_attr_led4);
-	device_create_file(dev, &dev_attr_bb_len);
-	device_create_file(dev, &dev_attr_debug);
-	device_create_file(dev, &dev_attr_pci_env);
-	device_create_file(dev, &dev_attr_cpld_rev);
-	device_create_file(dev, &dev_attr_hpi_mask);
-	device_create_file(dev, &dev_attr_ticks);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_route_d0);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_route_d1);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_route_d2);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_route_d3);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_route_d4);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_route_d5);
+	DEVICE_CREATE_FILE(dev, &dev_attr_led3);
+	DEVICE_CREATE_FILE(dev, &dev_attr_led4);
+	DEVICE_CREATE_FILE(dev, &dev_attr_bb_len);
+	DEVICE_CREATE_FILE(dev, &dev_attr_debug);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pci_env);
+	DEVICE_CREATE_FILE(dev, &dev_attr_cpld_rev);
+	DEVICE_CREATE_FILE(dev, &dev_attr_hpi_mask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ticks);
 
 	MK_DEV_FILE(ATUVID);
 	MK_DEV_FILE(ATUCMD);
@@ -799,11 +799,15 @@ static struct platform_device core_device = {
 
 
 static int __init acq200_core_init(void)
-//int acq200_core_init(void)
 {
-	driver_register(&core_device_driver);
+	int rc = driver_register(&core_device_driver);
 
-	return platform_device_register(&core_device);
+	if (rc != 0){
+		return rc;
+	}else{
+		return platform_device_register(&core_device);
+
+	}
 }
 
 

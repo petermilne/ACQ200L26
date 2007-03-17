@@ -104,7 +104,7 @@
 #include "acq200-inline-dma.h"
 
 int acq100_scatter_debug;
-module_param(acq100_scatter_debug, int, 0666);
+module_param(acq100_scatter_debug, int, 0664);
 
 
 #define MAXDEST 6             

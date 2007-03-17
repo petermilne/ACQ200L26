@@ -74,7 +74,7 @@
 #include "acq200-inline-dma.h"
 
 int acq2xx_pwm_debug;
-module_param(acq2xx_pwm_debug, int, 0666);
+module_param(acq2xx_pwm_debug, int, 0664);
 
 
 #define ENTRIES_PER_CYCLE 1024

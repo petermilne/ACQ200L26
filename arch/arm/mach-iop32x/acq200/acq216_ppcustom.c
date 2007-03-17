@@ -60,7 +60,7 @@
 #include "acq32busprot.h"          /* soft link to orig file */
 
 int acq216_ppcustom_debug;
-module_param(acq216_ppcustom_debug, int, 0666);
+module_param(acq216_ppcustom_debug, int, 0664);
 
 
 #define VERID "$Revision: 1.3 $ build B1000 "

@@ -46,7 +46,7 @@
 
 
 int int_clk_calcmode;
-module_param(int_clk_calcmode, int, 0666);
+module_param(int_clk_calcmode, int, 0664);
 
 #define AICHAN_DEFAULT 96
 
@@ -559,7 +559,9 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 	dbg( 2, "len %d *offset %d", len, (int)*offset );
 
-	copy_to_user( buf, va_buf_offset( DG, *offset ), len );
+	if (copy_to_user( buf, va_buf_offset( DG, *offset ), len )){
+		return -EFAULT;
+	}
 	*offset += len;
 
 	return len;

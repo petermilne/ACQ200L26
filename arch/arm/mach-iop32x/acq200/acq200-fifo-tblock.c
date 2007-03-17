@@ -40,7 +40,7 @@
 
 
 static int acq200_tblock_debug = 0;
-module_param(acq200_tblock_debug, int, 0666);
+module_param(acq200_tblock_debug, int, 0664);
 
 #define DBG if (acq200_tblock_debug) dbg
 

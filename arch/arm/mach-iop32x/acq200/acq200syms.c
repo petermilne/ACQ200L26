@@ -1,6 +1,5 @@
 /* liunux/arch/arm/mach-iop3xx/acq200syms.c */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/user.h>
 
@@ -9,8 +8,29 @@
 #include "acq200.h"
 
 
-EXPORT_SYMBOL_GPL( acq200_get_bigbuf_resource );
-EXPORT_SYMBOL_GPL( acq200_get_mumem_resource );
-EXPORT_SYMBOL_GPL( acq200_get_tblock_resource );
-EXPORT_SYMBOL_GPL( acq200_mask_irq );
-EXPORT_SYMBOL_GPL( acq200_unmask_irq );
+void acq200_device_create_file(
+	struct device * dev, struct device_attribute * attr,
+	const char *file, int line)
+{
+	if (device_create_file(dev, attr)){
+		err("%s:%d device_create_file", file, line);
+	}
+}
+
+extern void acq200_driver_create_file(
+	struct device_driver *drv, struct driver_attribute * attr,
+	const char* file, int line)
+{
+	if (driver_create_file(drv, attr)){
+		err("%s:%d driver_create_file", file, line);
+	}
+}
+
+EXPORT_SYMBOL_GPL(acq200_device_create_file);
+EXPORT_SYMBOL_GPL(acq200_driver_create_file);
+
+EXPORT_SYMBOL_GPL(acq200_get_bigbuf_resource);
+EXPORT_SYMBOL_GPL(acq200_get_mumem_resource);
+EXPORT_SYMBOL_GPL(acq200_get_tblock_resource);
+EXPORT_SYMBOL_GPL(acq200_mask_irq);
+EXPORT_SYMBOL_GPL(acq200_unmask_irq);

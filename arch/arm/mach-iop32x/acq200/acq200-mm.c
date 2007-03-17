@@ -33,7 +33,7 @@
  * option) any later version.
  *
  */
-#include <linux/config.h>
+
 #include <linux/module.h>         /* EXPORT_SYMBOL() */
 
 #include <linux/bootmem.h>        /* alloc_bootmem */

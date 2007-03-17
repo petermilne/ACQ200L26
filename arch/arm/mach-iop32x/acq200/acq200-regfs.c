@@ -61,7 +61,7 @@
 #include "acq32busprot.h"          /* soft link to orig file */
 
 int acq200_regfs_debug;
-module_param(acq200_regfs_debug, int, 0666);
+module_param(acq200_regfs_debug, int, 0664);
 
 #define EBAD_FORMAT 1234
 

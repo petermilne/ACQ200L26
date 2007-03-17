@@ -121,13 +121,13 @@
 
 
 int acq100_llc_debug;
-module_param(acq100_llc_debug, int, 0666);
+module_param(acq100_llc_debug, int, 0664);
 
 int acq100_llc_dump_ao2bb;
-module_param(acq100_llc_dump_ao2bb, int , 0666);
+module_param(acq100_llc_dump_ao2bb, int , 0664);
 
 int disable_acq_debug = 0;         /* set 1 */
-module_param(disable_acq_debug, int, 0666);
+module_param(disable_acq_debug, int, 0664);
 
 /** set to non-zero for 2V mode */
 int acq100_llc_sync2V = 0;
@@ -137,18 +137,18 @@ int acq100_llc_sync2V = 0;
 #define ACQ100_LLC_SYNC2V_DIDO    3
 #define ACQ100_LLC_SYNC2V_DIDOSTA 4
 
-module_param(acq100_llc_sync2V, int, 0666);
+module_param(acq100_llc_sync2V, int, 0664);
 
 
 int acq100_llc_sync2V_AO_len = 0;
-module_param(acq100_llc_sync2V_AO_len, int, 0666);
+module_param(acq100_llc_sync2V_AO_len, int, 0664);
 
 /** one cycle "see how fast it can be mode" */
 int acq100_mem2mem = 0;
-module_param(acq100_mem2mem, int, 0666);
+module_param(acq100_mem2mem, int, 0664);
 
 int acq100_dropACQEN_on_exit;
-module_param(acq100_dropACQEN_on_exit, int, 0666);
+module_param(acq100_dropACQEN_on_exit, int, 0664);
 
 /** increment BUILD and VERID each build */
 #define BUILD 1069
@@ -1648,7 +1648,7 @@ DECLARE_HOST_BUF(STATUS_target);
 DECLARE_HOST_BUF(PUAD);
 
 #define DEVICE_CREATE_HOST_BUF(dev, id)		\
-device_create_file(dev, &dev_attr_##id)
+DEVICE_CREATE_FILE(dev, &dev_attr_##id)
 
 static ssize_t set_iodd(
 	struct device *dev, 
@@ -1971,25 +1971,25 @@ static DEVICE_ATTR(timer0_count, S_IRUGO,
 
 static int mk_llc_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_run);
-	device_create_file(dev, &dev_attr_stats);
-	device_create_file(dev, &dev_attr_mode);
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_imask);
-	device_create_file(dev, &dev_attr_debug);
-	device_create_file(dev, &dev_attr_settings);
-	device_create_file(dev, &dev_attr_emergency_stop);
-	device_create_file(dev, &dev_attr_status);
-	device_create_file(dev, &dev_attr_channel_mask);
-	device_create_file(dev, &dev_attr_dac_lowlat);
-	device_create_file(dev, &dev_attr_adc_clkdly);
-	device_create_file(dev, &dev_attr_dma_poll_holdoff);
-	device_create_file(dev, &dev_attr_show_dma);
-	device_create_file(dev, &dev_attr_timer0_count);
+	DEVICE_CREATE_FILE(dev, &dev_attr_run);
+	DEVICE_CREATE_FILE(dev, &dev_attr_stats);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_imask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_debug);
+	DEVICE_CREATE_FILE(dev, &dev_attr_settings);
+	DEVICE_CREATE_FILE(dev, &dev_attr_emergency_stop);
+	DEVICE_CREATE_FILE(dev, &dev_attr_status);
+	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dac_lowlat);
+	DEVICE_CREATE_FILE(dev, &dev_attr_adc_clkdly);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dma_poll_holdoff);
+	DEVICE_CREATE_FILE(dev, &dev_attr_show_dma);
+	DEVICE_CREATE_FILE(dev, &dev_attr_timer0_count);
 
-	device_create_file(dev, &dev_attr_soft_trigger);
-	device_create_file(dev, &dev_attr_IODD);
-	device_create_file(dev, &dev_attr_sync_output);
+	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trigger);
+	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
 
 	DEVICE_CREATE_HOST_BUF(dev, DO_src);
 	DEVICE_CREATE_HOST_BUF(dev, AO_src);
@@ -2071,10 +2071,15 @@ static struct platform_device acq100_llc_device = {
 
 static int __init acq100_llc_init( void )
 {
+	int rc;
 	acq200_debug = acq100_llc_debug;
 
-	driver_register(&acq100_llc_driver);
-	return platform_device_register(&acq100_llc_device);
+	rc = driver_register(&acq100_llc_driver);
+	if (rc){
+		return rc;
+	}else{
+		return platform_device_register(&acq100_llc_device);
+	}
 }
 
 

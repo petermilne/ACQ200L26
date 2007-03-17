@@ -25,7 +25,7 @@
  *  linux timer
  */
 int pulse_timer_hz = 0;
-module_param(pulse_timer_hz, int, 0666);
+module_param(pulse_timer_hz, int, 0664);
 
 
 static int using_aux_timer_hz;

@@ -48,6 +48,7 @@
 #include "acq200-mu-app.h"
 
 #if 1
+#include <linux/blkdev.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>      /* mark_page_accessed() */
 #endif
@@ -77,7 +78,7 @@ void acq200_releaseDCI(struct file *file)
 
 static unsigned update_inode_stats(struct inode *inode)
 {
-	int ident = (int)inode->u.generic_ip;
+	int ident = (int)inode->i_private;
 	unsigned ssize;
 
 	switch(ident){
@@ -347,7 +348,7 @@ static int acq200_AIfs_fifo_bigbuf_open (
 	struct inode *inode, struct file *file)
 /** works with cdevs */
 {
-	int lchannel = ((unsigned)inode->u.generic_ip) & 0x7f;    
+	int lchannel = ((unsigned)inode->i_private) & 0x7f;    
 	dbg(1, "channel %d", lchannel);
 	acq200_initDCI(file, lchannel);
 	return 0;
@@ -448,7 +449,9 @@ static ssize_t acq200_fifo_bigbuf_read_raw (
 	dbg(1,"ch %02d smax_chan %d offsets %d", channel, smax_chan, offsets);
 
 	len = min(len, (size_t)(smax_chan-offsets)/strides);
-	copy_to_user(buf, chanbase+offsets, cplen = len);
+	if (copy_to_user(buf, chanbase+offsets, cplen = len)){
+		return -EFAULT;
+	}
 	
 	*offset += cplen;
 	
@@ -541,10 +544,7 @@ int fifo_AIfs_mmap(struct file * file, struct vm_area_struct * vma)
 		.nopage         = fifo_AIfs_vma_nopage,
 	};
 
-	struct address_space *mapping = file->f_mapping;
-	struct inode *inode = mapping->host;
-
-/* 	touch_atime(vfsmount, dentry); */ /** @@todo TOO HARD! */
+	file_accessed(file);	     /* touch_atime() better in open() ? */
 	vma->vm_ops = &fifo_AIfs_vm_ops;
 	vma->vm_ops->open(vma);
 	return 0;
@@ -789,7 +789,9 @@ static int tblock_rawxx_extractor(
 
 	for(cplen = 0; cplen < maxwords; cplen += NCHAN){
 		this->memcpy(tbuf, bblock_base + offsetw, sample_size());
-		copy_to_user(ubuf+cplen, tbuf, sample_size());
+		if (copy_to_user(ubuf+cplen, tbuf, sample_size())){
+			return -EFAULT;
+		}
 		offsetw += stride*NCHAN;
 	}		
 
@@ -821,7 +823,9 @@ static int dma_xx_extractor(
 
 	dbg(1, "channel %2d offset %08x maxbuf %x", channel, offsam, maxbuf);
 
-	copy_to_user(ubuf, &mu_rma, sizeof(struct mu_rma));
+	if (copy_to_user(ubuf, &mu_rma, sizeof(struct mu_rma))){
+		return -EFAULT;
+	}
 
 	dbg(1, "returns maxbuf %d", maxbuf);
 	return maxbuf;
@@ -1028,7 +1032,9 @@ static int dma_extractor(
 
 	dbg(1, "channel %2d offset %08x maxbuf %x", channel, offsam, maxbuf);
 
-	copy_to_user(ubuf, &mu_rma, sizeof(struct mu_rma));
+	if (copy_to_user(ubuf, &mu_rma, sizeof(struct mu_rma))){
+		return -EFAULT;
+	}
 
 	dbg(1, "returns maxbuf %d", maxbuf);
 	return maxbuf;
@@ -1201,7 +1207,7 @@ int ai_simple_fill_super(
 		return -ENOMEM;
 	inode->i_mode = S_IFDIR | 0755;
 	inode->i_uid = inode->i_gid = 0;
-	inode->i_blksize = PAGE_CACHE_SIZE;
+	inode->i_blkbits = blksize_bits(PAGE_CACHE_SIZE);
 	inode->i_blocks = 0;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = &simple_dir_inode_operations;
@@ -1226,14 +1232,14 @@ int ai_simple_fill_super(
 			goto out;
 		inode->i_mode = S_IFREG | files->mode;
 		inode->i_uid = inode->i_gid = 0;
-		inode->i_blksize = PAGE_CACHE_SIZE;
+		inode->i_blkbits = blksize_bits(PAGE_CACHE_SIZE);
 		inode->i_blocks = 0;
 		inode->i_atime = inode->i_mtime = 
 			inode->i_ctime = CURRENT_TIME;
 		inode->i_op = &inops;
 		inode->i_fop = files->ops;
 		inode->i_ino = i;
-		inode->u.generic_ip = (void*)(unsigned)(fsd->idents[i]);
+		inode->i_private = (void*)(unsigned)(fsd->idents[i]);
 		inode->i_mapping->a_ops = &bigbuf_aops;
 		inode->i_mapping->backing_dev_info = &ramfs_backing_dev_info;
 		d_add(dentry, inode);

@@ -42,21 +42,21 @@
 #ifndef EXPORT_SYMTAB
 #define EXPORT_SYMTAB
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #endif
 
 #include <asm/arch-iop32x/iop321.h>
 
-#include "acq200_debug.h"
+#include "acq200.h"
 
 
-int acq200_bridge_debug;
-module_param(acq200_bridge_debug, int, 0666);
+static int acq200_bridge_debug;
+
 
 
 
 char acq200_bridge_driver_name[] = "acq200_bridge";
 char acq200_bridge_driver_string[] = "D-TACQ bridge device";
-char acq200_bridge_driver_version[] = "1.1";
 char acq200_bridge_copyright[] = "Copyright (c) 2003 D-TACQ Solutions Ltd";
 
 
@@ -371,16 +371,16 @@ static DEVICE_ATTR(upstream_window, S_IRUGO|S_IWUGO,
 
 static void mk_sysfs(struct device *device)
 {
-	device_create_file(device, &dev_attr_downstream_window);
-	device_create_file(device, &dev_attr_upstream_window);
-	device_create_file(device, &dev_attr_regs);
-	device_create_file(device, &dev_attr_enable_address_translation);
+	DEVICE_CREATE_FILE(device, &dev_attr_downstream_window);
+	DEVICE_CREATE_FILE(device, &dev_attr_upstream_window);
+	DEVICE_CREATE_FILE(device, &dev_attr_regs);
+	DEVICE_CREATE_FILE(device, &dev_attr_enable_address_translation);
 }
 
 static void rm_sysfs(struct device *device)
 {
 	device_remove_file(device, &dev_attr_downstream_window);
-	device_create_file(device, &dev_attr_upstream_window);
+	device_remove_file(device, &dev_attr_upstream_window);
 	device_remove_file(device, &dev_attr_regs);
 	device_remove_file(device, &dev_attr_enable_address_translation);
 }
@@ -496,12 +496,15 @@ acq200_bridge_exit_module(void)
 	pci_unregister_driver(&acq200_bridge_driver);
 }
 
-module_init(acq200_bridge_init);
-module_exit(acq200_bridge_exit_module);
 
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
 MODULE_DESCRIPTION("Driver for ACQ200 BRIDGE");
+MODULE_VERSION("1.1");
 
 
+module_param(acq200_bridge_debug, int, 0664);
+
+module_init(acq200_bridge_init);
+module_exit(acq200_bridge_exit_module);

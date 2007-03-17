@@ -338,7 +338,7 @@ module_param(acq100_tweaks, int, 0600);
 
 static void smc91x_acq100_dmac_init(void);
 static int acq100_debug;
-module_param(acq100_debug, int, 0666);
+module_param(acq100_debug, int, 0664);
 
 #define ACQX00_DMA_REG 0x0
 #define ACQ100_SMC_BLOCK (ACQ200_LOCALIO_P+0x400)

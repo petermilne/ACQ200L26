@@ -45,3 +45,11 @@ series
 
 # cscope files
 cscope.*
+
+# pgm
+.snproj/*
+*~
+*.orig
+*.rej
+*.proj
+

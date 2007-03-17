@@ -62,10 +62,10 @@
 #include "acq196.h"
 
 int acq196_mac_debug;
-module_param(acq196_mac_debug, int, 0666);
+module_param(acq196_mac_debug, int, 0664);
 
 int acq196_mac_word_size = sizeof(u32);
-module_param(acq196_mac_word_size, int , 0666);
+module_param(acq196_mac_word_size, int , 0664);
 
 
 #define VERID "$Revision: 1.3 $ build B1012 "

@@ -20,7 +20,7 @@
 
 #include <linux/init.h>
 #include <linux/interrupt.h>
-
+#include <linux/irq.h>
 #include <linux/list.h>
 #include <asm/mach/irq.h>
 #include <asm/irq.h>
@@ -62,7 +62,7 @@ static void cpld_unmask(unsigned int irq)
 
 
 
-static struct irqchip hpi_chip = {
+static struct irq_chip hpi_chip = {
 	.ack    = cpld_mask,
 	.mask   = cpld_mask,
 	.unmask = cpld_unmask,
@@ -89,7 +89,7 @@ static void __init __acq2xx_init_irq(void) {
 static void __init init_hpi_chip(void (*unmask)(unsigned int irq)){
 	hpi_chip.unmask = unmask;
 	set_irq_chip(IRQ_IOP32X_HPI, &hpi_chip);
-	set_irq_handler(IRQ_IOP32X_HPI, do_level_IRQ);
+	set_irq_handler(IRQ_IOP32X_HPI, handle_level_irq);
 	set_irq_flags(IRQ_IOP32X_HPI, IRQF_VALID | IRQF_PROBE);
 }
 

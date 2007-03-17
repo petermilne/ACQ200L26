@@ -51,7 +51,7 @@
 #include "dio_defs.h"
 
 int rtm_debug;
-module_param(rtm_debug, int, 0666);
+module_param(rtm_debug, int, 0664);
 
 
 
