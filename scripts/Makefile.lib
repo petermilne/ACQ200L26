@@ -83,8 +83,11 @@ obj-dirs	:= $(addprefix $(obj)/,$(obj-dirs))
 #       where foo and bar are the name of the modules.
 name-fix = $(subst $(comma),_,$(subst -,_,$1))
 basename_flags = -D"KBUILD_BASENAME=KBUILD_STR($(call name-fix,$(basetarget)))"
-modname_flags  = $(if $(filter 1,$(words $(modname))),\
-                 -D"KBUILD_MODNAME=KBUILD_STR($(call name-fix,$(modname)))")
+
+# pgmwashere - KBUILD_MODNAME not happening?
+#modname_flags  = $(if $(filter 1,$(words $(modname))),\
+#                 -D"KBUILD_MODNAME=KBUILD_STR($(call name-fix,$(modname)))")
+modname_flags  =-D"KBUILD_MODNAME=KBUILD_STR($(call name-fix,$(modname)))"
 
 _c_flags       = $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(basetarget).o)
 _a_flags       = $(AFLAGS) $(EXTRA_AFLAGS) $(AFLAGS_$(basetarget).o)

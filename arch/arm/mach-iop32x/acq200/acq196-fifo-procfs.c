@@ -15,7 +15,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-
+#define KBUILD_MODNAME "pgmwasere-hacking"
 
 
 #define DTACQ_MACH 1

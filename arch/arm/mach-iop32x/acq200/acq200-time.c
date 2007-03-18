@@ -51,7 +51,7 @@ static unsigned long next_jiffy_time;
 
 static int insert_histo[4];
 
-unsigned long iop3xx_gettimeoffset(void)
+unsigned long iop_gettimeoffset(void)
 {
         unsigned long offset;
 
@@ -69,9 +69,7 @@ iop3xx_timer_interrupt(int irq, void *dev_id)
         write_seqlock(&xtime_lock);
 
 
-        iop3xx_cp6_enable();
         asm volatile("mcr p6, 0, %0, c6, c1, 0" : : "r" (1));
-        iop3xx_cp6_disable();
 
 	iop321_auxtimer_func();
 
@@ -114,7 +112,7 @@ static struct irqaction iop3xx_timer_irq = {
 #define AUX_HZ	1000
 
 
-void __init iop3xx_init_time(unsigned long tick_rate)
+void __init iop_init_time(unsigned long tick_rate)
 {
 	u32 timer_ctl;
 	u32 timer_load;
@@ -126,8 +124,8 @@ void __init iop3xx_init_time(unsigned long tick_rate)
 	printk("iop3xx_init_time tick_rate %lu ticks_per_jiffy %lu usec %lu\n",
 	       tick_rate, ticks_per_jiffy, ticks_per_usec);
 
-	timer_ctl = IOP3XX_TMR_EN | IOP3XX_TMR_PRIVILEGED |
-			IOP3XX_TMR_RELOAD | IOP3XX_TMR_RATIO_1_1;
+	timer_ctl = IOP_TMR_EN | IOP_TMR_PRIVILEGED |
+			IOP_TMR_RELOAD | IOP_TMR_RATIO_1_1;
 
 	timer_load = ticks_per_jiffy * HZ/AUX_HZ;
 
@@ -135,12 +133,10 @@ void __init iop3xx_init_time(unsigned long tick_rate)
 	 * We use timer 0 for our timer interrupt, and timer 1 as
 	 * monotonic counter for tracking missed jiffies.
 	 */
-	iop3xx_cp6_enable();
 	asm volatile("mcr p6, 0, %0, c4, c1, 0" : : "r" (timer_load));
 	asm volatile("mcr p6, 0, %0, c0, c1, 0" : : "r" (timer_ctl));
 	asm volatile("mcr p6, 0, %0, c5, c1, 0" : : "r" (0xffffffff));
 	asm volatile("mcr p6, 0, %0, c1, c1, 0" : : "r" (timer_ctl));
-	iop3xx_cp6_disable();
 
 	setup_irq(IRQ_IOP3XX_TIMER0, &iop3xx_timer_irq);
 }

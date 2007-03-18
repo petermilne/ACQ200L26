@@ -49,13 +49,13 @@
  */
 static void __init acqX00_timer_init(void)
 {
-	iop3xx_init_time(machine_is_acq100()? 
+	iop_init_time(machine_is_acq100()? 
 				ACQ100_TICK_RATE: ACQ200_TICK_RATE);
 }
 
 struct sys_timer acqX00_timer = {
 	.init		= acqX00_timer_init,
-	.offset		= iop3xx_gettimeoffset,
+	.offset		= iop_gettimeoffset,
 };
 
 static struct plat_serial8250_port acqX00_serial_platform_port[] = {

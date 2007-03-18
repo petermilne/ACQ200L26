@@ -9,7 +9,9 @@ obj-$(CONFIG_ARCH_IOP32X) += gpio.o
 obj-$(CONFIG_ARCH_IOP32X) += i2c.o
 obj-$(CONFIG_ARCH_IOP32X) += pci.o
 obj-$(CONFIG_ARCH_IOP32X) += setup.o
+ifndef CONFIG_ARCH_ACQ200
 obj-$(CONFIG_ARCH_IOP32X) += time.o
+endif
 obj-$(CONFIG_ARCH_IOP32X) += io.o
 obj-$(CONFIG_ARCH_IOP32X) += cp6.o
 

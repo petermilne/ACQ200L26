@@ -220,7 +220,6 @@ static void set_fpga_isr_steering(int use_fiq)
 {
 	volatile u32 intstr;
 
-	iop3xx_cp6_enable();	
 	asm volatile( "mrc p6, 0, %0, c4, c0, 0" : "=r" (intstr) );
 	if ( use_fiq ){
 		intstr |= 1<<FPGA_INT;
@@ -228,7 +227,6 @@ static void set_fpga_isr_steering(int use_fiq)
 		intstr &= ~(1<<FPGA_INT);
 	}
 	asm volatile( "mcr p6, 0, %0, c4, c0, 0" : : "r" (intstr) );
-	iop3xx_cp6_disable();	
 }
 
 
