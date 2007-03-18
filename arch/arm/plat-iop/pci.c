@@ -24,10 +24,13 @@
 #include <asm/mach/pci.h>
 #include <asm/hardware/iop3xx.h>
 
-// #define DEBUG
+#define DEBUG
+
+extern int G_iop321_pci_debug;
 
 #ifdef DEBUG
-#define  DBG(x...) printk(x)
+#define  DBG(x...) do { if (G_iop321_pci_debug) printk(x); } while (0)
+//#define DBG(x...)	printk(x)
 #else
 #define  DBG(x...) do { } while (0)
 #endif

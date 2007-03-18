@@ -38,8 +38,41 @@
 /*
  * Define your architecture specific bus configuration parameters here.
  */
+#if	defined(CONFIG_MACH_ACQ100)
 
-#if	defined(CONFIG_ARCH_LUBBOCK)
+#warning PGMWASHERE cooking up a _special_ smc driver for acq100
+
+#define SMC_CAN_USE_8BIT  1
+#define SMC_CAN_USE_16BIT 1
+#define SMC_CAN_USE_32BIT 1
+#define SMC_NOWAIT        1
+#define SMC_IO_SHIFT	  0
+
+#define SMC_inl(a, r)           readl((a) + (r))
+#define SMC_outl(v, a, r)       writel(v, (a) + (r))
+#define SMC_insl(a, r, p, l)    readsl((a) + (r), p, l)
+#define SMC_outsl(a, r, p, l)   writesl((a) + (r), p, l)
+
+#define SMC_inw(a, r)		readw((a) + (r))
+#define SMC_outw(v, a, r)	writew(v, (a) + (r))
+#define SMC_insw(a, r, p, l)	readsw((a) + (r), p, l)
+#define SMC_outsw(a, r, p, l)	writesw((a) + (r), p, l)
+
+#define SMC_inb(a, r)		readb((a) + (r))
+#define SMC_insb(a, r, p, l)	readsb((a) + (r), p, (l))
+#define SMC_outb(v, a, r)	writeb(v, (a) + (r))
+#define SMC_outsb(a, r, p, l)	writesb((a) + (r), p, (l))
+
+#define SMC_IOADDR        (ACQ100_ETHERNET+0x300)
+#define SMC_PADR          (ACQ200_LOCALIO_P+0x300)
+#define SMC_IRQ           IRQ_ACQ100_ETH
+
+
+extern int acq200_get_mac( int imac, int nmac, unsigned char the_mac[] );
+
+#define SMC_GET_MAC_ADDR(addr) acq200_get_mac(0, 6, addr)
+
+#elif	defined(CONFIG_ARCH_LUBBOCK)
 
 /* We can only do 16-bit reads and writes in the static memory space. */
 #define SMC_CAN_USE_8BIT	0

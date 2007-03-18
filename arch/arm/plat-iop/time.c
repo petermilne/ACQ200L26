@@ -24,7 +24,16 @@
 #include <asm/uaccess.h>
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
-#include <asm/arch/time.h>
+
+#ifndef CONFIG_ARCH_ACQ200
+
+#ifdef CONFIG_ARCH_IOP32X
+#define IRQ_IOP3XX_TIMER0	IRQ_IOP32X_TIMER0
+#else
+#ifdef CONFIG_ARCH_IOP33X
+#define IRQ_IOP3XX_TIMER0	IRQ_IOP33X_TIMER0
+#endif
+#endif
 
 static unsigned long ticks_per_jiffy;
 static unsigned long ticks_per_usec;
@@ -100,3 +109,6 @@ void __init iop_init_time(unsigned long tick_rate)
 
 	setup_irq(IRQ_IOP_TIMER0, &iop_timer_irq);
 }
+#else
+#warning ACQ200 flavor - DIY timers are us.
+#endif /* CONFIG_ARCH_ACQ200 */
