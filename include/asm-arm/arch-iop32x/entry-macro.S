@@ -9,7 +9,15 @@
  */
 
 #include <asm/arch/irqs.h>
-		
+
+
+                .macro  get_irqnr_preamble, base, tmp
+                .endm
+
+                .macro  arch_ret_to_user, tmp1, tmp2
+                .endm
+
+			
 #if defined(CONFIG_ARCH_ACQ200)
 		.macro  disable_fiq
 		.endm
@@ -62,6 +70,4 @@
 		clzne	\irqnr, \irqstat
 		rsbne	\irqnr, \irqnr, #31
 		.endm
-
 #endif
-

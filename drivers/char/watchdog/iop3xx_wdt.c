@@ -46,11 +46,8 @@ static unsigned long boot_status;
 static void
 wdt_enable(void)
 {
-	iop3xx_cp6_enable();
 	asm volatile("mcr p6, 0, %0, c7, c1, 0" : : "r" (IOP3XX_WDT_MAGIC1));
 	asm volatile("mcr p6, 0, %0, c7, c1, 0" : : "r" (IOP3XX_WDT_MAGIC2));
-	iop3xx_cp6_disable();
-	
 }
 
 static int
