@@ -48,6 +48,8 @@ typedef enum {
     TRUE = 1
 } boolean_t;
 
+/* pgm entered this using good old vi */
+
 #ifdef DBG
 #define DEBUGOUT(S)		printk(KERN_DEBUG S "\n")
 #define DEBUGOUT1(S, A...)	printk(KERN_DEBUG S "\n", A)
