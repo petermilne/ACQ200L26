@@ -804,8 +804,10 @@ static int acq200_core_probe(struct device * dev)
 	}else if ( acq200_core_major == 0 ){
 		acq200_core_major = rc;
 	}
-
+#if 0
+	/* Chicken/Egg: core helper lives on extra, not yet mounted */
 	run_core_mknod_helper(acq200_core_major);
+#endif
 	return 0;
 }
 

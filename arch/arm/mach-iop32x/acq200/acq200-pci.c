@@ -91,8 +91,8 @@ int acq200_iop321_setup(int nr, struct pci_sys_data *sys)
 
 	allocate_resource( &ioport_resource, &res[0], 
 			   0x10000,
-			   IOP321_PCI_LOWER_IO_PA + 0x6e000000,
-			   IOP321_PCI_UPPER_IO_PA + 0x6e000000,
+			   IOP321_PCI_LOWER_IO_PA,
+			   IOP321_PCI_UPPER_IO_PA,
 			   0x10000, NULL, NULL );
 
 	allocate_resource( &iomem_resource, &res[1], 
@@ -106,8 +106,7 @@ int acq200_iop321_setup(int nr, struct pci_sys_data *sys)
 	sys->resource[0] = &res[0];
 	sys->resource[1] = &res[1];
 	sys->resource[2] = NULL;
-	sys->io_offset   = 0x6e000000;
-
+	sys->io_offset = 0;
 	return 1;
 }
 

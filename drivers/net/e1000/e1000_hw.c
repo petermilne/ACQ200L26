@@ -654,6 +654,8 @@ e1000_reset_hw(struct e1000_hw *hw)
      * device.  Later controllers reload the EEPROM automatically, so just wait
      * for reload to complete.
      */
+
+    DEBUGOUT("FORCE EEPROM reload (What EEPROM?) mac_type\n");
     switch (hw->mac_type) {
         case e1000_82542_rev2_0:
         case e1000_82542_rev2_1:
@@ -692,14 +694,22 @@ e1000_reset_hw(struct e1000_hw *hw)
             break;
     }
 
+
     /* Disable HW ARPs on ASF enabled adapters */
     if (hw->mac_type >= e1000_82540 && hw->mac_type <= e1000_82547_rev_2) {
+
+	DEBUGOUT("Disable HW ARPs on ASF enabled adapters\n");
+
         manc = E1000_READ_REG(hw, MANC);
         manc &= ~(E1000_MANC_ARP_EN);
         E1000_WRITE_REG(hw, MANC, manc);
     }
 
+
     if ((hw->mac_type == e1000_82541) || (hw->mac_type == e1000_82547)) {
+
+	DEBUGOUT("phy_init_script\n");
+
         e1000_phy_init_script(hw);
 
         /* Configure activity LED after PHY reset */
@@ -1141,6 +1151,10 @@ e1000_setup_link(struct e1000_hw *hw)
             hw->fc = E1000_FC_FULL;
             break;
         default:
+#ifdef CONFIG_ARCH_ACQ200
+	    hw->fc = E1000_FC_FULL;
+	    break;
+#else
             ret_val = e1000_read_eeprom(hw, EEPROM_INIT_CONTROL2_REG,
                                         1, &eeprom_data);
             if (ret_val) {
@@ -1155,6 +1169,7 @@ e1000_setup_link(struct e1000_hw *hw)
             else
                 hw->fc = E1000_FC_FULL;
             break;
+#endif
         }
     }
 
@@ -4971,6 +4986,7 @@ e1000_spi_eeprom_ready(struct e1000_hw *hw)
     return E1000_SUCCESS;
 }
 
+
 /******************************************************************************
  * Reads a 16 bit word from the EEPROM.
  *
@@ -4990,6 +5006,9 @@ e1000_read_eeprom(struct e1000_hw *hw,
 
     DEBUGFUNC("e1000_read_eeprom");
 
+ #ifdef CONFIG_ARCH_ACQ200
+     DEBUGOUT1("acq200_read_eeprom(%p, %d, %d)\n", hw, offset, words);
+ #else
     /* If eeprom is not yet detected, do so now */
     if (eeprom->word_size == 0)
         e1000_init_eeprom_params(hw);
@@ -5069,7 +5088,7 @@ e1000_read_eeprom(struct e1000_hw *hw,
 
     /* End this read operation */
     e1000_release_eeprom(hw);
-
+#endif		/* CONFIG_ARCH_ACQ200 */
     return E1000_SUCCESS;
 }
 
@@ -6666,7 +6685,11 @@ e1000_write_reg_io(struct e1000_hw *hw,
 {
     unsigned long io_addr = hw->io_base;
     unsigned long io_data = hw->io_base + 4;
-
+/*
+    printk("e1000_write_reg_io addr 0x%08x offset %04x\n"
+	   "e1000_write_reg_io data 0x%08x value 0x%08x\n",
+	   io_addr, offset, io_data, value);
+*/
     e1000_io_write(hw, io_addr, offset);
     e1000_io_write(hw, io_data, value);
 }
