@@ -1141,6 +1141,10 @@ e1000_setup_link(struct e1000_hw *hw)
             hw->fc = E1000_FC_FULL;
             break;
         default:
+#ifdef CONFIG_ARCH_ACQ200
+	    hw->fc = E1000_FC_FULL;
+	    break;
+#else
             ret_val = e1000_read_eeprom(hw, EEPROM_INIT_CONTROL2_REG,
                                         1, &eeprom_data);
             if (ret_val) {
@@ -1155,6 +1159,7 @@ e1000_setup_link(struct e1000_hw *hw)
             else
                 hw->fc = E1000_FC_FULL;
             break;
+#endif
         }
     }
 
@@ -4971,6 +4976,7 @@ e1000_spi_eeprom_ready(struct e1000_hw *hw)
     return E1000_SUCCESS;
 }
 
+
 /******************************************************************************
  * Reads a 16 bit word from the EEPROM.
  *
@@ -4990,6 +4996,9 @@ e1000_read_eeprom(struct e1000_hw *hw,
 
     DEBUGFUNC("e1000_read_eeprom");
 
+ #ifdef CONFIG_ARCH_ACQ200
+     DEBUGOUT1("acq200_read_eeprom(%p, %d, %d)\n", hw, offset, words);
+ #else
     /* If eeprom is not yet detected, do so now */
     if (eeprom->word_size == 0)
         e1000_init_eeprom_params(hw);
@@ -5069,7 +5078,7 @@ e1000_read_eeprom(struct e1000_hw *hw,
 
     /* End this read operation */
     e1000_release_eeprom(hw);
-
+#endif		/* CONFIG_ARCH_ACQ200 */
     return E1000_SUCCESS;
 }
 

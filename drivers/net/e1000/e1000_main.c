@@ -853,6 +853,41 @@ e1000_reset(struct e1000_adapter *adapter)
 	e1000_release_manageability(adapter);
 }
 
+#ifdef CONFIG_ARCH_ACQ200
+
+#include <asm/mach-types.h>
+
+extern int acq200_get_mac(int imac, int nmac, unsigned char the_mac[]);
+
+void acq200_mac_hack(struct e1000_adapter *adapter)
+{
+	static int imac = 0;
+
+        printk( KERN_INFO "acq200_mac_hack bd_number %d\n", 
+		adapter->bd_number );
+
+	acq200_get_mac(imac<2? imac: 0, 6, adapter->hw.perm_mac_addr);
+
+	if (machine_is_acq100() || adapter->bd_number > 1){
+		/** avoid duplicating eth0 MAC */
+		adapter->hw.perm_mac_addr[3] = 'b' + adapter->bd_number;
+	}
+
+	memcpy(adapter->hw.mac_addr, adapter->hw.perm_mac_addr, 
+	       NODE_ADDRESS_SIZE);
+
+	printk( KERN_INFO "acq200_mac_hack %x:%x:%x:%x:%x:%x\n",
+		adapter->hw.perm_mac_addr[0], adapter->hw.perm_mac_addr[1],
+		adapter->hw.perm_mac_addr[2], adapter->hw.perm_mac_addr[3],
+		adapter->hw.perm_mac_addr[4], adapter->hw.perm_mac_addr[5]  );
+
+	imac += 1;
+}
+
+#warning PGMWASHERE HACKING IN PROGRESS
+#endif
+
+
 /**
  * e1000_probe - Device Initialization Routine
  * @pdev: PCI device information struct
@@ -877,8 +912,10 @@ e1000_probe(struct pci_dev *pdev,
 	static int cards_found = 0;
 	static int global_quad_port_a = 0; /* global ksp3 port a indication */
 	int i, err, pci_using_dac;
+#ifndef CONFIG_ARCH_ACQ200
 	uint16_t eeprom_data = 0;
 	uint16_t eeprom_apme_mask = E1000_EEPROM_APME;
+#endif
 	if ((err = pci_enable_device(pdev)))
 		return err;
 
@@ -1016,7 +1053,12 @@ e1000_probe(struct pci_dev *pdev,
 	e1000_reset_hw(&adapter->hw);
 
 	/* make sure the EEPROM is good */
+#ifdef CONFIG_ARCH_ACQ200
+#warning ACQ200 specific command line mac hack - how do the other guys do it?
 
+	acq200_mac_hack(adapter);
+#else
+#warning Standard modus operandii here
 	if (e1000_validate_eeprom_checksum(&adapter->hw) < 0) {
 		DPRINTK(PROBE, ERR, "The EEPROM Checksum Is Not Valid\n");
 		goto err_eeprom;
@@ -1026,6 +1068,7 @@ e1000_probe(struct pci_dev *pdev,
 
 	if (e1000_read_mac_addr(&adapter->hw))
 		DPRINTK(PROBE, ERR, "EEPROM Read Error\n");
+#endif /* ACQ200 */
 	memcpy(netdev->dev_addr, adapter->hw.mac_addr, netdev->addr_len);
 	memcpy(netdev->perm_addr, adapter->hw.mac_addr, netdev->addr_len);
 
@@ -1052,6 +1095,9 @@ e1000_probe(struct pci_dev *pdev,
 
 	e1000_check_options(adapter);
 
+#ifdef CONFIG_ARCH_ACQ200
+#warning ACQ200 we dont want no wimpy Wake On Lan
+#else
 	/* Initial Wake on LAN setting
 	 * If APM wake is enabled in the EEPROM,
 	 * enable the ACPI Magic Packet filter
@@ -1089,7 +1135,7 @@ e1000_probe(struct pci_dev *pdev,
 	}
 	if (eeprom_data & eeprom_apme_mask)
 		adapter->eeprom_wol |= E1000_WUFC_MAG;
-
+#endif /* ACQ200 */
 	/* now that we have the eeprom settings, apply the special cases
 	 * where the eeprom may be wrong or the board simply won't support
 	 * wake on lan on a particular port */
