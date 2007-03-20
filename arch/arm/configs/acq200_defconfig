@@ -1,44 +1,24 @@
 #
 # Automatically generated make config: don't edit
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# Linux kernel version: 2.6.18.2
-# Tue Dec 12 22:10:14 2006
-=======
-# Linux kernel version: 2.6.21-rc4-pgm
-# Sun Mar 18 17:39:28 2007
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
+# Linux kernel version: 2.6.21-rc4
+# Mon Mar 19 14:03:21 2007
 #
 CONFIG_ARM=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
 # CONFIG_GENERIC_GPIO is not set
 # CONFIG_GENERIC_TIME is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_MMU=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_NO_IOPORT is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_GENERIC_HARDIRQS=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_TRACE_IRQFLAGS_SUPPORT=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_HARDIRQS_SW_RESEND=y
 CONFIG_GENERIC_IRQ_PROBE=y
 CONFIG_RWSEM_GENERIC_SPINLOCK=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_ARCH_HAS_ILOG2_U32 is not set
 # CONFIG_ARCH_HAS_ILOG2_U64 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_GENERIC_HWEIGHT=y
 CONFIG_GENERIC_CALIBRATE_DELAY=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_ZONE_DMA=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_FIQ=y
 CONFIG_VECTORS_BASE=0xffff0000
 CONFIG_DEFCONFIG_LIST="/lib/modules/$UNAME_RELEASE/.config"
@@ -58,42 +38,23 @@ CONFIG_LOCALVERSION="-acqX00"
 CONFIG_LOCALVERSION_AUTO=y
 # CONFIG_SWAP is not set
 CONFIG_SYSVIPC=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_IPC_NS is not set
 CONFIG_SYSVIPC_SYSCTL=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_POSIX_MQUEUE is not set
 # CONFIG_BSD_PROCESS_ACCT is not set
 # CONFIG_TASKSTATS is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_UTS_NS is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_AUDIT is not set
 # CONFIG_IKCONFIG is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_SYSFS_DEPRECATED=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_RELAY is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_BLK_DEV_INITRD=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_INITRAMFS_SOURCE=""
 CONFIG_CC_OPTIMIZE_FOR_SIZE=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_SYSCTL=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_EMBEDDED is not set
 CONFIG_UID16=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-CONFIG_SYSCTL=y
-=======
 CONFIG_SYSCTL_SYSCALL=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_KALLSYMS=y
 # CONFIG_KALLSYMS_ALL is not set
 # CONFIG_KALLSYMS_EXTRA_PASS is not set
@@ -125,16 +86,10 @@ CONFIG_KMOD=y
 #
 # Block layer
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_BLOCK=y
 # CONFIG_LBD is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_BLK_DEV_IO_TRACE is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_LSF is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # IO Schedulers
@@ -173,10 +128,7 @@ CONFIG_ARCH_IOP32X=y
 # CONFIG_ARCH_IXP2000 is not set
 # CONFIG_ARCH_IXP23XX is not set
 # CONFIG_ARCH_L7200 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_ARCH_NS9XXX is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_ARCH_PNX4008 is not set
 # CONFIG_ARCH_PXA is not set
 # CONFIG_ARCH_RPC is not set
@@ -193,26 +145,15 @@ CONFIG_ARCH_IOP32X=y
 #
 # IOP32x Platform Types
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_MACH_GLANTANK is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_ARCH_IQ80321 is not set
 # CONFIG_ARCH_IQ31244 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-CONFIG_IOP3XX_ATU=y
-=======
 # CONFIG_MACH_N2100 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_ARCH_ACQ200=y
 CONFIG_MACH_ACQ100=y
 CONFIG_ARCH_ACQX00=y
 CONFIG_ARCH_IOP321=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-CONFIG_ARCH_IOP=y
-=======
 CONFIG_PLAT_IOP=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Processor Type
@@ -223,22 +164,16 @@ CONFIG_CPU_32v5=y
 CONFIG_CPU_ABRT_EV5T=y
 CONFIG_CPU_CACHE_VIVT=y
 CONFIG_CPU_TLB_V4WBI=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_CPU_CP15=y
 CONFIG_CPU_CP15_MMU=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Processor Features
 #
 # CONFIG_ARM_THUMB is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_CPU_DCACHE_DISABLE is not set
 # CONFIG_OUTER_CACHE is not set
 # CONFIG_IWMMXT is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_XSCALE_PMU=y
 
 #
@@ -269,10 +204,7 @@ CONFIG_FLAT_NODE_MEM_MAP=y
 # CONFIG_SPARSEMEM_STATIC is not set
 CONFIG_SPLIT_PTLOCK_CPUS=4096
 # CONFIG_RESOURCES_64BIT is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_ZONE_DMA_FLAG=1
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_LEDS=y
 CONFIG_LEDS_TIMER=y
 CONFIG_LEDS_CPU=y
@@ -285,10 +217,7 @@ CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
 CONFIG_CMDLINE="ip=boot root=/dev/ram0 console=ttyS0,38400"
 # CONFIG_XIP_KERNEL is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_KEXEC is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Floating point emulation
@@ -313,10 +242,6 @@ CONFIG_BINFMT_ELF=y
 # Power management options
 #
 # CONFIG_PM is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_APM is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Networking
@@ -332,11 +257,8 @@ CONFIG_PACKET_MMAP=y
 CONFIG_UNIX=y
 CONFIG_XFRM=y
 # CONFIG_XFRM_USER is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_XFRM_SUB_POLICY is not set
 # CONFIG_XFRM_MIGRATE is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_NET_KEY is not set
 CONFIG_INET=y
 CONFIG_IP_MULTICAST=y
@@ -358,20 +280,13 @@ CONFIG_IP_PNP_DHCP=y
 # CONFIG_INET_TUNNEL is not set
 CONFIG_INET_XFRM_MODE_TRANSPORT=y
 CONFIG_INET_XFRM_MODE_TUNNEL=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_INET_XFRM_MODE_BEET=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_INET_DIAG=y
 CONFIG_INET_TCP_DIAG=y
 # CONFIG_TCP_CONG_ADVANCED is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-CONFIG_TCP_CONG_BIC=y
-=======
 CONFIG_TCP_CONG_CUBIC=y
 CONFIG_DEFAULT_TCP_CONG="cubic"
 # CONFIG_TCP_MD5SIG is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # IP: Virtual Server Configuration
@@ -388,26 +303,15 @@ CONFIG_NETFILTER=y
 # Core Netfilter Configuration
 #
 # CONFIG_NETFILTER_NETLINK is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_NF_CONNTRACK is not set
-=======
 # CONFIG_NF_CONNTRACK_ENABLED is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_NETFILTER_XTABLES is not set
 
 #
 # IP: Netfilter Configuration
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_IP_NF_CONNTRACK is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_IP_NF_QUEUE is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_IP_NF_IPTABLES is not set
 # CONFIG_IP_NF_ARPTABLES is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # DCCP Configuration (EXPERIMENTAL)
@@ -460,10 +364,7 @@ CONFIG_STANDALONE=y
 CONFIG_PREVENT_FIRMWARE_BUILD=y
 # CONFIG_FW_LOADER is not set
 # CONFIG_DEBUG_DRIVER is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_DEBUG_DEVRES is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_SYS_HYPERVISOR is not set
 
 #
@@ -486,19 +387,13 @@ CONFIG_MTD_PARTITIONS=y
 # User Modules And Translation Layers
 #
 CONFIG_MTD_CHAR=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_MTD_BLKDEVS=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_MTD_BLOCK=y
 # CONFIG_FTL is not set
 # CONFIG_NFTL is not set
 # CONFIG_INFTL is not set
 # CONFIG_RFD_FTL is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SSFDC is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # RAM/ROM/Flash chip drivers
@@ -569,10 +464,7 @@ CONFIG_MTD_ACQ200=y
 #
 # Plug and Play support
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_PNPACPI is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Block devices
@@ -589,10 +481,6 @@ CONFIG_BLK_DEV_RAM=y
 CONFIG_BLK_DEV_RAM_COUNT=16
 CONFIG_BLK_DEV_RAM_SIZE=8192
 CONFIG_BLK_DEV_RAM_BLOCKSIZE=1024
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-CONFIG_BLK_DEV_INITRD=y
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_CDROM_PKTCDVD is not set
 # CONFIG_ATA_OVER_ETH is not set
 
@@ -622,10 +510,6 @@ CONFIG_IDEPCI_SHARE_IRQ=y
 # CONFIG_BLK_DEV_OFFBOARD is not set
 CONFIG_BLK_DEV_GENERIC=m
 # CONFIG_BLK_DEV_OPTI621 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_BLK_DEV_SL82C105 is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_BLK_DEV_IDEDMA_PCI=y
 # CONFIG_BLK_DEV_IDEDMA_FORCED is not set
 CONFIG_IDEDMA_PCI_AUTO=y
@@ -640,33 +524,21 @@ CONFIG_IDEDMA_ONLYDISK=y
 # CONFIG_BLK_DEV_CS5530 is not set
 # CONFIG_BLK_DEV_HPT34X is not set
 # CONFIG_BLK_DEV_HPT366 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_BLK_DEV_JMICRON is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_BLK_DEV_SC1200 is not set
 # CONFIG_BLK_DEV_PIIX is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_BLK_DEV_IT8213 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_BLK_DEV_IT821X is not set
 # CONFIG_BLK_DEV_NS87415 is not set
 # CONFIG_BLK_DEV_PDC202XX_OLD is not set
 CONFIG_BLK_DEV_PDC202XX_NEW=m
 # CONFIG_BLK_DEV_SVWKS is not set
 # CONFIG_BLK_DEV_SIIMAGE is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_BLK_DEV_SL82C105 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_BLK_DEV_SLC90E66 is not set
 # CONFIG_BLK_DEV_TRM290 is not set
 # CONFIG_BLK_DEV_VIA82CXXX is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_BLK_DEV_TC86C001 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_IDE_ARM is not set
 CONFIG_BLK_DEV_IDEDMA=y
 # CONFIG_IDEDMA_IVB is not set
@@ -678,15 +550,12 @@ CONFIG_IDEDMA_AUTO=y
 #
 # CONFIG_RAID_ATTRS is not set
 # CONFIG_SCSI is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SCSI_NETLINK is not set
 
 #
 # Serial ATA (prod) and Parallel ATA (experimental) drivers
 #
 # CONFIG_ATA is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Multi-device support (RAID and LVM)
@@ -764,27 +633,18 @@ CONFIG_E1000_NAPI=y
 # CONFIG_SK98LIN is not set
 # CONFIG_TIGON3 is not set
 # CONFIG_BNX2 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_QLA3XXX is not set
 # CONFIG_ATL1 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Ethernet (10000 Mbit)
 #
 # CONFIG_CHELSIO_T1 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_CHELSIO_T3 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_IXGB is not set
 # CONFIG_S2IO is not set
 # CONFIG_MYRI10GE is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_NETXEN_NIC is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Token Ring devices
@@ -818,10 +678,7 @@ CONFIG_E1000_NAPI=y
 # Input device support
 #
 CONFIG_INPUT=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_INPUT_FF_MEMLESS is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Userland interfaces
@@ -910,13 +767,6 @@ CONFIG_HW_RANDOM=y
 # CONFIG_DTLK is not set
 # CONFIG_R3964 is not set
 # CONFIG_APPLICOM is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-
-#
-# Ftape, the floppy tape device driver
-#
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_DRM is not set
 # CONFIG_RAW_DRIVER is not set
 
@@ -924,10 +774,6 @@ CONFIG_HW_RANDOM=y
 # TPM devices
 #
 # CONFIG_TCG_TPM is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_TELCLOCK is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # I2C support
@@ -957,10 +803,7 @@ CONFIG_I2C_IOP3XX=y
 # CONFIG_I2C_NFORCE2 is not set
 # CONFIG_I2C_OCORES is not set
 # CONFIG_I2C_PARPORT_LIGHT is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_I2C_PASEMI is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_I2C_PROSAVAGE is not set
 # CONFIG_I2C_SAVAGE4 is not set
 # CONFIG_I2C_SIS5595 is not set
@@ -996,10 +839,7 @@ CONFIG_I2C_IOP3XX=y
 #
 # Dallas's 1-wire bus
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_W1 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Hardware Monitoring support
@@ -1010,10 +850,7 @@ CONFIG_HWMON=y
 # CONFIG_SENSORS_ADM1021 is not set
 # CONFIG_SENSORS_ADM1025 is not set
 # CONFIG_SENSORS_ADM1026 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SENSORS_ADM1029 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_SENSORS_ADM1031 is not set
 # CONFIG_SENSORS_ADM9240 is not set
 # CONFIG_SENSORS_ASB100 is not set
@@ -1037,27 +874,18 @@ CONFIG_HWMON=y
 # CONFIG_SENSORS_LM92 is not set
 # CONFIG_SENSORS_MAX1619 is not set
 # CONFIG_SENSORS_PC87360 is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SENSORS_PC87427 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_SENSORS_SIS5595 is not set
 # CONFIG_SENSORS_SMSC47M1 is not set
 # CONFIG_SENSORS_SMSC47M192 is not set
 # CONFIG_SENSORS_SMSC47B397 is not set
 # CONFIG_SENSORS_VIA686A is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SENSORS_VT1211 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_SENSORS_VT8231 is not set
 # CONFIG_SENSORS_W83781D is not set
 # CONFIG_SENSORS_W83791D is not set
 # CONFIG_SENSORS_W83792D is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SENSORS_W83793 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_SENSORS_W83L785TS is not set
 # CONFIG_SENSORS_W83627HF is not set
 # CONFIG_SENSORS_W83627EHF is not set
@@ -1066,8 +894,6 @@ CONFIG_HWMON=y
 #
 # Misc devices
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_SGI_IOC4 is not set
 # CONFIG_TIFM_CORE is not set
 
@@ -1075,7 +901,6 @@ CONFIG_HWMON=y
 # Multifunction device drivers
 #
 # CONFIG_MFD_SM501 is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # LED devices
@@ -1094,10 +919,6 @@ CONFIG_HWMON=y
 # Multimedia devices
 #
 # CONFIG_VIDEO_DEV is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-CONFIG_VIDEO_V4L2=y
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Digital Video Broadcasting Devices
@@ -1107,11 +928,7 @@ CONFIG_VIDEO_V4L2=y
 #
 # Graphics support
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_FIRMWARE_EDID is not set
-=======
 # CONFIG_BACKLIGHT_LCD_SUPPORT is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_FB is not set
 
 #
@@ -1119,10 +936,6 @@ CONFIG_VIDEO_V4L2=y
 #
 # CONFIG_VGA_CONSOLE is not set
 CONFIG_DUMMY_CONSOLE=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_BACKLIGHT_LCD_SUPPORT is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 
 #
 # Sound
@@ -1130,15 +943,12 @@ CONFIG_DUMMY_CONSOLE=y
 # CONFIG_SOUND is not set
 
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # HID Devices
 #
 CONFIG_HID=y
 # CONFIG_HID_DEBUG is not set
 
 #
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # USB support
 #
 CONFIG_USB_ARCH_HAS_HCD=y
@@ -1167,40 +977,18 @@ CONFIG_RTC_LIB=y
 # CONFIG_RTC_CLASS is not set
 
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# DMA Engine support
-#
-# CONFIG_DMA_ENGINE is not set
-
-#
-# DMA Clients
-#
-
-#
-# DMA Devices
-#
-
-#
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # File systems
 #
 CONFIG_EXT2_FS=y
 # CONFIG_EXT2_FS_XATTR is not set
 # CONFIG_EXT2_FS_XIP is not set
 # CONFIG_EXT3_FS is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_EXT4DEV_FS is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_REISERFS_FS is not set
 # CONFIG_JFS_FS is not set
 # CONFIG_FS_POSIX_ACL is not set
 # CONFIG_XFS_FS is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_GFS2_FS is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_OCFS2_FS is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_ROMFS_FS is not set
@@ -1229,10 +1017,7 @@ CONFIG_DNOTIFY=y
 # Pseudo filesystems
 #
 CONFIG_PROC_FS=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_PROC_SYSCTL=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_SYSFS=y
 # CONFIG_TMPFS is not set
 # CONFIG_HUGETLB_PAGE is not set
@@ -1249,10 +1034,6 @@ CONFIG_RAMFS=y
 # CONFIG_BEFS_FS is not set
 # CONFIG_BFS_FS is not set
 # CONFIG_EFS_FS is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_JFFS_FS is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_JFFS2_FS=y
 CONFIG_JFFS2_FS_DEBUG=0
 CONFIG_JFFS2_FS_WRITEBUFFER=y
@@ -1309,14 +1090,11 @@ CONFIG_MSDOS_PARTITION=y
 # CONFIG_NLS is not set
 
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # Distributed Lock Manager
 #
 # CONFIG_DLM is not set
 
 #
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # Profiling support
 #
 # CONFIG_PROFILING is not set
@@ -1325,72 +1103,35 @@ CONFIG_MSDOS_PARTITION=y
 # Kernel hacking
 #
 # CONFIG_PRINTK_TIME is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_ENABLE_MUST_CHECK=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_UNUSED_SYMBOLS is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_DEBUG_FS is not set
 # CONFIG_HEADERS_CHECK is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_DEBUG_KERNEL=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_DEBUG_SHIRQ is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_LOG_BUF_SHIFT=14
 CONFIG_DETECT_SOFTLOCKUP=y
 # CONFIG_SCHEDSTATS is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_TIMER_STATS is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_DEBUG_SLAB is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_DEBUG_PREEMPT=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_DEBUG_RT_MUTEXES is not set
 # CONFIG_RT_MUTEX_TESTER is not set
 # CONFIG_DEBUG_SPINLOCK is not set
 # CONFIG_DEBUG_MUTEXES is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_DEBUG_RWSEMS is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_DEBUG_SPINLOCK_SLEEP is not set
 # CONFIG_DEBUG_LOCKING_API_SELFTESTS is not set
 # CONFIG_DEBUG_KOBJECT is not set
 CONFIG_DEBUG_BUGVERBOSE=y
 CONFIG_DEBUG_INFO=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_DEBUG_FS is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_DEBUG_VM is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_DEBUG_LIST is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_FRAME_POINTER=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_UNWIND_INFO is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_FORCED_INLINING=y
 # CONFIG_RCU_TORTURE_TEST is not set
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 # CONFIG_FAULT_INJECTION is not set
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 CONFIG_DEBUG_USER=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# CONFIG_DEBUG_WAITQ is not set
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_DEBUG_ERRORS is not set
 # CONFIG_DEBUG_LL is not set
 
@@ -1406,19 +1147,9 @@ CONFIG_DEBUG_USER=y
 # CONFIG_CRYPTO is not set
 
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-# Hardware crypto devices
-#
-
-#
-=======
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # Library routines
 #
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_BITREVERSE=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
 # CONFIG_CRC_CCITT is not set
 # CONFIG_CRC16 is not set
 CONFIG_CRC32=y
@@ -1426,8 +1157,5 @@ CONFIG_CRC32=y
 CONFIG_ZLIB_INFLATE=y
 CONFIG_ZLIB_DEFLATE=y
 CONFIG_PLIST=y
-<<<<<<< HEAD:arch/arm/configs/acq200_defconfig
-=======
 CONFIG_HAS_IOMEM=y
 CONFIG_HAS_IOPORT=y
->>>>>>> acqX00-work:arch/arm/configs/acq200_defconfig
