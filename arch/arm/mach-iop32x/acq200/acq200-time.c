@@ -49,7 +49,8 @@ static unsigned long ticks_per_jiffy;
 static unsigned long ticks_per_usec;
 static unsigned long next_jiffy_time;
 
-static int insert_histo[4];
+#define MAX_CATCHUP 4
+static int insert_histo[MAX_CATCHUP+1];
 
 unsigned long iop_gettimeoffset(void)
 {
@@ -66,40 +67,49 @@ static irqreturn_t
 iop3xx_timer_interrupt(int irq, void *dev_id)
 {
 	int tick_insert = 0;
-        write_seqlock(&xtime_lock);
 
-
+	/* intack */
         asm volatile("mcr p6, 0, %0, c6, c1, 0" : : "r" (1));
 
 	iop321_auxtimer_func();
 
         while ((signed long)(next_jiffy_time - *IOP3XX_TU_TCR1)
                                                         >= ticks_per_jiffy) {
+
+	        write_seqlock(&xtime_lock);
 		timer_tick();
-		if (++tick_insert > 2){
-                       next_jiffy_time = *IOP3XX_TU_TCR1 - ticks_per_jiffy;
+	        write_sequnlock(&xtime_lock);
+
+		if (++tick_insert >= MAX_CATCHUP){
+                       next_jiffy_time = *IOP3XX_TU_TCR1;
                        break;
 		}else{
 			next_jiffy_time -= ticks_per_jiffy;
 		}
         }
 
-        write_sequnlock(&xtime_lock);
-
-	insert_histo[min(tick_insert, 3)]++;
+	insert_histo[min(tick_insert, MAX_CATCHUP)]++;
 
         return IRQ_HANDLED;
 }
 
 int iop3xx_report_ticks(char* buf, int maxbuf)
 {
-	return snprintf(buf, maxbuf, 
-			"[%6d,%6d,%6d,%6d]\n",
-			insert_histo[0],
-			insert_histo[1],
-			insert_histo[2],
-			insert_histo[3]
-			);
+	int cursor = 0;
+	int bin;
+
+	cursor += snprintf(buf, maxbuf, "[");
+	
+	for (bin = 0; bin <= MAX_CATCHUP; ++bin){
+		cursor += snprintf(buf+cursor, maxbuf-cursor,
+				   "%6d ", insert_histo[bin]);
+
+		if (cursor > maxbuf-4){
+			break;
+		}
+	}
+	cursor += snprintf(buf+cursor, maxbuf-cursor, "]\n");
+	return cursor;
 }
 
 
