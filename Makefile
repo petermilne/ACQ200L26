@@ -1,14 +1,8 @@
 VERSION = 2
 PATCHLEVEL = 6
-<<<<<<< HEAD:Makefile
-SUBLEVEL = 20
-EXTRAVERSION = -pgm
-NAME = Homicidal Dwarf Hamster
-=======
 SUBLEVEL = 21
-EXTRAVERSION = -rc4
+EXTRAVERSION = -rc4-pgm
 NAME = Nocturnal Monster Puppy
->>>>>>> acqX00-work:Makefile
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
