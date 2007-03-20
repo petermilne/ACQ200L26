@@ -44,12 +44,14 @@
 #include <asm/arch-iop32x/acqX00-irq.h>
 #include <asm/arch-iop32x/iop321.h>
 
+extern void __init acq200_init_time(unsigned long tick_rate);
+
 /*
  * ACQX00 timer tick configuration.
  */
 static void __init acqX00_timer_init(void)
 {
-	iop_init_time(machine_is_acq100()? 
+	acq200_init_time(machine_is_acq100()? 
 				ACQ100_TICK_RATE: ACQ200_TICK_RATE);
 }
 

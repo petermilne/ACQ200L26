@@ -112,7 +112,7 @@ static struct irqaction iop3xx_timer_irq = {
 #define AUX_HZ	1000
 
 
-void __init iop3xx_init_time(unsigned long tick_rate)
+void __init acq200_init_time(unsigned long tick_rate)
 {
 	u32 timer_ctl;
 	u32 timer_load;
