@@ -163,15 +163,16 @@ void mmr_setup(void)
 
 static void __devinit pci_fixup_acq216(struct pci_dev *dev)
 {
-	info("found a HINT: cl:%04x %s"
+	int fixme = ((dev->class>>8)==0x680) && dev->bus->number > 0;
+	info("HINT: cl:%04x %s"
 	     "devfn 0x%08x v:%04x d:%04x "
 	     "sv:%04x sd:%04x",
-	     dev->class>>8, (dev->class>>8)==0x680? "FIXME": "nofix",
+	     dev->class>>8, fixme? "FIX": "ok ",
 		dev->devfn, dev->vendor, dev->device, 
 	     dev->subsystem_vendor, dev->subsystem_device);
 
 
-	if ((dev->class>>8) == 0x680){
+	if (fixme){
 		/** limit downstream bridge resource to 1M */
 		int i;
 
