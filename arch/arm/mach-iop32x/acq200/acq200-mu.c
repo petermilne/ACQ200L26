@@ -106,7 +106,14 @@ static int acq200_debug;
 #define ACQ216_BRIDGE_WINDOW_MASK (ACQ216_BRIDGE_WINDOW_SIZE-1)
 
 int acq200_databuf_debug = 0;
-module_param(acq200_databuf_debug, int, 0);
+module_param(acq200_databuf_debug, int, 0664);
+
+
+int HBLEN = _HBLEN;
+module_param(HBLEN, int, 0444);
+
+int HBBLOCK = _HBBLOCK;
+module_param(HBBLOCK, int, 0444);
 
 #define DBDBG(lvl, format, args...) \
         if (acq200_databuf_debug>lvl ) info( "DBDBG:" format, ##args)
@@ -154,7 +161,7 @@ static struct ACQ200_MU_DEVICE {
 	dma_addr_t mumem_dmad;
 	u32 host_base_len;
 	wait_queue_head_t ip_waitq;
-	struct PCI_DMA_BUFFER databufs[NDATABUFS];
+	struct PCI_DMA_BUFFER *databufs;
 	struct STATS {
 		unsigned n_ops;
 	}
@@ -167,6 +174,7 @@ static struct ACQ200_MU_DEVICE {
 	.host_base_len= 0x01000000,
 };
 
+#define DATABUFS_SZ	(sizeof(struct PCI_DMA_BUFFER)*NDATABUFS)
 
 static inline int mumem_len(void)
 {
@@ -438,39 +446,29 @@ static void mk_sysfs(struct device *dev)
 	dbg(1,  "calling device_create_file dev %p", dev );
 
 
-	device_create_file(dev, &dev_attr_host_base);
-	device_create_file(dev, &dev_attr_queue_state);
-	device_create_file(dev, &dev_attr_acq200_debug);
-	device_create_file(dev, &dev_attr_ipq_entries);
-	device_create_file(dev, &dev_attr_ifq_entries);
-	device_create_file(dev, &dev_attr_opq_entries);
-	device_create_file(dev, &dev_attr_ofq_entries);
-	device_create_file(dev, &dev_attr_acq200_databuf_debug);
-	device_create_file(dev, &dev_attr_mu_ipq_int_enable);
-	device_create_file(dev, &dev_attr_OIMR);
+	DEVICE_CREATE_FILE(dev, &dev_attr_host_base);
+	DEVICE_CREATE_FILE(dev, &dev_attr_queue_state);
+	DEVICE_CREATE_FILE(dev, &dev_attr_acq200_debug);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ipq_entries);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ifq_entries);
+	DEVICE_CREATE_FILE(dev, &dev_attr_opq_entries);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ofq_entries);
+	DEVICE_CREATE_FILE(dev, &dev_attr_acq200_databuf_debug);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mu_ipq_int_enable);
+	DEVICE_CREATE_FILE(dev, &dev_attr_OIMR);
 
-	driver_create_file(dev->driver, &driver_attr_version);
+	DRIVER_CREATE_FILE(dev->driver, &driver_attr_version);
 }
 
 static void rm_sysfs(struct device *dev)
 {
-	device_remove_file(dev, &dev_attr_host_base);
-	device_remove_file(dev, &dev_attr_queue_state);
-	device_remove_file(dev, &dev_attr_acq200_debug);
-	device_remove_file(dev, &dev_attr_ipq_entries);
-	device_remove_file(dev, &dev_attr_ifq_entries);
-	device_remove_file(dev, &dev_attr_opq_entries);
-	device_remove_file(dev, &dev_attr_ofq_entries);
-	device_remove_file(dev, &dev_attr_acq200_databuf_debug);
-	driver_remove_file(dev->driver, &driver_attr_version);
-	device_remove_file(dev, &dev_attr_mu_ipq_int_enable);
-	device_remove_file(dev, &dev_attr_OIMR);
+
 }
 
 
 
 
-static irqreturn_t acq200_mu_isr(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t acq200_mu_isr(int irq, void *dev_id)
 {
 	u32 iisr = *IOP321_IISR;
 
@@ -713,7 +711,9 @@ static ssize_t acq200_mu_inbound_read(
 
 		dbg(2, "copy_to_user( %p, %p, %d)", buf, LBUF(file), len);
 
-		copy_to_user(buf, LBUF(file), len);
+		if (copy_to_user(buf, LBUF(file), len)){
+			return -EFAULT;
+		}
 		acq200mu_return_free_ib(mfa);
 		return len;
 	}
@@ -747,7 +747,9 @@ static ssize_t acq200_mu_outbound_write(
 
 	dbg(2,  "copy_from_user( %p %p %d )", LBUF(file), buf, len);
 
-	copy_from_user(LBUF(file), buf, len);
+	if (copy_from_user(LBUF(file), buf, len)){
+		return -EFAULT;
+	}
 
 
 	dbg(2,  "memcpy_toio( v:%p [p:0x%08x] %p %d )", 
@@ -865,7 +867,9 @@ static ssize_t acq200_mu_remote_write(
 	if (len < MU_RMA_SZ) return -E_MU_BAD_STRUCT;
 
 	rma = getRma();
-	copy_from_user(rma, buf, MU_RMA_SZ);
+	if (copy_from_user(rma, buf, MU_RMA_SZ)){
+		return -EFAULT;
+	}
 
 	dbg(1, "rma %08x %08x %08x", 
 	      rma->magic, rma->buffer_offset, rma->length);
@@ -1332,6 +1336,8 @@ run_mu_mknod_helper( int major )
 static void free_databufs(void)
 {
 	int ibuf;
+
+	kfree(mug.databufs);
 	
 	for (ibuf = 0; ibuf != NDATABUFS; ++ibuf){
 		u32* abuf = mug.databufs[ibuf].va;
@@ -1361,6 +1367,8 @@ static int alloc_databufs(void)
 /* allocate 1MB buffers for data transfer return !=0 on fail to abort */
 {
 	int ibuf;
+
+	mug.databufs = kzalloc(DATABUFS_SZ, GFP_KERNEL);
 
 	for (ibuf = 0; ibuf != NDATABUFS; ++ibuf){
 		u32* abuf = (u32*)__get_free_pages(GFP_KERNEL, ORDER_1MB);
@@ -1451,8 +1459,8 @@ static DEVICE_ATTR(downstream_window,
 
 static void mk_dev_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_globs);
-	device_create_file(dev, &dev_attr_downstream_window);
+	DEVICE_CREATE_FILE(dev, &dev_attr_globs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_downstream_window);
 }
 
 
@@ -1577,7 +1585,11 @@ static struct platform_device mu_device = {
 
 static int __init acq200_mu_init( void )
 {
-	driver_register(&mu_device_driver);
+	int rc = driver_register(&mu_device_driver);
+	
+	if (rc){
+		return rc;
+	}
 
 	return platform_device_register(&mu_device);
 }

@@ -175,48 +175,6 @@ vaddr      paddr      baddr        descr
 
 #define ACQ200_MU_ENTRY(n) (((n)-1)*ACQ200_MU_QINC)
 
-/*
- * Message Buffer
- */
-
-/** Host Buffer LENgth - host buffer size in host slave memory
- *  Host Buffer BLOCK  - basic size division
- *
- */
-#define HOST_LINUX26       
-
-#ifdef HOST_LINUX26
-/* will work Linux 24 as well ... 4MB dynamic buffer */
-#define HBLEN	      0x400000
-#define HBBLOCK       0x080000
-#else
-/* V1.0 scheme - relied on 16MB BIGBUF host buffer. BUGBUF!! */
-#define HBLEN	      0x1000000
-#define HBBLOCK       0x0100000
-#endif
-
-#define NUM_HBBLOCKS  (HBLEN/HBBLOCK)
-
-#define MSGQBASE      ((NUM_HBBLOCKS-1)*HBBLOCK)
-#define MSQQLEN       HBBLOCK
-#define MSQSIZE       0x400
-#define NMSGS         (MSQQLEN/MSQSIZE)
-#define NIBMSGS       (NMSGS/2)
-#define NOBMSGS       (NMSGS/2)
-
-#define MSGQBASE_IN   MSGQBASE
-#define MSGQBASE_OUT  (MSGQBASE+NIBMSGS*MSQSIZE)
-
-#define ACQ200_MU_IFQ_ENTRY(n)  
-
-
-#define NDATABUFS (NUM_HBBLOCKS-1)
-#define DATABUFSZ HBBLOCK
-#define DATABUFLN (DATABUFSZ/sizeof(u32))
-
-
-/* for local buffer allocation */
-#define ORDER_1MB (8)      /* 1MB = 4096 * (1<<8) */
 
 /*
  * Tblock
