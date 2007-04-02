@@ -266,13 +266,13 @@ static DEVICE_ATTR(subcon, S_IRUGO|S_IWUGO, show_subcon, store_subcon);
 
 static int mk_mac_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_status);
-	device_create_file(dev, &dev_attr_K1);
-	device_create_file(dev, &dev_attr_K2);
-	device_create_file(dev, &dev_attr_K3);
-	device_create_file(dev, &dev_attr_depth);
-	device_create_file(dev, &dev_attr_subcon);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_status);
+	DEVICE_CREATE_FILE(dev, &dev_attr_K1);
+	DEVICE_CREATE_FILE(dev, &dev_attr_K2);
+	DEVICE_CREATE_FILE(dev, &dev_attr_K3);
+	DEVICE_CREATE_FILE(dev, &dev_attr_depth);
+	DEVICE_CREATE_FILE(dev, &dev_attr_subcon);
 	return 0;
 }
 
@@ -323,10 +323,14 @@ static struct platform_device acq196_mac_device = {
 
 static int __init acq196_mac_init( void )
 {
+	int rc;
 	acq200_debug = acq196_mac_debug;
 
 	CAPDEF_set_word_size(acq196_mac_word_size);
-	driver_register(&acq196_mac_driver);
+	rc = driver_register(&acq196_mac_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&acq196_mac_device);
 }
 

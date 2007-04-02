@@ -345,7 +345,9 @@ static ssize_t ch_read(
 	sprintf(str, "%d,%d\n", th->th_min, th->th_max);
 
 	if (count > strlen(str) && *offset == 0){
-		copy_to_user(buf, str, strlen(str));
+		if (copy_to_user(buf, str, strlen(str))){
+			return -EFAULT;
+		}
 		*offset = strlen(str);
 		return strlen(str);
 	}else{

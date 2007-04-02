@@ -61,6 +61,7 @@ static inline unsigned setDO32(u32 output_values)
 {
 	SET_REG(RTM_DIO_DATA_A, =, output_values&0xffff);
 	SET_REG(RTM_DIO_DATA_B, =, output_values >> 16);	
+	return output_values;
 }
 
 static inline void set_outputs(void)

@@ -54,4 +54,13 @@ extern void acq200_driver_create_file(
 #define DRIVER_CREATE_FILE(drv, attr) \
 	acq200_driver_create_file(drv, attr, __FILE__, __LINE__)
 
+static inline int PO(int len)
+{
+	int order = 0;
+
+	for (; (1 << order) * PAGE_SIZE < len; ++order){
+		;
+	}
+	return order;
+}
 #endif /* #define __ACQ200_H__ */

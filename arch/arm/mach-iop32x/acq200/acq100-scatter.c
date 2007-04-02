@@ -570,6 +570,7 @@ static inline NZE waitForTrigger(void)
 			return 1;
 		}
 	}
+	return -1;
 }
 
 static inline NZE shouldStop(void)
@@ -612,6 +613,7 @@ static inline NZE waitForData(void)
 			return 1;
 		}		
 	}
+	return -1;
 }
 
 

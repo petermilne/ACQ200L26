@@ -1220,6 +1220,7 @@ static int createShotDir(void)
 
 	snprintf(S_dname, 16, "SHOT.%06d", DG->shot);
 	S_dir = ebfs_create_dir(S_sb, my_root, S_dname);
+	return 0;
 }
 
 

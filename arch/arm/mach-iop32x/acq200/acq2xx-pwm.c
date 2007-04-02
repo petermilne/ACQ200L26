@@ -507,11 +507,11 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 static int mk_scatter_sysfs(struct device *dev)
 /** create device hooks: in /dev/pwm (link into sysfs). */
 {
-	device_create_file(dev, &dev_attr_run);
-	device_create_file(dev, &dev_attr_stop);
-	device_create_file(dev, &dev_attr_epc);
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_amp);
+	DEVICE_CREATE_FILE(dev, &dev_attr_run);
+	DEVICE_CREATE_FILE(dev, &dev_attr_stop);
+	DEVICE_CREATE_FILE(dev, &dev_attr_epc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_amp);
 	return 0;
 }
 

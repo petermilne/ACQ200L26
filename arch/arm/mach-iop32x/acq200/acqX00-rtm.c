@@ -45,6 +45,7 @@
 #include <linux/module.h>
 #endif
 
+#include "acq200.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
 
@@ -224,10 +225,10 @@ static DEVICE_ATTR(dio32_hex, S_IRUGO|S_IWUGO, show_dio_hex, store_dio_hex);
 
 static void mk_rtm_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_dio32);
-	device_create_file(dev, &dev_attr_dio32_raw);
-	device_create_file(dev, &dev_attr_pulse_dio_sync);
-	device_create_file(dev, &dev_attr_dio32_hex);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio32);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_raw);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_dio_sync);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_hex);
 }
 
 static void rtm_dev_release(struct device * dev)
@@ -276,9 +277,13 @@ static struct platform_device rtm_device = {
 
 static int __init rtm_init( void )
 {
+	int rc;
 	acq200_debug = rtm_debug;
 
-	driver_register(&rtm_driver);
+	rc = driver_register(&rtm_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&rtm_device);
 }
 

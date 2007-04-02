@@ -237,9 +237,9 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 
 static int mk_ppcustom_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_test_pattern);
-	device_create_file(dev, &dev_attr_clear);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_test_pattern);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clear);
 	return 0;
 }
 
@@ -438,9 +438,13 @@ static struct platform_device acq216_ppcustom_device = {
 
 static int __init acq216_ppcustom_init( void )
 {
+	int rc;
 	acq200_debug = acq216_ppcustom_debug;
 
-	driver_register(&acq216_ppcustom_driver);
+	rc = driver_register(&acq216_ppcustom_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&acq216_ppcustom_device);
 }
 

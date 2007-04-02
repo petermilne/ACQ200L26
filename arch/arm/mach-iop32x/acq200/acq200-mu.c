@@ -1,5 +1,3 @@
-//#define USEBIGBUF
-
 /* ------------------------------------------------------------------------- */
 /* acq200-mu.c driver for acq200/iop321 message unit (MU)                    */
 /* ------------------------------------------------------------------------- */
@@ -109,11 +107,14 @@ int acq200_databuf_debug = 0;
 module_param(acq200_databuf_debug, int, 0664);
 
 
-int HBLEN = _HBLEN;
+int HBLEN = _HBLEN24;
 module_param(HBLEN, int, 0444);
 
-int HBBLOCK = _HBBLOCK;
+int HBBLOCK = _HBBLOCK24;
 module_param(HBBLOCK, int, 0444);
+
+int downstream_is_set = 0;
+module_param(downstream_is_set, int, 0444);
 
 #define DBDBG(lvl, format, args...) \
         if (acq200_databuf_debug>lvl ) info( "DBDBG:" format, ##args)
@@ -1346,9 +1347,7 @@ static void free_databufs(void)
 			break;
 		}else{
 			mug.databufs[ibuf].va = 0;
-#ifndef USEBIGBUF
-			free_pages((unsigned long)abuf, ORDER_1MB);
-#endif
+			free_pages(abuf, PO(HBBLOCK));			
 		}
 	}
 }
@@ -1363,16 +1362,22 @@ static void debug_fill_databuf(int ibuf)
 	}
 }
 
-static int alloc_databufs(void)
+
+static int alloc_databufs()
 /* allocate 1MB buffers for data transfer return !=0 on fail to abort */
 {
 	int ibuf;
 
+	if (HBLEN <= _HBLEN26){
+		if (HBBLOCK > _HBBLOCK26){
+			HBBLOCK = _HBBLOCK26;
+		}
+	}
+
 	mug.databufs = kzalloc(DATABUFS_SZ, GFP_KERNEL);
 
 	for (ibuf = 0; ibuf != NDATABUFS; ++ibuf){
-		u32* abuf = (u32*)__get_free_pages(GFP_KERNEL, ORDER_1MB);
-		memset(&mug.databufs[ibuf], 0, sizeof(struct PCI_DMA_BUFFER));
+		u32* abuf = __get_free_pages(GFP_KERNEL, PO(HBBLOCK));
 
 		if (abuf==0){
 			err( " allocation failed at %d", ibuf);
@@ -1385,9 +1390,9 @@ static int alloc_databufs(void)
 			if (acq200_databuf_debug > 1){
 				debug_fill_databuf(ibuf);
 			}
-
 		}
 	}
+	info("allocated %d bufs each 0x%08x", ibuf, HBBLOCK);
 
 	return 0;
 }
@@ -1428,7 +1433,8 @@ static ssize_t set_downstream_window(
 {
         unsigned offset;
 
-        if (sscanf(buf, "0x%x", &offset) == 1){
+        if (downstream_is_set == 0 && 
+	    sscanf(buf, "0x%x 0x%08x", &offset, &HBLEN) >= 1){
 		if (machine_is_acq100()){
 			info("ACQ100:setting IOP321_OMWTVR0 to 0x%08x",offset);
 			*IOP321_OMWTVR0 = offset;
@@ -1446,6 +1452,9 @@ static ssize_t set_downstream_window(
 				offset&ACQ216_BRIDGE_WINDOW_MASK;
 		}
 		info("host_win_offset= 0x%08x",mug.host_window_offset);
+
+		alloc_databufs();
+		init_mu_queues();
         }       
 
 	return strlen(buf);
@@ -1473,9 +1482,7 @@ static int acq200_mu_probe(struct device * dev)
 	int rc;
 
 	info( "" );
-	if ((rc = alloc_databufs()) != 0){
-		return rc;
-	}
+
 	mug.dev = dev;
 	init_waitqueue_head(&mug.ip_waitq);
 
@@ -1486,8 +1493,6 @@ static int acq200_mu_probe(struct device * dev)
 	dbg(1, "dmad 0x%08x", mug.mumem_dmad );
 
 	acq200_get_bigbuf_resource(&mug.bigbuf);
-
-	init_mu_queues();
 	mk_dev_sysfs(dev);
 
 /*

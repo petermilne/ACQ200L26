@@ -32,25 +32,16 @@
  *  Host Buffer BLOCK  - basic size division
  *
  */
-#define HOST_LINUX26       
 
-#ifdef HOST_LINUX26
 /* will work Linux 24 as well ... 4MB dynamic buffer */
-#define _HBLEN	      0x400000
-#define _HBBLOCK       0x080000
-#else
+#define _HBLEN26	 0x0400000
+#define _HBBLOCK26       0x0080000
 /* V1.0 scheme - relied on 16MB BIGBUF host buffer. BUGBUF!! */
-#define _HBLEN	      0x1000000
-#define _HBBLOCK       0x0100000
-#endif
+#define _HBLEN24	 0x1000000
+#define _HBBLOCK24       0x0100000
 
-#if 0
-#define HBLEN		_HBLEN
-#define HBBLOCK		_HBBLOCK
-#else
 extern int HBLEN;
 extern int HBBLOCK;
-#endif
 
 #define NUM_HBBLOCKS  (HBLEN/HBBLOCK)
 
@@ -70,16 +61,6 @@ extern int HBBLOCK;
 #define NDATABUFS (NUM_HBBLOCKS-1)
 #define DATABUFSZ HBBLOCK
 #define DATABUFLN (DATABUFSZ/sizeof(u32))
-
-
-/* for local buffer allocation */
-#define ORDER_1MB (8)      /* 1MB = 4096 * (1<<8) */
-
-
-
-
-
-
 
 
 #define MFA_MASK 0x00ffffff   /* converts MFA PA to hostmem offset */
