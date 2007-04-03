@@ -48,12 +48,21 @@
  * Q pointer values are byte indexes into mumem;
  */
 
-#define USE_INTERRUPTS
+#define USE_INTERRUPTS 1
 
 /* lazy alloc - in principle, host can define buf len. In practise, no */
-#define MU_LAZY_ALLOC	0
+#define MU_LAZY_ALLOC	1
 
-#define VERID "$Revision: 1.6 $ Build 1002 " __DATE__
+static const char* VERID =
+	"$Revision: 1.6 $ Build 1003 " __DATE__ "\n"
+	"Features:"
+#if (MU_LAZY_ALLOC)
+	"MU_LAZY_ALLOC "
+#endif
+#if (USE_INTERRUPTS)
+	"USE_INTERRUPTS "
+#endif
+	;
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -999,7 +1008,6 @@ static int acq200_mu_release(
 	struct inode *inode, struct file *file)
 {
 	kfree(MUPD(file));
-	mu_inbound_active = 0;
 	return 0;
 }
 
@@ -1008,6 +1016,7 @@ static int acq200_mu_inbound_release(
 {
 	dbg(1,"");
 	*IOP321_IIMR |= IOP321_IIxR_IPQ;
+	mu_inbound_active = 0;
 	return acq200_mu_release(inode, file);
 }
 static int acq200_mu_outbound_release(
@@ -1022,26 +1031,6 @@ static int acq200_mu_rma_release(
 	return acq200_mu_release(inode, file);
 }
 
-
-
-
-/* prototype mapping function pre/post DMA 
-			do_mapping(buf, direction);
-			if (direction != buf->direction || !buf->mapped){
-				
-				if (buf->mapped){
-					pci_un
-				}
-			}
-			
-
-			if (MU_RMA_IS_HOSTBOUND(rma)){
-				pci_dma_sync_single(dg.dev,
-			}
-
-
-	laddr = pci_map_single(dg.dev, lbuf, bc, direction );
-*/
 
 int getDirectionFromVma(struct vm_area_struct *vma)
 {
@@ -1390,7 +1379,6 @@ static void debug_fill_databuf(int ibuf)
 
 
 static int alloc_databufs(void)
-/* allocate 1MB buffers for data transfer return !=0 on fail to abort */
 {
 	int ibuf;
 
