@@ -715,7 +715,7 @@ unsigned int acq200_mailbox_inbound_poll(
 static int acq200_mailbox_inbound_open(struct inode *inode, struct file *file)
 {
 	dbg(1,"");
-#ifdef USE_INTERRUPTS
+#if (USE_INTERRUPTS)
 	*IOP321_IIMR &= ~IOP321_IIxR_IM0;
 #endif
 	mug.mailbox_inbound_active = 1;
@@ -726,7 +726,7 @@ static int acq200_mailbox_inbound_release(
 	struct inode *inode, struct file *file)
 {
 	dbg(1,"");
-	*IOP321_IIMR |= ~IOP321_IIxR_IM0;
+	*IOP321_IIMR |= IOP321_IIxR_IM0;
 	mug.mailbox_inbound_active = 0;
 	return acq200_mu_release(inode, file);
 }
@@ -1062,7 +1062,7 @@ static int mu_inbound_active;
 static int acq200_mu_inbound_open(struct inode *inode, struct file *file)
 {
 	dbg(1,"");
-#ifdef USE_INTERRUPTS
+#if (USE_INTERRUPTS)
 	*IOP321_IISR |= IOP321_IIxR_IPQ;  /* clear any pended interrupt */
 	if (downstream_is_set){	
 		*IOP321_IIMR &= ~IOP321_IIxR_IPQ;
@@ -1532,7 +1532,7 @@ static ssize_t set_downstream_window(
 		alloc_databufs();
 		init_mu_queues();
 #endif
-#ifdef USE_INTERRUPTS
+#if (USE_INTERRUPTS)
 		/* clear any pended interrupt */
 		*IOP321_IISR |= IOP321_IIxR_IPQ; 
 		if (request_irq(IRQ_IOP321_MU_IPQ, 
