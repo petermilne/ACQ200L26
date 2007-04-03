@@ -50,6 +50,9 @@
 
 #define USE_INTERRUPTS
 
+/* lazy alloc - in principle, host can define buf len. In practise, no */
+#define MU_LAZY_ALLOC	0
+
 #define VERID "$Revision: 1.6 $ Build 1002 " __DATE__
 
 #include <linux/kernel.h>
@@ -468,16 +471,11 @@ static void rm_sysfs(struct device *dev)
 
 
 
-
 static irqreturn_t acq200_mu_isr(int irq, void *dev_id)
 {
 	u32 iisr = *IOP321_IISR;
 
-	if ( iisr&IOP321_IIxR_IPQ ){
-		*IOP321_IISR = IOP321_IIxR_IPQ;
-		iisr &= ~IOP321_IIxR_IPQ;
-		wake_up_interruptible_all(&mug.ip_waitq);
-	}
+	iisr &= ~IOP321_IIxR_IPQ;
 	
 	if (iisr){
 		err( "Attempting to clear SPURIOUS interrupt status 0x%02x", 
@@ -486,6 +484,22 @@ static irqreturn_t acq200_mu_isr(int irq, void *dev_id)
 	}
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t acq200_mu_ipq_isr(int irq, void *dev_id)
+{
+	u32 iisr = *IOP321_IISR;
+
+	
+	if ( iisr&IOP321_IIxR_IPQ ){
+		*IOP321_IISR = IOP321_IIxR_IPQ;
+		iisr &= ~IOP321_IIxR_IPQ;
+		wake_up_interruptible_all(&mug.ip_waitq);
+	}
+
+	return IRQ_HANDLED;
+}
+
+
 #ifdef PGMCOMOUT
 /* acq32-drv asserts on HIBYTES != 0 */
 #define ID_IN  0xd1000000
@@ -563,7 +577,7 @@ MFA acq200mu_get_free_ob(void)
 	u32 qp;
 	MFA mfa = 0;
 
-	if ( !isEmpty( qp = *IOP321_OFTPR, *IOP321_OFHPR )){
+	if (downstream_is_set && !isEmpty(qp = *IOP321_OFTPR, *IOP321_OFHPR)){
 		mfa = *qp2va(qp);
 		LILSYNCI(qp);      //@@bogus		BIGSYNC;
 		*IOP321_OFTPR = INCR(qp);
@@ -577,7 +591,7 @@ int acq200mu_post_ob(MFA mfa)
 {
 	u32 qp;
 
-	if ( !isFull( *IOP321_OPTPR, qp = *IOP321_OPHPR )){
+	if (downstream_is_set && !isFull(*IOP321_OPTPR, qp = *IOP321_OPHPR)){
 		*qp2va(qp) = mfa;
 		LILSYNCO(qp);
 		*IOP321_OPHPR = INCR(qp);
@@ -591,11 +605,15 @@ int acq200mu_post_ob(MFA mfa)
 MFA acq200mu_get_ib(void)
 /* return next inbound message, or block until one arrives. return 0 on fail */
 {
-	u32 qp;
+	u32 qp = 0;
 	MFA mfa = 0;
 
+	if (downstream_is_set){
+		dbg(2, "01: downstream is set");
+	}
 
-	if ( !isEmpty( qp = *IOP321_IPTPR, *IOP321_IPHPR )){
+	if (downstream_is_set && !isEmpty(qp = *IOP321_IPTPR, *IOP321_IPHPR)){
+		dbg(2, "qp 0x%08x va %p", qp, qp2va(qp));
 		LILSYNCI(qp);
 		mfa = *qp2va(qp);
 		*IOP321_IPTPR = INCR(qp);
@@ -610,7 +628,7 @@ int acq200mu_return_free_ib(MFA mfa)
 {
 	u32 qp;
 
-	if ( !isFull( *IOP321_IFTPR, qp = *IOP321_IFHPR )){
+	if (downstream_is_set && !isFull(*IOP321_IFTPR, qp = *IOP321_IFHPR)){
 		*qp2va(qp) = mfa;
 		LILSYNCO(qp);            //@@todo bogus		BIGSYNC;
 		*IOP321_IFHPR = INCR(qp);
@@ -723,10 +741,13 @@ static ssize_t acq200_mu_inbound_read(
 unsigned int acq200_mu_inbound_poll(
 	struct file *file, struct poll_table_struct *poll_table)
 {
+	dbg(4, "01");
 	poll_wait(file, &mug.ip_waitq, poll_table );
-	if (!isEmpty(*IOP321_IPTPR, *IOP321_IPHPR)){
+	if (downstream_is_set && !isEmpty(*IOP321_IPTPR, *IOP321_IPHPR)){
+		dbg(3, "POLLIN | POLLRDNORM");
 		return POLLIN | POLLRDNORM;
 	}else{
+		dbg(4, "99");
 		return 0;
 	}
 }
@@ -959,14 +980,18 @@ static int acq200_mu_rma_open (struct inode *inode, struct file *file)
 	dbg(1,  "null" );
 	return 0;
 }
-
+	
+static int mu_inbound_active;
 static int acq200_mu_inbound_open(struct inode *inode, struct file *file)
 {
 	dbg(1,"");
 #ifdef USE_INTERRUPTS
 	*IOP321_IISR |= IOP321_IIxR_IPQ;  /* clear any pended interrupt */
-	*IOP321_IIMR &= ~IOP321_IIxR_IPQ;
+	if (downstream_is_set){	
+		*IOP321_IIMR &= ~IOP321_IIxR_IPQ;
+	}
 #endif
+	mu_inbound_active = 1;
 	return 0;
 }
 
@@ -974,6 +999,7 @@ static int acq200_mu_release(
 	struct inode *inode, struct file *file)
 {
 	kfree(MUPD(file));
+	mu_inbound_active = 0;
 	return 0;
 }
 
@@ -1347,7 +1373,7 @@ static void free_databufs(void)
 			break;
 		}else{
 			mug.databufs[ibuf].va = 0;
-			free_pages(abuf, PO(HBBLOCK));			
+			free_pages((unsigned)abuf, PO(HBBLOCK));			
 		}
 	}
 }
@@ -1363,7 +1389,7 @@ static void debug_fill_databuf(int ibuf)
 }
 
 
-static int alloc_databufs()
+static int alloc_databufs(void)
 /* allocate 1MB buffers for data transfer return !=0 on fail to abort */
 {
 	int ibuf;
@@ -1377,7 +1403,7 @@ static int alloc_databufs()
 	mug.databufs = kzalloc(DATABUFS_SZ, GFP_KERNEL);
 
 	for (ibuf = 0; ibuf != NDATABUFS; ++ibuf){
-		u32* abuf = __get_free_pages(GFP_KERNEL, PO(HBBLOCK));
+		u32* abuf = (u32*)__get_free_pages(GFP_KERNEL, PO(HBBLOCK));
 
 		if (abuf==0){
 			err( " allocation failed at %d", ibuf);
@@ -1452,9 +1478,25 @@ static ssize_t set_downstream_window(
 				offset&ACQ216_BRIDGE_WINDOW_MASK;
 		}
 		info("host_win_offset= 0x%08x",mug.host_window_offset);
-
+#if (MU_LAZY_ALLOC != 0)
 		alloc_databufs();
 		init_mu_queues();
+#endif
+#ifdef USE_INTERRUPTS
+		/* clear any pended interrupt */
+		*IOP321_IISR |= IOP321_IIxR_IPQ; 
+		if (request_irq(IRQ_IOP321_MU_IPQ, 
+	                        acq200_mu_ipq_isr, 0, 
+				"acq200-mu-ipq", &mug) != 0){
+			err( "request_irq() failed" );
+			return -ENODEV;
+		}
+		if (mu_inbound_active){
+			*IOP321_IIMR &= ~IOP321_IIxR_IPQ;
+		}
+#endif
+		dbg(2, "downstream_is_set = 1");
+		downstream_is_set = 1;
         }       
 
 	return strlen(buf);
@@ -1493,6 +1535,10 @@ static int acq200_mu_probe(struct device * dev)
 	dbg(1, "dmad 0x%08x", mug.mumem_dmad );
 
 	acq200_get_bigbuf_resource(&mug.bigbuf);
+#if (MU_LAZY_ALLOC == 0)
+		alloc_databufs();
+		init_mu_queues();
+#endif
 	mk_dev_sysfs(dev);
 
 /*
@@ -1507,12 +1553,6 @@ static int acq200_mu_probe(struct device * dev)
 	*IOP321_IIMR = IOP321_IIxR_MASK;
 	if (request_irq(IRQ_IOP321_MESSAGING, 
                          acq200_mu_isr, 0, "acq200-mu", &mug) != 0){
-		err( "request_irq() failed" );
-		return -ENODEV;
-	}
-
-	if (request_irq(IRQ_IOP321_MU_IPQ, 
-                         acq200_mu_isr, 0, "acq200-mu-ipq", &mug) != 0){
 		err( "request_irq() failed" );
 		return -ENODEV;
 	}

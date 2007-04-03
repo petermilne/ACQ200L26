@@ -84,4 +84,22 @@ int acq200mu_post_ob(MFA mfa);
 MFA acq200mu_get_ib(void);
 int acq200mu_return_free_ib(MFA mfa);
 
+
+
+#define __ACQ200_MU_Q_OFF(ix) (ACQ200_MU_QSZ*(ix))
+
+#define ACQ200_MU_IFQ_FIRST __ACQ200_MU_Q_OFF(0)
+#define ACQ200_MU_IPQ_FIRST __ACQ200_MU_Q_OFF(1)
+#define ACQ200_MU_OPQ_FIRST __ACQ200_MU_Q_OFF(2)
+#define ACQ200_MU_OFQ_FIRST __ACQ200_MU_Q_OFF(3)
+
+#define __ACQ200_MU_Q_LAST(ix) (__ACQ200_MU_Q_OFF((ix)+1)-ACQ200_MU_QINC)
+
+#define ACQ200_MU_IFQ_LAST  __ACQ200_MU_Q_LAST(0)
+#define ACQ200_MU_IPQ_LAST  __ACQ200_MU_Q_LAST(1)
+#define ACQ200_MU_OPQ_LAST  __ACQ200_MU_Q_LAST(2)
+#define ACQ200_MU_OFQ_LAST  __ACQ200_MU_Q_LAST(3)
+
+#define ACQ200_MU_ENTRY(n) (((n)-1)*ACQ200_MU_QINC)
+
 #endif /* __ACQ200_MU_H__ */
