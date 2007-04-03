@@ -174,6 +174,10 @@ static struct ACQ200_MU_DEVICE {
 	dma_addr_t mumem_dmad;
 	u32 host_base_len;
 	wait_queue_head_t ip_waitq;
+	wait_queue_head_t mb_waitq;
+	int mb_interrupt_rx;
+	int mailbox_inbound_active;
+	int mb_count;
 	struct PCI_DMA_BUFFER *databufs;
 	struct STATS {
 		unsigned n_ops;
@@ -480,16 +484,22 @@ static void rm_sysfs(struct device *dev)
 
 
 
-static irqreturn_t acq200_mu_isr(int irq, void *dev_id)
+static irqreturn_t acq200_mb_isr(int irq, void *dev_id)
 {
 	u32 iisr = *IOP321_IISR;
 
 	iisr &= ~IOP321_IIxR_IPQ;
-	
+	*IOP321_IISR = iisr;
+
+	if (iisr&IOP321_IIxR_IM0){		
+		iisr &= ~IOP321_IIxR_IM0;
+		mug.mb_interrupt_rx = 1;
+		mug.mb_count++;
+		wake_up_interruptible_all(&mug.mb_waitq);
+	}
 	if (iisr){
-		err( "Attempting to clear SPURIOUS interrupt status 0x%02x", 
+		dbg(1, "Attempting to clear SPURIOUS interrupt status 0x%02x", 
 		       iisr );
-		*IOP321_IISR = iisr;
 	}
 	return IRQ_HANDLED;
 }
@@ -648,10 +658,14 @@ int acq200mu_return_free_ib(MFA mfa)
 	}
 }
 
-/*
- * hooks for sending the data. Policy decision whether to use DMAC or
- * NOT.
- */
+static int acq200_mu_release(
+	struct inode *inode, struct file *file)
+{
+	kfree(MUPD(file));
+	return 0;
+}
+
+
 
 int acq200_mu_write_rma(RMA rma, char* buf, int len)
 {
@@ -663,6 +677,59 @@ int acq200_mu_read_rma(RMA rma, char* buf, int len)
 	return 0;
 }
 
+
+static ssize_t acq200_mailbox_inbound_read(
+	struct file *file, char *buf, size_t len, loff_t *offset
+	)
+{
+	int rc;
+
+	len = min(len, (size_t)4*sizeof(u32));
+
+	if ((file->f_flags & O_NONBLOCK) == 0){
+		int old_count = mug.mb_count;
+		wait_event_interruptible(mug.mb_waitq, 
+						old_count != mug.mb_count);
+	}
+
+	rc = copy_to_user(buf, (u32*)IOP321_IMR0, len);	
+	return len;	
+}
+
+unsigned int acq200_mailbox_inbound_poll(
+	struct file *file, struct poll_table_struct *poll_table)
+{
+	dbg(4, "01");
+	poll_wait(file, &mug.mb_waitq, poll_table );
+	if (mug.mb_interrupt_rx){
+		/* @todo RACE */
+		mug.mb_interrupt_rx = 0;
+		dbg(3, "POLLIN | POLLRDNORM");
+		return POLLIN | POLLRDNORM;
+	}else{
+		dbg(4, "99");
+		return 0;
+	}
+}
+
+static int acq200_mailbox_inbound_open(struct inode *inode, struct file *file)
+{
+	dbg(1,"");
+#ifdef USE_INTERRUPTS
+	*IOP321_IIMR &= ~IOP321_IIxR_IM0;
+#endif
+	mug.mailbox_inbound_active = 1;
+	return 0;
+}
+
+static int acq200_mailbox_inbound_release(
+	struct inode *inode, struct file *file)
+{
+	dbg(1,"");
+	*IOP321_IIMR |= ~IOP321_IIxR_IM0;
+	mug.mailbox_inbound_active = 0;
+	return acq200_mu_release(inode, file);
+}
 /*
  * hook on read(0 write() interface.
  * Question: at what level does the app want to interface
@@ -746,6 +813,7 @@ static ssize_t acq200_mu_inbound_read(
 		return len;
 	}
 }
+
 
 unsigned int acq200_mu_inbound_poll(
 	struct file *file, struct poll_table_struct *poll_table)
@@ -1004,12 +1072,6 @@ static int acq200_mu_inbound_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int acq200_mu_release(
-	struct inode *inode, struct file *file)
-{
-	kfree(MUPD(file));
-	return 0;
-}
 
 static int acq200_mu_inbound_release(
 	struct inode *inode, struct file *file)
@@ -1246,10 +1308,10 @@ int acq200_mu_host_window_release (struct inode *inode, struct file *file)
 static int acq200_mu_open (struct inode *inode, struct file *file)
 {
 	static struct file_operations mailbox_fops = {
-		.open = acq200_mu_inbound_open,
-		.release = acq200_mu_inbound_release,
-		.read = acq200_mu_inbound_read,
-		.poll = acq200_mu_inbound_poll,
+		.open = acq200_mailbox_inbound_open,
+		.release = acq200_mailbox_inbound_release,
+		.read = acq200_mailbox_inbound_read,
+		.poll = acq200_mailbox_inbound_poll,
 	};
 
 	static struct file_operations inbound_fops = {
@@ -1313,27 +1375,27 @@ run_mu_mknod_helper( int major )
 		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
 		0
 	};
-	static char args[5][5] = {
+	static char args[][5] = {
 		{},
 		{},
 		{ '0'+ACQ200_MU_INBOUND, },
 		{ '0'+ACQ200_MU_OUTBOUND, },
 		{ '0'+ACQ200_MU_RMA, },
+		{ '0'+ACQ200_MU_MAILBOX, },
+		{}
 	};
-	char *argv[6];
+#define ARGLEN (sizeof(args)/sizeof(args[0]))	
+	char *argv[ARGLEN];
 	int rc;
 
-	sprintf( args[1], "%d", major );
-
         argv[0] = "/sbin/acq200_mu_helper";
-	argv[1] = args[1];  /* major */
-	argv[2] = args[2];  /* minors ... */
-	argv[3] = args[3];
-	argv[4] = args[4];
-	argv[5] = 0;
+	sprintf( args[1], "%d", major );
+	
+	for (rc = 1; rc < ARGLEN; ++rc){
+		argv[rc] = args[rc];
+	}
 
-
-	dbg( 1, "call_usermodehelper %s\n", argv[0] );
+	info("call_usermodehelper %s %d args\n", argv[0], ARGLEN);
 
 	rc = call_usermodehelper(argv [0], argv, envp, 0);
 
@@ -1515,6 +1577,7 @@ static int acq200_mu_probe(struct device * dev)
 
 	mug.dev = dev;
 	init_waitqueue_head(&mug.ip_waitq);
+	init_waitqueue_head(&mug.mb_waitq);
 
 	acq200_get_mumem_resource(&mug.mumem);
 	mug.mumem_dmad = dma_map_single(dev, mumem_va(), mumem_len(), 
@@ -1535,12 +1598,9 @@ static int acq200_mu_probe(struct device * dev)
 */
 	mk_sysfs(dev);
 
-	*IOP321_IIMR = 0xfff; 
-	dbg(1,  "masked all %x", *IOP321_IIMR );
-
 	*IOP321_IIMR = IOP321_IIxR_MASK;
 	if (request_irq(IRQ_IOP321_MESSAGING, 
-                         acq200_mu_isr, 0, "acq200-mu", &mug) != 0){
+                         acq200_mb_isr, 0, "acq200-mu mb", &mug) != 0){
 		err( "request_irq() failed" );
 		return -ENODEV;
 	}
