@@ -782,11 +782,6 @@ static ssize_t acq200_mu_inbound_read(
 		dbg(1,"dma_sync mfa %08x pa 0x%08x va %p", 
 		    mfa, mfa2pa(mfa), mfa2va(mfa));
 
-		dma_sync_single(
-			0, mfa2pa(mfa), 
-			MESSAGE_HEADER_SIZE, 
-			DMA_FROM_DEVICE);
-
 		memcpy_fromio(&messageHeader,mfa2va(mfa),MESSAGE_HEADER_SIZE);
 
 		dbg(2, "MessageHeader id:0x%04x len:0x%04x type:0x%04x\n",
@@ -800,7 +795,6 @@ static ssize_t acq200_mu_inbound_read(
 
 		dbg(2, "memcpy_fromio( %p, %p, %d )", 
 		    LBUF(file), mfa2va(mfa), len);
-		dma_sync_single(0, mfa2pa(mfa), len, DMA_FROM_DEVICE);
 
 		memcpy_fromio(LBUF(file), mfa2va(mfa), len);
 
@@ -840,6 +834,7 @@ static ssize_t acq200_mu_outbound_write(
  * Post the MF
  */
 {
+	dma_addr_t handle;
 	MFA mfa = acq200mu_get_free_ob();
 
 	dbg(2,  "got mfa 0x%08x", mfa );
@@ -850,11 +845,13 @@ static ssize_t acq200_mu_outbound_write(
 		return -EFAULT;
 	}
 
+	handle = dma_map_single(mug.dev, LBUF(file), len, DMA_TO_DEVICE);
 
 	dbg(2,  "memcpy_toio( v:%p [p:0x%08x] %p %d )", 
 	      mfa2va(mfa), mfa2pa(mfa), buf, len);
 	memcpy_toio(mfa2va(mfa), LBUF(file), len);
-	dma_sync_single(0, mfa2pa(mfa), len, DMA_TO_DEVICE);
+
+	dma_unmap_single(mug.dev, handle, len, DMA_TO_DEVICE);
 
 	dbg(2,  "now post mfa 0x%08x", mfa );
 	acq200mu_post_ob(mfa);
@@ -928,7 +925,7 @@ static int post_dmac_incoming_request(
 	rc = acq200_post_dmac_request(
 		DMA_CHANNEL, buf->laddr, offset, remaddr, bc, INCOMING);
 
-	dma_sync_single(mug.dev, buf->laddr, bc, DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(mug.dev, buf->laddr, bc, DMA_FROM_DEVICE);
 
 	ADUMP( FN, (char*)buf->va, 80 );
 	return rc;
@@ -944,7 +941,7 @@ static int post_dmac_outgoing_request(
 	
 	ADUMP( FN, (char*)buf->va, 80 );				
 
-	dma_sync_single(mug.dev, buf->laddr, bc, DMA_TO_DEVICE);
+	dma_sync_single_for_device(mug.dev, buf->laddr, bc, DMA_TO_DEVICE);
 
 	return acq200_post_dmac_request(
 		DMA_CHANNEL, buf->laddr, offset, remaddr, bc, OUTGOING );
@@ -1626,6 +1623,9 @@ static int acq200_mu_probe(struct device * dev)
 		 */
 		mug.rma_base = 0x70000000; /* WORKTODO! */
 	}
+
+	info(": va:%p pa:0x%08x len:%08x", 
+	     mug.host_base_va, mug.host_base_pa, mug.host_base_len);
 
 	if ( rc > 0 ){
 		run_mu_mknod_helper(acq200_mu_major = rc);
