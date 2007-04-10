@@ -1520,9 +1520,8 @@ static ssize_t set_downstream_window(
 			mug.rma_base = offset - *IOP321_OMWTVR0;
 			info("IOP321_OMWTVR0 = 0x%08x", *IOP321_OMWTVR0);
 		}else if (machine_is_acq200()){
-			mug.rma_base = offset&ACQ216_BRIDGE_WINDOW_MASK;
-			mug.host_window_offset = 
-				offset&ACQ216_BRIDGE_WINDOW_MASK;
+			/* bridge window fits exactly */
+			mug.rma_base = mug.host_window_offset = 0;
 		}
 		info("host_win_offset= 0x%08x",mug.host_window_offset);
 #if (MU_LAZY_ALLOC != 0)
