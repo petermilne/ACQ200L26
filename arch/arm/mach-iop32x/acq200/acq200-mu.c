@@ -49,6 +49,7 @@
  */
 
 #define USE_INTERRUPTS 1
+#define USE_MAILBOX_INTERRUPTS 0
 
 /* lazy alloc - in principle, host can define buf len. In practise, no */
 #define MU_LAZY_ALLOC	1
@@ -715,7 +716,7 @@ unsigned int acq200_mailbox_inbound_poll(
 static int acq200_mailbox_inbound_open(struct inode *inode, struct file *file)
 {
 	dbg(1,"");
-#if (USE_INTERRUPTS)
+#if (USE_MAILBOX_INTERRUPTS)
 	*IOP321_IIMR &= ~IOP321_IIxR_IM0;
 #endif
 	mug.mailbox_inbound_active = 1;
@@ -942,6 +943,9 @@ static int post_dmac_outgoing_request(
 	ADUMP( FN, (char*)buf->va, 80 );				
 
 	dma_sync_single_for_device(mug.dev, buf->laddr, bc, DMA_TO_DEVICE);
+
+	dbg(2, "acq200_post_dmac_request(%d, 0x%08x, 0x%08x, 0x%08x, %d)",
+	    DMA_CHANNEL, buf->laddr, offset, remaddr, bc);
 
 	return acq200_post_dmac_request(
 		DMA_CHANNEL, buf->laddr, offset, remaddr, bc, OUTGOING );
@@ -1505,9 +1509,10 @@ static ssize_t set_downstream_window(
 	const char * buf, size_t count)
 {
         unsigned offset;
+	unsigned bw_mask = 0;
 
         if (downstream_is_set == 0 && 
-	    sscanf(buf, "0x%x 0x%08x", &offset, &HBLEN) >= 1){
+	    sscanf(buf, "0x%x 0x%08x %x", &offset, &HBLEN, &bw_mask) >= 1){
 		if (machine_is_acq100()){
 			info("ACQ100:setting IOP321_OMWTVR0 to 0x%08x",offset);
 			*IOP321_OMWTVR0 = offset;
@@ -1520,8 +1525,8 @@ static ssize_t set_downstream_window(
 			mug.rma_base = offset - *IOP321_OMWTVR0;
 			info("IOP321_OMWTVR0 = 0x%08x", *IOP321_OMWTVR0);
 		}else if (machine_is_acq200()){
-			/* bridge window fits exactly */
-			mug.rma_base = mug.host_window_offset = 0;
+			/* mug.rma_base is already set */
+			mug.host_window_offset = offset&bw_mask;
 		}
 		info("host_win_offset= 0x%08x",mug.host_window_offset);
 #if (MU_LAZY_ALLOC != 0)
@@ -1620,7 +1625,7 @@ static int acq200_mu_probe(struct device * dev)
 		 * base is address of bridge outbound window.
                  * it should NOT be rocket science to hook this up
 		 */
-		mug.rma_base = 0x70000000; /* WORKTODO! */
+		mug.rma_base = ACQ216_BRIDGE_WINDOW_BASE;
 	}
 
 	info(": va:%p pa:0x%08x len:%08x", 

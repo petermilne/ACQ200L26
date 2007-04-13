@@ -373,8 +373,12 @@ void finish_with_engines(int ifinish)
 	if (!DG->finished_with_engines){
 		stop_capture();
 		call_end_of_shot_hooks();
+		if (DG->shot == 0 || ifinish < 0){
+			DMC_WO->state = ST_STOP;
+		}else{
 /** ST_CAPDONE is an attempt to avoid end of shot status race. */
-		DMC_WO->state = uses_ST_CAPDONE? ST_CAPDONE: ST_STOP;
+			DMC_WO->state = uses_ST_CAPDONE? ST_CAPDONE: ST_STOP;
+		}
 		iop321_stop_ppmu();
 		DG->stats.end_gtsr = *IOP321_GTSR;
 		DG->stats.end_jiffies = jiffies;
@@ -452,6 +456,7 @@ static inline unsigned phase_increment(unsigned offset)
 
 	return offset;
 #endif
+	return 0;
 }
 #endif
 

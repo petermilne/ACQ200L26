@@ -48,7 +48,7 @@
 #include <asm/arch-iop32x/iop321.h>
 
 #include "acq200.h"
-
+#include "acq200-bridge.h"
 
 static int acq200_bridge_debug;
 
@@ -62,9 +62,22 @@ char acq200_bridge_copyright[] = "Copyright (c) 2003 D-TACQ Solutions Ltd";
 
 static struct DevGlobs {
 	int major;
+	struct B_WINDOW downstream_window;
+	struct B_WINDOW upstream_window;
 } dg;
 
 
+int acq200_bridge_get_windows(
+	struct B_WINDOW* upstream, struct B_WINDOW* downstream)
+{
+	if (upstream){
+		*upstream = dg.upstream_window;
+	}
+	if (downstream){
+		*downstream = dg.downstream_window;
+	}
+	return 0;
+}
 
 #define PCIDEV(dev) container_of(dev, struct pci_dev, dev)
 
@@ -283,8 +296,8 @@ static ssize_t set_window(
 	struct device *dev, 
 	struct device_attribute *attr,
 	const char * buf, size_t count,
-	int XBARTA0
-	)
+	int XBARTA0,
+	struct B_WINDOW *gw)
 {
 	unsigned window_base;
 	unsigned window_len;
@@ -308,6 +321,9 @@ static ssize_t set_window(
 				bit(window_len)|flags);
 		}
 		write_hint_ext_reg(PCIDEV(dev), NOWHERE, 0);
+
+		gw->w_base = window_base;
+		gw->w_len  = window_len;
 	}else {
 		err( "unable to decode \"%s\"\n", buf );
 	}
@@ -318,11 +334,14 @@ static ssize_t show_window(
 	struct device *dev, 
 	struct device_attribute *attr,
 	char * buf,
-	int XBARTA0)
+	int XBARTA0,
+	struct B_WINDOW *gw)
 {
-        return sprintf(buf, "0x%08x 0x%08x\n",
+        return sprintf(buf, "0x%08x 0x%08x [0x%08x 0x%08x]\n",
 		       read_hint_ext_reg(PCIDEV(dev), XBARTA0),
-		       read_hint_ext_reg(PCIDEV(dev), XTRANW(XBARTA0)));
+		       read_hint_ext_reg(PCIDEV(dev), XTRANW(XBARTA0)),
+		       gw->w_base, gw->w_len
+			);
 }
 
 static ssize_t set_downstream_window(
@@ -330,7 +349,10 @@ static ssize_t set_downstream_window(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	return set_window(dev, attr, buf, count, HINT8_EXT_REG_DBARTA0);
+	return set_window(
+		dev, attr, buf, count, HINT8_EXT_REG_DBARTA0,
+		&dg.downstream_window
+	);
 }
 
 
@@ -340,7 +362,9 @@ static ssize_t show_downstream_window(
 	char * buf)
 	       
 {
-	return show_window(dev, attr, buf, HINT8_EXT_REG_DBARTA0); 
+	return show_window(dev, attr, buf, HINT8_EXT_REG_DBARTA0,
+		&dg.downstream_window
+	); 
 }
 
 static DEVICE_ATTR(downstream_window, S_IRUGO|S_IWUGO,
@@ -354,7 +378,9 @@ static ssize_t show_upstream_window(
 	char * buf)
 	       
 {
-	return show_window(dev, attr, buf, HINT8_EXT_REG_UBARTA0); 
+	return show_window(dev, attr, buf, HINT8_EXT_REG_UBARTA0,
+		&dg.upstream_window
+	); 
 }
 
 static ssize_t set_upstream_window(
@@ -362,7 +388,9 @@ static ssize_t set_upstream_window(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	return set_window(dev, attr, buf, count, HINT8_EXT_REG_UBARTA0);
+	return set_window(dev, attr, buf, count, HINT8_EXT_REG_UBARTA0,
+		&dg.upstream_window
+		);
 }
 
 static DEVICE_ATTR(upstream_window, S_IRUGO|S_IWUGO,
@@ -496,7 +524,7 @@ acq200_bridge_exit_module(void)
 	pci_unregister_driver(&acq200_bridge_driver);
 }
 
-
+EXPORT_SYMBOL_GPL(acq200_bridge_get_windows);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
