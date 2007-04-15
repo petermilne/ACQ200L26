@@ -165,7 +165,6 @@ struct MU_PATH_DESCRIPTOR {
 
 int acq200_mu_major;
 
-/* @todo host_window_offset and rma_base appear to be the same thing ... */
 static struct ACQ200_MU_DEVICE {
 	struct device *dev;
 	u32 host_base_pa;
@@ -1013,6 +1012,12 @@ static ssize_t acq200_mu_remote_write(
 			dma_buf.direction);
 		dma_buf.mapped = 1;
 
+		dbg(1, "MU_MAGIC_BB:%s src 0x%08x dst 0x%08x len %d",
+			MU_RMA_IS_ACQBOUND(rma)? "IN": "OUT",
+			dma_buf.laddr,
+			mug.rma_base+rma->bb_remote_pci_offset,
+			rma->length);
+
 		if (MU_RMA_IS_ACQBOUND(rma)){
 			rc = post_dmac_incoming_request(
 				&dma_buf,
@@ -1489,6 +1494,7 @@ static ssize_t show_globs (
 	DEFPR(mug.host_base_va);
 	DEFPR(mug.host_window_offset);
 	DEFPR(mug.host_base_len);
+	DEFPR(mug.rma_base);
 	return len;
 #undef DEFPR
 }
@@ -1509,26 +1515,24 @@ static ssize_t set_downstream_window(
 	const char * buf, size_t count)
 {
         unsigned offset;
-	unsigned bw_mask = 0;
+	unsigned dw_mask = 0;
 
         if (downstream_is_set == 0 && 
-	    sscanf(buf, "0x%x 0x%08x %x", &offset, &HBLEN, &bw_mask) >= 1){
+	    sscanf(buf, "0x%x 0x%08x %x", &offset, &HBLEN, &dw_mask) >= 1){
 		if (machine_is_acq100()){
-			info("ACQ100:setting IOP321_OMWTVR0 to 0x%08x",offset);
 			*IOP321_OMWTVR0 = offset;
 		/*
 		 * Outbound translate window sits on 64MB boundary
                  * External memory def doesn't have this restriction,
 		 * so we need to record the offset
+		 * DMAC uses DIRECT addressing to rma_base _is_ offset
                  */
 			mug.host_window_offset = offset - *IOP321_OMWTVR0;
-			mug.rma_base = offset - *IOP321_OMWTVR0;
-			info("IOP321_OMWTVR0 = 0x%08x", *IOP321_OMWTVR0);
+			mug.rma_base = offset;
 		}else if (machine_is_acq200()){
 			/* mug.rma_base is already set */
-			mug.host_window_offset = offset&bw_mask;
+			mug.host_window_offset = offset&dw_mask;
 		}
-		info("host_win_offset= 0x%08x",mug.host_window_offset);
 #if (MU_LAZY_ALLOC != 0)
 		alloc_databufs();
 		init_mu_queues();
