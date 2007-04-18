@@ -16,15 +16,20 @@ struct mu_rma {
 	u32 bb_remote_pci_offset;  /** MU_MAGIC_BB ONLY */
 };
 
-#define MU_MAGIC     0xd1acbabe
+#define MU_MAGIC     0xd1acbab0
 #define MU_MAGIC_BB  0xd1acbbb0      /** @@todo offset in bigbuf */
 #define MU_HOSTBOUND 0x1             /* tag on to magic */
 #define MU_ACQBOUND  0x0
+#define MU_PCI_ABS   0x2             /* bb_remote_pci_offset abs pci */
+#define MU_FLAGS     0xf
 
-#define MU_RMA_MAGIC(rma)         ((rma)->magic&~MU_HOSTBOUND)
-#define MU_RMA_MAGIC_OK(rma)      (((rma)->magic&~MU_HOSTBOUND)==MU_MAGIC)
+#define MU_RMA_MAGIC(rma)         ((rma)->magic&~MU_FLAGS)
+#define MU_RMA_MAGIC_OK(rma)      (((rma)->magic&~MU_FLAGS)==MU_MAGIC)
 #define MU_RMA_IS_HOSTBOUND(rma)  (((rma)->magic&MU_HOSTBOUND)!=0)
-#define MU_RMA_IS_ACQBOUND(rma)   (!MU_RMA_IS_HOSTBOUND(rma))
+#define MU_RMA_IS_ACQBOUND(rma)   (((rma)->magic&MU_HOSTBOUND)==0)
+#define MU_RMA_IS_PCI_ABS(rma)    (((rma)->magic&MU_PCI_ABS) != 0)
+#define MU_RMA_IS_PCI_REL(rma)	  (((rma)->magic&MU_PCI_ABS) == 0)
+
 #define MU_STATUS_OK 0
 
 #define MU_SAMPLE_SIZE(status, sz)    ((sz = (status&0xffff)>>16)? sz: 2)
@@ -34,3 +39,5 @@ struct mu_rma {
 
 #define E_MU_BAD_STRUCT 0xd100
 #define E_MU_BAD_MAGIC  0xd101
+
+

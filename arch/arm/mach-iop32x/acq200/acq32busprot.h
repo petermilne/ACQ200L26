@@ -10,11 +10,17 @@
  * Description: defines ACQ32 bus command protocol
  *
 <<<<<<< acq32busprot.h
- * $Id: acq32busprot.h,v 1.85.2.23 2006/02/17 11:59:45 pgm Exp $
+ * $Id: acq32busprot.h,v 1.85.2.25 2007/04/18 14:54:45 pgm Exp $
 =======
- * $Id: acq32busprot.h,v 1.85.2.23 2006/02/17 11:59:45 pgm Exp $
+ * $Id: acq32busprot.h,v 1.85.2.25 2007/04/18 14:54:45 pgm Exp $
 >>>>>>> 1.85.2.1
  * $Log: acq32busprot.h,v $
+ * Revision 1.85.2.25  2007/04/18 14:54:45  pgm
+ * *** empty log message ***
+ *
+ * Revision 1.85.2.24  2007/02/16 16:31:55  pgm
+ * *** empty log message ***
+ *
  * Revision 1.85.2.23  2006/02/17 11:59:45  pgm
  * *** empty log message ***
  *
@@ -384,7 +390,7 @@ The Host PC is the Master, ACQ32 is the Slave
 
 
 
-#define BP_REV            "$Revision: 1.85.2.23 $"
+#define BP_REV            "$Revision: 1.85.2.25 $"
 
 #define BP_MB_COMMAND     0
 #define BP_MB_A3          1
@@ -1280,7 +1286,7 @@ typedef struct STATUS_CHANGE_NOTIFICATION_REQUEST {
  * Bit for 2G, pci is the host bus offset => 0 is valid!!
  */
 typedef struct HOST_REQUEST_DATA_RECORD {
-    unsigned pci;
+    unsigned pci;			       
     unsigned start;
     unsigned nsamples;        
     unsigned short chan;
@@ -1291,9 +1297,11 @@ typedef struct HOST_REQUEST_DATA_RECORD {
 /*
  * optional flags for chan
  */
+
 #define HRD_CHAN_IS_FILE 0x8000
 #define HRD_CHAN_EOF     0x0400
 #define HRD_CHECKED      0x4000    /* we have checked this one */
+#define HRD_ABS_PCI	 0x2000    /* pci is absolute address  */
 
 #define HRD_CHANNEL(hrd)  (((hrd)->chan)&0x0ff)
 #define HRD_SPCLID(hrd)   (((hrd)->chan)&0x07f)
@@ -1307,6 +1315,10 @@ typedef struct HOST_REQUEST_DATA_RECORD {
 #define HRD_SPCLID_BATCHOUT 100
 #define HRD_SPCLID_BATCHIO  101        /* batch in/out on same channel */
 #define HRD_SPCLID_BATCHRSH 102        /* planned interactive rsh io   */
+
+/* text acqcmd : monitor 128+109 = 237 */
+#define HRD_SPCLID_ACQCMD   109
+
 /*
  * Host Request Cross Sections Data - supply zero terminated list of records
  * to govern the transfer.
@@ -1432,6 +1444,8 @@ typedef struct MESSAGE_HEADER {
 #define HRDR_SZ             (sizeof(struct HOST_REQUEST_DATA_RECORD))
 #define MESSAGE_HRDR_LEN    (MESSAGE_DATA_LEN/HRDR_SZ)
 
+#define MESSAGE_ACTUAL_LEN(message) \
+       (sizeof(MessageHeader) + (message)->header.length)
 
 /** I2O message handling. */        
 typedef struct MESSAGE { 

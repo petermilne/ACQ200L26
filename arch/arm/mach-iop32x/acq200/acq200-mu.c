@@ -1003,6 +1003,11 @@ static ssize_t acq200_mu_remote_write(
 	}
 	case MU_MAGIC_BB: {
 		struct PCI_DMA_BUFFER dma_buf;
+		unsigned pci_addr = rma->bb_remote_pci_offset;
+
+		if (MU_RMA_IS_PCI_REL(rma)){			
+			pci_addr += mug.rma_base; /* rma relative offset */
+		}
 		
 		dma_buf.va = bbva(rma->buffer_offset);
 		dma_buf.direction = MU_RMA_IS_HOSTBOUND(rma)?
@@ -1012,23 +1017,24 @@ static ssize_t acq200_mu_remote_write(
 			dma_buf.direction);
 		dma_buf.mapped = 1;
 
-		dbg(1, "MU_MAGIC_BB:%s src 0x%08x dst 0x%08x len %d",
-			MU_RMA_IS_ACQBOUND(rma)? "IN": "OUT",
-			dma_buf.laddr,
-			mug.rma_base+rma->bb_remote_pci_offset,
-			rma->length);
+
+		dbg(1, "MU_MAGIC_BB:%s src 0x%08x dst 0x%08x len %d %s",
+			    MU_RMA_IS_ACQBOUND(rma)? "IN": "OUT",
+			    dma_buf.laddr, pci_addr,
+			    rma->length,
+			    MU_RMA_IS_PCI_REL(rma)? "REL": "ABS");
 
 		if (MU_RMA_IS_ACQBOUND(rma)){
 			rc = post_dmac_incoming_request(
 				&dma_buf,
 			        0,
-				mug.rma_base+rma->bb_remote_pci_offset,
+				pci_addr,
 				rma->length );			
 		}else{
 			rc = post_dmac_outgoing_request(
 				&dma_buf,
 				0,
-				mug.rma_base+rma->bb_remote_pci_offset,
+				pci_addr,
 				rma->length );
 		}	
 		len = MU_RMA_SZ;
@@ -1450,12 +1456,13 @@ static int alloc_databufs(void)
 {
 	int ibuf;
 
+#if 0
 	if (HBLEN <= _HBLEN26){
 		if (HBBLOCK > _HBBLOCK26){
 			HBBLOCK = _HBBLOCK26;
 		}
 	}
-
+#endif
 	mug.databufs = kzalloc(DATABUFS_SZ, GFP_KERNEL);
 
 	for (ibuf = 0; ibuf != NDATABUFS; ++ibuf){

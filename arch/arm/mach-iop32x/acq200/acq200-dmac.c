@@ -190,6 +190,7 @@ void acq200_dmad_clear(void)
 
 
 static int G_poll_caf;
+static int G_calls;
 
 int acq200_post_dmac_request( 
 	int channel, 
@@ -209,6 +210,8 @@ int acq200_post_dmac_request(
 	u32 ie = poll? 0: IOP321_DCR_IE;
 
 	if (chn != 1) return -ENODEV;
+
+	++G_calls;
 
 	if (channel&DMA_CHANNEL_NOBLOCK){
 		while(*IOP321_DMA1_CSR & IOP321_CSR_CAF){
@@ -595,6 +598,7 @@ static ssize_t show_dmac_state(
 	len += PRINTF("%15s: %d\n", "pool_alloc", DP.pool_alloc);
 	len += PRINTF("%15s: %d\n", "max_alloc", DP.max_alloc);
 
+	len += PRINTF("%15s: %d\n", "calls", G_calls);
 	len += PRINTF("%15s: %d\n", "waiting CAF", G_poll_caf);
 	return len;
 #undef PRINTF
