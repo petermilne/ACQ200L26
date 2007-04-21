@@ -26,6 +26,17 @@ extern void acq200_driver_create_file(
 	}
 }
 
+extern int acq200_copy_to_user(
+	void *to, const void *from, unsigned long n, int line
+	)
+{
+	if (copy_to_user(to, from, n)){
+		err("FAILED at line %d", line);
+		BUG();
+	}
+	return 0;
+}
+	
 EXPORT_SYMBOL_GPL(acq200_device_create_file);
 EXPORT_SYMBOL_GPL(acq200_driver_create_file);
 

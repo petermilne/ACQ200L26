@@ -7,6 +7,8 @@
 
 #include <linux/device.h>
 
+#include <linux/ctype.h>
+
 #include "acq200_debug.h"
 
 #ifdef __KERNEL__
@@ -53,6 +55,14 @@ extern void acq200_driver_create_file(
 
 #define DRIVER_CREATE_FILE(drv, attr) \
 	acq200_driver_create_file(drv, attr, __FILE__, __LINE__)
+
+
+
+#define COPY_TO_USER(to, from, n) \
+	if (copy_to_user(to, from, n)){ return -EFAULT; }
+
+#define COPY_FROM_USER(to, from, n) \
+	if (copy_from_user(to, from, n)){ return -EFAULT; }
 
 static inline int PO(int len)
 {

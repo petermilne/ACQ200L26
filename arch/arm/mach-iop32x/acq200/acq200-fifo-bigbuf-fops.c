@@ -821,7 +821,7 @@ static int dma_xx_extractor(
 
 	dbg(1, "channel %2d offset %08x maxbuf %x", channel, offsam, maxbuf);
 
-	if (copy_to_user(ubuf, &mu_rma, sizeof(struct mu_rma))){
+	if (copy_to_user(ubuf, &mu_rma, MU_RMA_SZ)){
 		return -EFAULT;
 	}
 

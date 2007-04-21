@@ -948,7 +948,9 @@ static ssize_t store_FIFERR(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	sscanf(buf, "0x%x", &dg.FIFERR) || sscanf(buf, "%x", &dg.FIFERR);
+	if (sscanf(buf, "0x%x", &dg.FIFERR) ==0){
+		sscanf(buf, "%x", &dg.FIFERR);
+	}
 	return strlen(buf);
 }
 static DEVICE_ATTR(FIFERR, S_IRUGO|S_IWUGO,  show_FIFERR, store_FIFERR);
@@ -999,7 +1001,9 @@ static ssize_t set_scatter_mask(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	sscanf(buf, "0x%x", &dg.imask) || sscanf(buf, "%x", &dg.imask);
+	if (sscanf(buf, "0x%x", &dg.imask) == 0){
+		sscanf(buf, "%x", &dg.imask);
+	}
 
 	return strlen(buf);
 }

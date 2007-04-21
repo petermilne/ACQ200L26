@@ -86,6 +86,19 @@ static inline int u32rb_get(struct u32_ringbuffer* rb, u32 *px)
 	}
 }
 
+static inline int u32rb_peek(struct u32_ringbuffer* rb, u32 *px) 
+/* returns > 0 on data, 0 on no data */
+{
+	if (!u32rb_is_empty(rb)){
+		u32 x = rb->buffer[rb->iget];
+		*px = x;
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+
 static inline int u32rb_get_user(struct u32_ringbuffer* rb, u32 *px) 
 /* returns > 0 on data, 0 on no data */
 {

@@ -156,7 +156,7 @@ int acq200_dma_init_interrupt_hook(
 
 struct iop321_dma_desc* acq200_dmad_alloc(void)
 {
-	u32 item;
+	u32 item = 0;
 
 	if (likely(u32rb_get(&DP.rb, &item))){
 		return (struct iop321_dma_desc *)item;
@@ -191,6 +191,7 @@ void acq200_dmad_clear(void)
 
 static int G_poll_caf;
 static int G_calls;
+static int G_poll_calls;
 
 int acq200_post_dmac_request( 
 	int channel, 
@@ -208,6 +209,7 @@ int acq200_post_dmac_request(
 		(channel&DMA_CHANNEL_POLL) != 0 || 
 		!acq200_is_dma[chn].eoc.isr_cb; 
 	u32 ie = poll? 0: IOP321_DCR_IE;
+	int poll_calls = 0;
 
 	if (chn != 1) return -ENODEV;
 
@@ -216,7 +218,12 @@ int acq200_post_dmac_request(
 	if (channel&DMA_CHANNEL_NOBLOCK){
 		while(*IOP321_DMA1_CSR & IOP321_CSR_CAF){
 			++G_poll_caf;
+			poll_calls++;
 		}
+	}
+
+	if (poll_calls){
+		++G_poll_calls;
 	}
 	
 	acq200_is_dma[chn].eoc.interrupted = 0;
@@ -599,6 +606,7 @@ static ssize_t show_dmac_state(
 	len += PRINTF("%15s: %d\n", "max_alloc", DP.max_alloc);
 
 	len += PRINTF("%15s: %d\n", "calls", G_calls);
+	len += PRINTF("%15s: %d\n", "poll_calls", G_poll_calls);
 	len += PRINTF("%15s: %d\n", "waiting CAF", G_poll_caf);
 	return len;
 #undef PRINTF
