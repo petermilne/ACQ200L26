@@ -563,8 +563,8 @@ static int __init acq2xx_pwm_init( void )
 {
 	acq200_debug = acq2xx_pwm_debug;
 
-	driver_register(&acq2xx_pwm_driver);
-	return platform_device_register(&acq2xx_pwm_device);
+	return driver_register(&acq2xx_pwm_driver) ||
+	       platform_device_register(&acq2xx_pwm_device);
 }
 
 
