@@ -4,6 +4,7 @@
 #include <linux/user.h>
 
 #include <linux/ioport.h>
+#include <asm/uaccess.h>	/* copy_to_user */
 
 #include "acq200.h"
 

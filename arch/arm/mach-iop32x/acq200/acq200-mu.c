@@ -988,13 +988,15 @@ static int print_chain(struct DmaChannel* channel, char* buf)
 }
 /** chaining DMA operation. Single work task does all, then no locking issues*/
 
+#define DMA_ISYNC acq200_dma_getDmaChannelSync()[1].eoc
+
 DEFINE_DMA_CHANNEL(dma_channel, 1);
 static struct u32_ringbuffer DMADQ;
 static int new_chain_ready;
 
 static int acq200mu_EOT_task(void *nothing)
 {
-	struct InterruptSync * isync = &acq200_dma_getDmaChannelSync()[1].eoc;
+	struct InterruptSync * isync = &DMA_ISYNC;
 	spinlock_t lock = SPIN_LOCK_UNLOCKED;
 	unsigned long flags;
 	u32 stat;
@@ -1193,11 +1195,15 @@ static ssize_t acq200_mu_remote_write_chain(
 			/* pull down an MF, fill the message, store the MFA */
 			MFA mfa = copy_user_to_mfa(file, BUF_PAYLOAD, rlen-4);
 
-			assert(mfa != 0); assert(dmad != 0);
-			dmad->clidat = (void*)mfa;
-			dmad->DC |= IOP321_DCR_IE;
+			dbg(1, "MU_MAGIC_OB: %p M:%08x", dmad, mfa);
+			assert(mfa != 0); 
 
-			dbg(1, "MU_MAGIC_OB: %p M:%p", dmad, dmad->clidat);
+			if (dmad){
+				dmad->clidat = (void*)mfa;
+				dmad->DC |= IOP321_DCR_IE;
+			}else{
+				acq200mu_post_ob(mfa);
+			}
 			rlen = 0;
 			break;
 		}
@@ -1206,8 +1212,10 @@ static ssize_t acq200_mu_remote_write_chain(
 		}
 	}			    
 
-	new_chain_ready = dmad_count;
-	wake_up_interruptible(&acq200_dma_getDmaChannelSync()[1].eoc.waitq);
+	if (dmad_count){
+		new_chain_ready = dmad_count;
+		wake_up_interruptible(&DMA_ISYNC.waitq);
+	}
 
 	putRma(rma);
 
