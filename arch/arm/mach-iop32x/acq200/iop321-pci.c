@@ -270,8 +270,69 @@ struct pci_bus *iop321_scan_bus(int nr, struct pci_sys_data *sys)
 	return the_bus;
 }
 
+
+#define IOP3XX_PCSR_PE		(1<<18)
+#define IOP3XX_PCSR_PCIX	(3<<16)
+#define IOP3XX_PCSR_PCIX066	(1<<16)
+#define IOP3XX_PCSR_PCIX100	(2<<16)
+#define IOP3XX_PCSR_PCIX133	(3<<16)
+#define IOP3XX_PCSR_P_M66EN	(1<<10)
+#define IOP3XX_PCSR_P_REQ64	(1<<8)
+
+static int id_bus_speed(char ** id)
+{
+	u32 pcsr = *IOP3XX_PCSR;
+	char *_id;
+	int hz;
+	
+	switch(pcsr&IOP3XX_PCSR_PCIX){
+	case IOP3XX_PCSR_PCIX066:
+		hz = 66666000;
+		_id = "PCI-X 66MHz";
+		break;
+	case IOP3XX_PCSR_PCIX100:
+		hz = 99999000;
+		_id = "PCI-X 100MHz";
+		break;
+	case IOP3XX_PCSR_PCIX133:
+		hz = 133333200;
+		_id = "PCI-X 133MHz";
+		break;
+	default:
+		if (pcsr&IOP3XX_PCSR_P_M66EN){
+			hz = 66666000;
+			_id = "PCI 66MHz";
+		}else{
+			hz = 33333000;
+			_id = "PCI 33MHz";
+		}
+	}
+
+	if (id){
+		*id = _id;
+	}	
+	return hz;
+}
+int iop32x_pci_bus_speed(void)
+{
+	return id_bus_speed(0);
+}
+
+
+void iop32x_check_pci_bus_speed(void)
+{
+	u32 pcsr = *IOP3XX_PCSR;
+	char *width = (pcsr&IOP3XX_PCSR_P_REQ64)==0? "64 bit": "32 bit";
+	char *id;
+	
+	id_bus_speed(&id);
+
+	printk("PCI:iop3xx PCSR:%08x %s %s\n",  pcsr, id, width);
+}
+
 void iop321_init(void)
 {
+	iop32x_check_pci_bus_speed();
 	DBG("PCI:  Intel 80321 PCI init code.\n");
 	DBG("\tATU: IOP321_ATUCMD=0x%04x\n", *IOP321_ATUCMD);
 	DBG("\tATU: IOP321_OMWTVR0=0x%04x, IOP321_OIOWTVR=0x%04x\n",
@@ -295,3 +356,5 @@ void iop321_init(void)
 	hook_fault_code(16+6, iop321_pci_abort, SIGBUS, "imprecise external abort");
 }
 
+EXPORT_SYMBOL_GPL(iop32x_pci_bus_speed);
+EXPORT_SYMBOL_GPL(iop32x_check_pci_bus_speed);
