@@ -144,26 +144,22 @@ static int __init acq200_fifo_init( void )
 {
 	int rc;
 
-
 	acq200_debug = acq200_fifo_debug;
 
+	info( "acq200_debug set %d\n", acq200_debug );
 	dbg( 1, " init modules %s %s\n", __DATE__, __TIME__ );
-
 	dbg(1,"init_dg(), init_phases()");
+
 	CAPDEF = DTACQ_MACH_CREATE_CAPDEF();
 	init_dg();
 	init_phases();
 
-
-
 	acq200_eoc_tasklet1.data = (unsigned long)&IPC->is_dma[1].eoc;
 
-
-	info( "acq200_debug set %d\n", acq200_debug );
-
-
-	(rc = pci_register_driver( &acq200_fpga_driver )) >= 0 &&
-	(rc = mk_sysfs( &acq200_fpga_driver.driver)) >= 0;
+	rc = pci_register_driver( &acq200_fpga_driver );
+	if (rc >= 0){
+		rc = mk_sysfs( &acq200_fpga_driver.driver);
+	}
 	return rc;
 }
 
