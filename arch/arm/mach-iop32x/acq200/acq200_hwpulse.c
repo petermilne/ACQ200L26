@@ -501,10 +501,10 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 
 static int mk_pulse_sysfs(struct device *dev)
 {
-	DEVICE_CREATE_FILE(dev, &dev_attr_version);
-	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_def);
-	DEVICE_CREATE_FILE(dev, &dev_attr_trig);
-	DEVICE_CREATE_FILE(dev, &dev_attr_genDO);
+	device_create_file(dev, &dev_attr_version);
+	device_create_file(dev, &dev_attr_pulse_def);
+	device_create_file(dev, &dev_attr_trig);
+	device_create_file(dev, &dev_attr_genDO);
 	return 0;
 }
 
@@ -573,8 +573,8 @@ static int __init acq200_pulse_init( void )
 
 	init_signals();
 	start_work();
-	return driver_register(&acq200_pulse_driver) ||
-		platform_device_register(&acq200_pulse_device);
+	driver_register(&acq200_pulse_driver);
+	return platform_device_register(&acq200_pulse_device);
 }
 
 

@@ -71,7 +71,7 @@ module_param(stub, int, 0664);
 #define VERID "$Revision: 1.5 $ build B1000 "
 
 #define TD_SZ (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+1+1+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((1+(numchan)+1+1)*TD_SZ)
 
 #define MEANFS_MAGIC 0xbea02005
 #define TMPSIZE 20
@@ -91,7 +91,7 @@ struct CHNAME {
 };
 static struct CHNAME* my_names;
 
-static int enable;
+
 
 
 /** experiment: use kthread to collect data */
@@ -333,7 +333,7 @@ static ssize_t ch_read(
 {
         if (count > sizeof(int) && *offset == 0){
 		int my_mean = getMean((int)filp->private_data);
-		COPY_TO_USER(buf, &my_mean, sizeof(int));
+		copy_to_user(buf, &my_mean, sizeof(int));
 		*offset = 4;
 		return sizeof(int);
 	}
@@ -345,29 +345,6 @@ static int ch_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static ssize_t enable_read(
-	struct file *filp, char *buf, size_t count, loff_t *offset)
-{
-	char *value = enable? "1": "0";
-	COPY_TO_USER(buf, value, 1);
-	return 1;
-}
-
-static ssize_t enable_write(
-	struct file *filp, const char *buf, size_t count, loff_t *offset)
-{
-	char lbuf[4];
-	
-	COPY_FROM_USER(lbuf, buf, 1);
-	if (lbuf[0] == '1'){
-		enable = 1;
-		start_work();
-	}else if (lbuf[0] == '0'){
-		enable = 0;
-		stop_work();
-	}
-	return count;
-}
 
 
 
@@ -377,10 +354,6 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 		.open = ch_open,
 		.read = ch_read,
 		.release = ch_release
-	};
-	static struct file_operations enops = {
-		.write = enable_write,
-		.read = enable_read
 	};
 	static struct tree_descr front = {
 		NULL, NULL, 0
@@ -401,12 +374,6 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 		my_files[ichan].ops = &chops;
 		my_files[ichan].mode = S_IRUGO;
 	}
-
-	my_files[ichan].name = "enable";
-	my_files[ichan].ops = &enops;
-	my_files[ichan].mode = S_IRUGO|S_IWUGO;
-	ichan++;
-
 	memcpy(&my_files[ichan], &backstop, TD_SZ);
 
 	return simple_fill_super(sb, MEANFS_MAGIC, my_files);

@@ -810,23 +810,25 @@ static int dma_xx_extractor(
 	int offsam, 
 	int stride)
 {
-	int bblock_samples = this->length/sample_size();
-	int maxwords = min(maxbuf, bblock_samples-offsam) * NCHAN;
+	int bblock_samples = this->length/NCHAN/SSZ;
 	struct mu_rma mu_rma = {		
 		.magic = MU_MAGIC_BB|MU_HOSTBOUND,
 		.status = MU_STATUS_OK
 	};
+
+	maxbuf = min(maxbuf, bblock_samples-offsam);
+
 	mu_rma.buffer_offset = this->offset + offsam*NCHAN*SSZ;
-	mu_rma.length = maxwords*SSZ;
+	mu_rma.length = maxbuf*NCHAN*SSZ;
 
 	dbg(1, "channel %2d offset %08x maxbuf %x", channel, offsam, maxbuf);
 
-	if (copy_to_user(ubuf, &mu_rma, MU_RMA_SZ)){
+	if (copy_to_user(ubuf, &mu_rma, sizeof(struct mu_rma))){
 		return -EFAULT;
 	}
 
 	dbg(1, "returns maxbuf %d", maxbuf);
-	return maxwords;
+	return maxbuf;
 }
 
 

@@ -1628,9 +1628,9 @@ static ssize_t set_##id (					\
 	struct device_attribute *attr,				\
 	const char * buf, size_t count)				\
 {								\
-	if (sscanf(buf, "0x%x", &dg.settings.id) == 0){		\
-		sscanf(buf, "%x", &dg.settings.id);		\
-	}							\
+	sscanf(buf, "0x%x", &dg.settings.id) ||			\
+	sscanf(buf, "%x", &dg.settings.id);			\
+								\
 	return strlen(buf);					\
 }								\
 static ssize_t show_##id (					\
