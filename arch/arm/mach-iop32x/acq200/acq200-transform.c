@@ -324,6 +324,54 @@ void transform5(short *to, short *from, int nwords, int stride)
 #undef IDC1
 }
 
+/** acq216 speed up
+
+* Q1Q2Q3Q4
+* Q4Q3Q2Q1
+*
+* Logical:
+* 12 13 14 15  00 01 02 03 08 09 10 11 04 05 06 07
+* 04 05 06 07  08 09 10 11 00 01 02 03 12 13 14 15
+*/
+ 
+void transform12344321(short *to, short *from, int nwords, int stride)
+{
+	int ns = nwords/stride;
+	int isample, ichannel;
+	int nq = stride/4;
+
+	for (isample = 0; isample < ns-1; ++isample){
+		int iq;
+		int sq4;
+		int dq4;
+		int iss;
+
+		for (iq = 0; iq < nq; ++iq){
+			iss = isample * stride;
+			sq4 = iq*4; 			      
+			dq4 = iq * 4 * ns + isample; 
+
+			to[dq4] = from[iss + sq4 + 0]; dq4 += ns;
+			to[dq4] = from[iss + sq4 + 1]; dq4 += ns;
+			to[dq4] = from[iss + sq4 + 2]; dq4 += ns;
+			to[dq4] = from[iss + sq4 + 3];
+		}
+		++isample;
+
+		for (iq = 0; iq < nq; ++iq){
+			iss = isample*stride;
+			sq4 = (nq - 1 - iq) * 4; 
+			dq4 = iq * 4 * ns + isample;
+
+			to[dq4] = from[iss + sq4 + 0]; dq4 += ns;
+			to[dq4] = from[iss + sq4 + 1]; dq4 += ns;
+			to[dq4] = from[iss + sq4 + 2]; dq4 += ns;
+			to[dq4] = from[iss + sq4 + 3];
+		}			
+	}
+}
+
+
 
 
 static ssize_t show_transformer_transform(
@@ -466,6 +514,7 @@ void acq200_transform_init(void)
 		{ .name = "transform3", .transform = transform3 },
 		{ .name = "transform4", .transform = transform4 },
 		{ .name = "transform5", .transform = transform5 },
+		{ .name = "t12344321",  .transform = transform12344321 },
 	};
 #define NDEFAULTS (sizeof(defaults)/sizeof(struct Transformer))
 	int ireg;

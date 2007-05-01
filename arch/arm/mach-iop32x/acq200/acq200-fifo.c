@@ -518,6 +518,29 @@ static int woOnRefill(
 
 #ifndef WAV232
 
+static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
+{
+	struct list_head* clients = &DG->tbc.clients;
+	struct list_head* pool = &DG->bigbuf.pool_tblocks;
+	spin_lock(&DG->tbc.lock);
+
+	if (!list_empty(clients)){
+		struct TblockConsumer *tbc;
+
+		list_for_each_entry(tbc, clients, list){
+			TBLE* tle = TBLE_LIST_ENTRY(pool->next);
+
+			atomic_inc(&tblock->in_phase);
+			tle->tblock = tblock;
+
+			list_move_tail(pool->next, &tbc->tle_q);
+			wake_up_interruptible(&tbc->waitq);	
+		}
+	}
+	spin_unlock(&DG->tbc.lock);
+}
+
+
 static struct TblockListElement* dmc_phase_add_tblock(
 	struct Phase* phase, unsigned* start_off
 	)
@@ -541,6 +564,11 @@ static struct TblockListElement* dmc_phase_add_tblock(
 		}
 
 		atomic_inc(&tle->tblock->in_phase);
+		if (!list_empty(&phase->tblocks)){
+			/* pass old [full] tblock to clients */
+			_dmc_handle_tb_clients(
+				TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
+		}
 		list_move_tail(empty_tblocks->next, &phase->tblocks);
 
 		*start_off = tle->tblock->offset;
@@ -3503,6 +3531,9 @@ static void init_dg(void)
 
 	INIT_LIST_HEAD(&DG->start_of_shot_hooks);
 	INIT_LIST_HEAD(&DG->end_of_shot_hooks);
+
+	INIT_LIST_HEAD(&DG->tbc.clients);
+	spin_lock_init(&DG->tbc.lock);
 }
 
 static void delete_dg(void)

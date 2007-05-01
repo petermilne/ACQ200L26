@@ -53,9 +53,14 @@
 
 #define FPGA_IS_PCI_DEVICE 0
 
+#elif defined ACQ
 #elif defined ACQ216
 
+
 #define DMA_BLOCK_LEN 16384
+/*
+#define DMA_BLOCK_LEN (16384+8192)
+*/
 #define ISR_ADDS_ENDSTOP 0
 #define FPGA_IS_PCI_DEVICE 1
 

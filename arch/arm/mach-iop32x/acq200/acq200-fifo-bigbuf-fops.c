@@ -75,6 +75,38 @@ void acq200_releaseDCI(struct file *file)
 	kfree(file->private_data);
 }
 
+static struct TblockConsumer *newTBC(void)
+{
+	struct TblockConsumer *tbc = 
+		kzalloc(sizeof(struct TblockConsumer), GFP_KERNEL);
+	
+	init_waitqueue_head(&tbc->waitq);
+        INIT_LIST_HEAD(&tbc->tle_q);
+
+	spin_lock(&DG->tbc.lock);
+	list_add_tail(&tbc->list, &DG->tbc.clients);
+	spin_unlock(&DG->tbc.lock);
+	
+	return tbc;
+}
+static void deleteTBC(struct TblockConsumer *tbc)
+{
+	struct TblockListElement *cursor, *tmp;
+
+	spin_lock(&DG->tbc.lock);
+	list_del(&tbc->list);
+	spin_unlock(&DG->tbc.lock);
+
+	/* flush and free any waiting tblocks. 
+	 * list disconnected, no need to lock */
+	list_for_each_entry_safe(cursor, tmp, &tbc->tle_q, list){
+		acq200_phase_release_tblock_entry(cursor);
+	}
+	
+	kfree(tbc);
+}
+
+
 
 static unsigned update_inode_stats(struct inode *inode)
 {
@@ -1087,6 +1119,102 @@ static ssize_t dma_xxp_read (
 	return fifo_bigbuf_xxX_read(file, buf, len, offset);
 }
 
+static int dma_tb_open (
+	struct inode *inode, struct file *file)
+{
+	acq200_initDCI(file, 0);
+	DCI_TBC(file) = newTBC();
+	DCI(file)->extract = dma_xx_extractor;
+	return 0;
+}
+
+static int dma_tb_release (
+	struct inode *inode, struct file *file)
+{
+	deleteTBC(DCI_TBC(file));
+	acq200_releaseDCI(file);
+	return 0;
+}
+
+static ssize_t dma_tb_read ( 
+	struct file *file, char *buf, size_t len, loff_t *offset)
+/** read output a mu_rma descriptor. 
+     NB: returns data size, not descriptor size */
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	size_t headroom = 0;
+	struct mu_rma mu_rma = {		
+		.magic = MU_MAGIC_BB|MU_HOSTBOUND,
+		.status = MU_STATUS_OK
+	};
+	int ncopy;
+
+	if (tbc->c.tle){
+		headroom = tbc->c.tle->tblock->length - tbc->c.cursor;
+
+		if (headroom == 0){
+			spin_lock(&DG->tbc.lock);
+			acq200_phase_release_tblock_entry(tbc->c.tle);
+			spin_unlock(&DG->tbc.lock);	
+			tbc->c.cursor = 0;
+		}
+	}
+
+	if (headroom == 0){
+		wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
+
+		if (list_empty(&tbc->tle_q)){
+			return -EINTR;
+		}
+		tbc->c.tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+		headroom = tbc->c.tle->tblock->length;
+	}
+
+	ncopy = min(len, headroom);
+
+	mu_rma.buffer_offset = tbc->c.tle->tblock->offset + tbc->c.cursor;
+	mu_rma.length = ncopy;
+	COPY_TO_USER(buf, &mu_rma, sizeof(struct mu_rma));
+	tbc->c.cursor += ncopy;	
+	if (offset){
+		*offset += ncopy;
+	}
+	return ncopy;
+}
+
+static ssize_t status_tb_read ( 
+	struct file *file, char *buf, size_t len, loff_t *offset)
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle;
+	char lbuf[80];
+	int rc;
+		
+	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
+
+	if (list_empty(&tbc->tle_q)){
+		return -EINTR;
+	}
+
+	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+
+	rc = snprintf(lbuf, min(sizeof(lbuf), len), 
+			"tblock %d phys:0x%08x len %d scount %d\n", 
+			 tle->tblock->iblock, 
+			 pa_buf(DG) + tle->tblock->offset,
+			 tle->tblock->length,
+			 tle->sample_count
+		);
+
+	spin_lock(&DG->tbc.lock);
+	acq200_phase_release_tblock_entry(tle);
+	spin_unlock(&DG->tbc.lock);	
+
+	COPY_TO_USER(buf, lbuf, rc);
+	return rc;
+}
+
+
 
 
 
@@ -1316,7 +1444,17 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.open = dma_xx_open,
 		.read = dma_xxl_read,
 		.release = dma_xx_release
-	};	
+	};
+	static struct file_operations dma_tb_ops = {
+		.open = dma_tb_open,
+		.read = dma_tb_read,
+		.release = dma_tb_release
+	};
+	static struct file_operations dma_tbstatus_ops = {
+		.open = dma_tb_open,
+		.read = status_tb_read,
+		.release = dma_tb_release
+	};
 
 	static struct tree_descr front = {
 		NULL, NULL, 0
@@ -1350,6 +1488,14 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	tcount = updateFiles(&S_DFD, &src, 
 			     BIGBUF_DATA_DEVICE_XXP,
 			     tcount);
+
+	src.name = "tblock";
+	src.ops = &dma_tb_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
+	src.name = "tbstat";
+	src.ops = &dma_tbstatus_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
 	tcount = updateFiles(&S_DFD, &backstop, 0, tcount);
 	return simple_fill_super(sb, DMAFS_MAGIC, S_DFD.files);

@@ -31,6 +31,9 @@
 #include <linux/list.h>
 #include "ringbuffer.h"
 
+
+struct TblockListElement;
+
 #define IN_RANGE(xx, ll, rr) ((xx)>=(ll)&&(xx)<=(rr))
 
 #define USS (sizeof(unsigned))
@@ -95,6 +98,16 @@ struct SampleClockCounter {
 	unsigned scc_since_e2;
 };
 
+
+struct TblockConsumer {
+	wait_queue_head_t waitq;
+	struct list_head list;	       /* list of fellow consumers */
+	struct list_head tle_q;	       /* queue of TblockListElements */
+	struct CURRENT {
+		struct TblockListElement *tle;
+		unsigned cursor;
+	} c;
+};
 
 struct DataConsumerBuffer {
 	wait_queue_head_t waitq;
@@ -574,6 +587,11 @@ struct DevGlobs {
 	struct ArgBlock pre_arm_hook;
 	struct ArgBlock post_arm_hook;
 	struct ArgBlock post_shot_hook;	
+
+	struct TblockClients {
+		spinlock_t lock;
+		struct list_head clients;
+	} tbc;
 };
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)
@@ -1108,10 +1126,17 @@ struct DataChannelInfo {
 	int ssize;                    /** sample size              */
 	DataMover extract;            /** optional custom extractor */
 	Memcpy memcpy;                /** memory copy method (def:memcpy() */
-	struct Phase* phase;          /** phase (if known) */
+	union {
+		void *clidat;
+		struct Phase* phase;          /** phase (if known) */
+		struct TblockConsumer* tbc;
+	} _u;
 };
 
 #define DCI(file) ((struct DataChannelInfo *)file->private_data)
+#define DCI_PHASE(file) (DCI(file)->_u.phase)
+#define DCI_TBC(file)	(DCI(file)->_u.tbc)
+
 #define DCI_SZ (sizeof(struct DataChannelInfo))
 
 void acq200_initDCI(struct file *file, int lchannel);

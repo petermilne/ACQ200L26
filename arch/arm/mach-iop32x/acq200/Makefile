@@ -6,6 +6,7 @@
 
 CONFIG_ARCH_DTACQ_CORE=m
 CONFIG_ARCH_DTACQ_ACQ216=m
+CONFIG_ARCH_DTACQ_ACQ216x=m
 CONFIG_ARCH_DTACQ_WAV232=m
 CONFIG_ARCH_DTACQ_ACQ196=m
 CONFIG_ARCH_DTACQ_ACQ196m=m
@@ -60,6 +61,8 @@ obj-$(CONFIG_ARCH_DTACQ_FIQTIMER) += fiq-timer.o
 obj-$(CONFIG_ARCH_DTACQ_BRIDGE) += acq200-bridge.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ216) += acq216.o
+
+obj-$(CONFIG_ARCH_DTACQ_ACQ216x) += acq216.o
 
 obj-$(CONFIG_ARCH_DTACQ_WAV232) += wav232.o
 
@@ -126,6 +129,10 @@ acq216-objs := acq216-fifo.o acq216-fiq.o \
 	acq216-fifo-procfs.o acq2xx-fifo.o acq216-offset.o \
 	$(ACQ2XX_FIFO_COMMON)
 
+acq216x-objs := acq216-fifo-x.o acq216-fiq-x.o \
+	acq216-fifo-procfs.o acq2xx-fifo.o acq216-offset.o \
+	$(ACQ2XX_FIFO_COMMON)
+
 acq196-objs := acq196-fifo.o acq196-fiq.o \
 	acq196-fifo-procfs.o acq196-offset.o acq196-AO.o \
 	$(ACQ2XX_FIFO_COMMON)
@@ -160,8 +167,8 @@ acq100_skel-objs := acq100-skel.o
 
 acq196_mac-objs := acq196-mac.o
 
-acq216-fiq.o: acq216-fiq.S
-wav232-fiq.o: wav232-fiq.S
+#acq216-fiq.o: acq216-fiq.S
+#wav232-fiq.o: wav232-fiq.S
 
 acq200-fiq-shell.o: acq200-fiq-shell.S
 
