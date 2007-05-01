@@ -436,8 +436,8 @@ static DRIVER_ATTR(transformer_sectors, S_IRUGO | S_IWUGO,
 
 void acq200_transform_mk_sysfs(struct device_driver *driver)
 {
-	DRIVER_CREATE_FILE(driver, &driver_attr_transformer_transform);
-	DRIVER_CREATE_FILE(driver, &driver_attr_transformer_sectors);
+	driver_create_file(driver, &driver_attr_transformer_transform);
+	driver_create_file(driver, &driver_attr_transformer_sectors);
 }
 
 void acq200_transform_rm_sysfs(struct device_driver *driver)

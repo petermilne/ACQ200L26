@@ -22,10 +22,8 @@
 #ifndef __ACQ200_INLINE_DMA_H__
 #define __ACQ200_INLINE_DMA_H__
 
-#include <asm/arch/iop321-dma.h>
-#ifndef MAXCHAIN
 #define MAXCHAIN 8
-#endif
+
 
 
 struct DmaChannel {
@@ -42,10 +40,7 @@ struct DmaChannel {
 
 
 #define DMA_FIRE(dmac) \
-        (DMA_REG(dmac, DMA_CCR) = IOP321_CCR_CE)
-
-#define DMA_RELOAD(dmac) \
-	(DMA_REG(dmac, DMA_CCR) = IOP321_CCR_CE|IOP321_CCR_CR)
+        (DMA_REG(dmac, DMA_CCR) = IOP321_CCR_CE); \
 
 #define DMA_STA(dmac) \
         (DMA_REG(dmac, DMA_CSR))

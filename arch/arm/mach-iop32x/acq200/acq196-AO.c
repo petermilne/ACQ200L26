@@ -869,7 +869,7 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 		char my_buf[20];
 		unsigned commit_word;
 
-		COPY_FROM_USER(my_buf, buf, min(count, (size_t)20));
+		copy_from_user(my_buf, buf, min(count, (size_t)20));
 
 		if (sscanf(my_buf, "0x%x", &commit_word) == 1 ||
                     sscanf(my_buf, "%d", &commit_word) == 1 ){
@@ -995,7 +995,7 @@ static ssize_t access_wave_read(struct file *filp, char *buf,
 	count = min((int)count, fb_left);
 
 	if (count > 0){
-		COPY_TO_USER(buf, fbCursor(FB(filp), *offset), count);
+		copy_to_user(buf, fbCursor(FB(filp), *offset), count);
 		*offset += count;
 	}
 	return count;
@@ -1336,15 +1336,15 @@ int acq196_AO_fs_create(struct device* dev)
 	memset(AOG, 0, sizeof(struct Globs));
 
 	create_sawg();
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_status);
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_version);
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_sawg_rate);
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_fawg_rate);
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_sawg_sync);
+	device_create_file(dev, &dev_attr_AO_status);
+	device_create_file(dev, &dev_attr_AO_version);
+	device_create_file(dev, &dev_attr_AO_sawg_rate);
+	device_create_file(dev, &dev_attr_AO_fawg_rate);
+	device_create_file(dev, &dev_attr_AO_sawg_sync);
 #ifdef DODGY_DOUBLE_DC_RESET 
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_double_dc_reset);
+	device_create_file(dev, &dev_attr_AO_double_dc_reset);
 #endif
-	DEVICE_CREATE_FILE(dev, &dev_attr_hook_eoc);
+	device_create_file(dev, &dev_attr_hook_eoc);
 	return register_filesystem(&AO_fs_type);
 }
 void acq196_AO_fs_remove(void)
