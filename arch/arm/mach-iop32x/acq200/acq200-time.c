@@ -69,11 +69,11 @@ iop3xx_timer_interrupt(int irq, void *dev_id)
 	int tick_insert = 0;
 
 	/* intack */
-        asm volatile("mcr p6, 0, %0, c6, c1, 0" : : "r" (1));
+	write_tisr(1);
 
 	iop321_auxtimer_func();
 
-        while ((signed long)(next_jiffy_time - *IOP3XX_TU_TCR1)
+        while ((signed long)(next_jiffy_time - read_tcr1())
                                                         >= ticks_per_jiffy) {
 
 	        write_seqlock(&xtime_lock);
@@ -81,8 +81,8 @@ iop3xx_timer_interrupt(int irq, void *dev_id)
 	        write_sequnlock(&xtime_lock);
 
 		if (++tick_insert >= MAX_CATCHUP){
-                       next_jiffy_time = *IOP3XX_TU_TCR1;
-                       break;
+			next_jiffy_time = read_tcr1();
+			break;
 		}else{
 			next_jiffy_time -= ticks_per_jiffy;
 		}
@@ -143,10 +143,10 @@ void __init acq200_init_time(unsigned long tick_rate)
 	 * We use timer 0 for our timer interrupt, and timer 1 as
 	 * monotonic counter for tracking missed jiffies.
 	 */
-	asm volatile("mcr p6, 0, %0, c4, c1, 0" : : "r" (timer_load));
-	asm volatile("mcr p6, 0, %0, c0, c1, 0" : : "r" (timer_ctl));
-	asm volatile("mcr p6, 0, %0, c5, c1, 0" : : "r" (0xffffffff));
-	asm volatile("mcr p6, 0, %0, c1, c1, 0" : : "r" (timer_ctl));
+	write_trr0(timer_load);
+	write_tmr0(timer_ctl);
+	write_trr1(0xffffffff);
+	write_tmr1(timer_ctl);
 
 	setup_irq(IRQ_IOP3XX_TIMER0, &iop3xx_timer_irq);
 }

@@ -41,24 +41,9 @@ static unsigned long next_jiffy_time;
 
 unsigned long iop_gettimeoffset(void)
 {
-	unsigned long offset, temp1, temp2;
+	unsigned long offset;
 
-	/* enable cp6, if necessary, to avoid taking the overhead of an
-	 * undefined instruction trap
-	 */
-	asm volatile (
-	"mrc	p15, 0, %0, c15, c1, 0\n\t"
-	"ands	%1, %0, #(1 << 6)\n\t"
-	"orreq	%0, %0, #(1 << 6)\n\t"
-	"mcreq	p15, 0, %0, c15, c1, 0\n\t"
-#ifdef CONFIG_XSCALE
-	"mrceq	p15, 0, %0, c15, c1, 0\n\t"
-	"moveq	%0, %0\n\t"
-	"subeq	pc, pc, #4\n\t"
-#endif
-	: "=r"(temp1), "=r"(temp2) : : "cc");
-
-	offset = next_jiffy_time - read_tcr1();
+	offset = next_jiffy_time - *IOP3XX_TU_TCR1;
 
 	return offset / ticks_per_usec;
 }
