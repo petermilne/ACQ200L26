@@ -43,9 +43,16 @@
 
 /* BS 16384 - NO CHECK_2B, app processing adds endstop */
 
+/* Keep the core off the bus for 32 usecs:	@400MIPS, 2 IP/cycle */
 
-#if (DMA_BLOCK_LEN == 16384)
+#if (DMA_BLOCK_LEN == 16384 || DMA_BLOCK_LEN == (16384+8192))
+#if (DMA_BLOCK_LEN == 16384)	
 #warning DMA_BLOCK_LEN 16384 ISR_ADDS_ENDSTOP 0
+#define DMA_DELAY	(8*400/2)		
+#elif (DMA_BLOCK_LEN == (16384+8192))
+#warning DMA_BLOCK_LEN 16384+8192 ISR_ADDS_ENDSTOP 0
+#define DMA_DELAY	(32*400/2)		
+#endif			
 #define ACQ200_FIFCON_COLD_TH ACQ200_FIFCON_HITIDE_01	
 #define CHECK_2B 0
 #define TIDE_RAMP 0

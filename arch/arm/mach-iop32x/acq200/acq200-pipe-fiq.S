@@ -56,9 +56,10 @@
 @ 165 - attempt to fix 1/1000 broken chain with DWB before DMAC arm
 @ 170 - re-introduce ISR_ADDS_ENDSTOP for ACQ216/16K
 @ 171 - remember to Q to active
-@ 172 - CAF fail (196) caused stack fail 
+@ 172 - CAF fail (196) caused stack fail
+@ 173 - DMA_DELAY - force tight loop in FIQ to allow DMA priority	
 	
-#define VERSION 0x00000172
+#define VERSION 0x00000173
 
 /*
  * WE DONT CARE if CAF still set. 'cos first thing we do is DISABLE IT
@@ -405,6 +406,12 @@ teeup_next_call:
 		ldr	head_pa, [next, #DMA_DESCR_SW_PA]
 
 fiq_done:
+#ifdef ACQ216	
+		mov	r0,#DMA_DELAY
+_dma_delay:	
+		subs	r0,r0,#1
+		bne	_dma_delay
+#endif		
 		ldmea	sp, {r0-r7,lr}
 		subs	pc, lr, #4
 
