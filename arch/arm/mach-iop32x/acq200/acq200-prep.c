@@ -327,7 +327,7 @@ static void prep_initBBRP(
 {
 	unsigned offsam = get_fileOffsetSamples(file, offset, 
 				  DG->sample_read_stride, DCI(file)->ssize);
-	struct Phase* phase = DCI(file)->phase;
+	struct Phase* phase = DCI_PHASE(file);
 	struct TblockListElement* tble = getTble(phase, offsam);
 
 	dbg(2,"buf %p len %d offset %lu phase %p", 
@@ -368,10 +368,11 @@ static int xxp_open(struct inode *inode, struct file *file)
 	dbg(1, "");
 	acq200_fifo_bigbuf_xx_open (inode, file);
 
-	DCI(file)->phase = (struct Phase*)inode->i_private;
+	DCI_PHASE(file) = (struct Phase*)inode->i_private;
 
-	dbg(1, "phase %s tb %d ssize %d", DCI(file)->phase->name,
-	    getPhaseTblockCount(DCI(file)->phase),
+	dbg(1, "phase %s tb %d ssize %d", 
+	    DCI_PHASE(file)->name,
+	    getPhaseTblockCount(DCI_PHASE(file)),
 	    DCI(file)->ssize);
 
 	return 0;
@@ -633,22 +634,17 @@ static ssize_t spec_read(struct file *file, char *buf,
 
 			if (spec->errmsg){
 				ncopy = strlen(spec->errmsg);
-				copy_to_user(buf, spec->errmsg, ncopy);
+				COPY_TO_USER(buf, spec->errmsg, ncopy);
 				buf += ncopy;
 			}
 			if (spec->def){
 				dbg(1, "%12s %s", specShowFlags(spec),
 				    spec->def);
 				ncopy = strlen(spec->def);
-				if (copy_to_user(buf, spec->def, ncopy)){
-					return -EFAULT;
-				}
+				COPY_TO_USER(buf, spec->def, ncopy);
 				buf += ncopy;
 			}
-			if (copy_to_user(buf, "\n", 1)){
-				return -EFAULT;
-			}
-
+			COPY_TO_USER(buf, "\n", 1);
 			*offset += 1;
 			return msg_len;
 		}else{
@@ -1164,11 +1160,19 @@ static int init_text(struct TextBuffer *tb, int len)
 static int init_spec(struct SpecFileBuffer *spec)
 {
 #define POOLSZ (MAXSPEC*sizeof(struct Spec))
-	int rc;
-	
-	(rc = (spec->spec_pool = vmalloc(POOLSZ)) == 0) ||
-	(rc = init_text(&spec->source_text, MAXSPEC_TXT)) ||
-	(rc = init_text(&spec->err_text, MAXERR));
+	int rc = 0;
+
+	spec->spec_pool = vmalloc(POOLSZ);
+	if (!spec->spec_pool){
+		BUG();
+	}
+
+	if ((rc = init_text(&spec->source_text, MAXSPEC_TXT)) != 0){
+		return rc;
+	}
+	if ((rc = init_text(&spec->err_text, MAXERR)) != 0){
+		return rc;
+	}
 
 	INIT_LIST_HEAD(&spec->specs);
 	return rc;
