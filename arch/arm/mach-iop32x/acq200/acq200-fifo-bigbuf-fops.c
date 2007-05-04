@@ -1201,12 +1201,13 @@ static ssize_t status_tb_read (
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
 
 	rc = snprintf(lbuf, min(sizeof(lbuf), len), 
-			"tblock %d phys:0x%08x len %d scount %d\n", 
-			 tle->tblock->iblock, 
-			 pa_buf(DG) + tle->tblock->offset,
-			 tle->tblock->length,
-			 tle->sample_count
-		);
+			"tblock %3d off 0x%08x phys:0x%08x len %d scount %d\n",
+			tle->tblock->iblock, 
+			tle->tblock->offset,
+			pa_buf(DG) + tle->tblock->offset,
+			tle->tblock->length,
+			tle->sample_count
+			);
 
 	spin_lock(&DG->tbc.lock);
 	acq200_phase_release_tblock_entry(tle);
