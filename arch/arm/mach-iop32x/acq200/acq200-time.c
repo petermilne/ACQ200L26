@@ -139,6 +139,7 @@ void __init acq200_init_time(unsigned long tick_rate)
 	ticks_per_usec = tick_rate / 1000000;
 	next_jiffy_time = 0xffffffff;
 
+	iop_tick_rate = tick_rate;
 	printk("iop3xx_init_time tick_rate %lu ticks_per_jiffy %lu usec %lu\n",
 	       tick_rate, ticks_per_jiffy, ticks_per_usec);
 

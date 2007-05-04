@@ -192,6 +192,9 @@ extern void gpio_line_set(int line, int value);
 #define IOP_TMR_RELOAD	    0x04
 #define IOP_TMR_PRIVILEGED 0x08
 #define IOP_TMR_RATIO_1_1  0x00
+/* Watchdog timer definitions */ 
+#define IOP_WDTCR_EN_ARM        0x1e1e1e1e 
+#define IOP_WDTCR_EN            0xe1e1e1e1 
 
 /* Application accelerator unit  */
 #define IOP3XX_AAU_ACR		(volatile u32 *)IOP3XX_REG_ADDR(0x0800)
@@ -313,6 +316,16 @@ static inline void write_trr1(u32 val)
 static inline void write_tisr(u32 val)
 {
 	asm volatile("mcr p6, 0, %0, c6, c1, 0" : : "r" (val));
+}
+static inline u32 read_wdtcr(void)
+{
+	u32 val;
+	asm volatile("mrc p6, 0, %0, c7, c1, 0":"=r" (val));
+	return val;
+}
+static inline void write_wdtcr(u32 val)
+{
+	asm volatile("mcr p6, 0, %0, c7, c1, 0"::"r" (val));
 }
 
 extern struct platform_device iop3xx_i2c0_device;
