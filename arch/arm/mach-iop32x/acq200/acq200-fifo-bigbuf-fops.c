@@ -26,6 +26,8 @@
  *   define customer Extractor
  *   hook up.
  */
+
+#include "acqX00-port.h"
 #include "acq200-fifo-local.h"
 
 #include "acq200_minors.h"

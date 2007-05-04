@@ -61,6 +61,14 @@ unsigned long iop_gettimeoffset(void)
         return offset / ticks_per_usec;
 }
 
+static unsigned long iop_tick_rate;
+unsigned long get_iop_tick_rate(void)
+{
+	return iop_tick_rate;
+}
+EXPORT_SYMBOL(get_iop_tick_rate);
+
+
 extern void iop321_auxtimer_func(void);
 
 static irqreturn_t
