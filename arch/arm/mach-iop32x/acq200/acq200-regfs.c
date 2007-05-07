@@ -49,6 +49,7 @@
 /* keep debug local to this module */
 #define acq200_debug acq200_regfs_debug   
 
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
 
@@ -124,7 +125,7 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 
 static int mk_reg_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
 	return 0;
 }
 
@@ -193,7 +194,7 @@ static ssize_t reg_data_write(struct file *filp, const char *buf,
 		count = 15;
 	}
 
-	copy_from_user(lbuf, buf, count);
+	COPY_FROM_USER(lbuf, buf, count);
 
 	if (sscanf(lbuf, "0x%x", &value) == 1){
 		CLR_DECIMAL(filp->private_data);
@@ -400,9 +401,12 @@ static struct platform_device acq200_regfs_device = {
 
 static int __init acq200_regfs_init( void )
 {
+	int rc;
 	acq200_debug = acq200_regfs_debug;
 
-	driver_register(&acq200_regfs_driver);
+	if ((rc = driver_register(&acq200_regfs_driver)) != 0){
+		return rc;
+	}
 	return platform_device_register(&acq200_regfs_device);
 }
 
