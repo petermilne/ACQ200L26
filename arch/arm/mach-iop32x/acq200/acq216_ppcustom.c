@@ -48,6 +48,7 @@
 /* keep debug local to this module */
 #define acq200_debug acq216_ppcustom_debug   
 
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
 
