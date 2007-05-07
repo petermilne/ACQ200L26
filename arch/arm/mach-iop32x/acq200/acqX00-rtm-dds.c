@@ -46,6 +46,8 @@
 #endif
 
 #define acq200_debug rtm_debug
+
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
 
@@ -549,14 +551,14 @@ static DEVICE_ATTR(refclk_mult, S_IRUGO|S_IWUGO,
 
 static void mk_rtm_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_ftw1);
-	device_create_file(dev, &dev_attr_ftw1_bin);
-	device_create_file(dev, &dev_attr_clksrc);
-	device_create_file(dev, &dev_attr_clkdst);
-	device_create_file(dev, &dev_attr_rio_outputs);
-	device_create_file(dev, &dev_attr_refclk_mult);
-	device_create_file(dev, &dev_attr_qdacsrc);
-	device_create_file(dev, &dev_attr_qdac);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ftw1);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ftw1_bin);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clksrc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clkdst);
+	DEVICE_CREATE_FILE(dev, &dev_attr_rio_outputs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_refclk_mult);
+	DEVICE_CREATE_FILE(dev, &dev_attr_qdacsrc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_qdac);
 }
 
 static void rtm_dev_release(struct device * dev)
@@ -603,9 +605,10 @@ static struct platform_device rtm_device = {
 
 static int __init rtm_init( void )
 {
-
-
-	driver_register(&rtm_driver);
+	int rc = driver_register(&rtm_driver);
+	if (rc){
+		return rc;
+	}
 	return platform_device_register(&rtm_device);
 }
 
