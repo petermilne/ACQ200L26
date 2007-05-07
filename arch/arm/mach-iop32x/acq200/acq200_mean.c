@@ -49,6 +49,7 @@
 /* keep debug local to this module */
 #define acq200_debug acq200_mean_debug   
 
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "acq200-fifo-local.h"     /* DG */
 
@@ -333,7 +334,7 @@ static ssize_t ch_read(
 {
         if (count > sizeof(int) && *offset == 0){
 		int my_mean = getMean((int)filp->private_data);
-		copy_to_user(buf, &my_mean, sizeof(int));
+		COPY_TO_USER(buf, &my_mean, sizeof(int));
 		*offset = 4;
 		return sizeof(int);
 	}
