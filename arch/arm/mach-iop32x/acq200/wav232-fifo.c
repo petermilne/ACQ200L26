@@ -229,7 +229,7 @@ static struct DevGlobs wav232_dg = {
 
 static void load_dmac_chain( int entries )
 {
-	struct iop321_dma_desc *pbuf;
+	struct iop321_dma_desc *pbuf = 0;
 	struct iop321_dma_desc *head = 0;
 	struct iop321_dma_desc *pbuf_m1 = 0;
 
