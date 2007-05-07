@@ -18,6 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
+#include "acqX00-port.h"
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
 
@@ -337,7 +338,7 @@ void transform5(short *to, short *from, int nwords, int stride)
 void transform12344321(short *to, short *from, int nwords, int stride)
 {
 	int ns = nwords/stride;
-	int isample, ichannel;
+	int isample;
 	int nq = stride/4;
 
 	for (isample = 0; isample < ns-1; ++isample){
@@ -436,8 +437,8 @@ static DRIVER_ATTR(transformer_sectors, S_IRUGO | S_IWUGO,
 
 void acq200_transform_mk_sysfs(struct device_driver *driver)
 {
-	driver_create_file(driver, &driver_attr_transformer_transform);
-	driver_create_file(driver, &driver_attr_transformer_sectors);
+	DRIVER_CREATE_FILE(driver, &driver_attr_transformer_transform);
+	DRIVER_CREATE_FILE(driver, &driver_attr_transformer_sectors);
 }
 
 void acq200_transform_rm_sysfs(struct device_driver *driver)
