@@ -162,9 +162,13 @@ static int __init acq200_fifo_init( void )
 	info( "acq200_debug set %d\n", acq200_debug );
 
 
-	(rc = pci_register_driver( &acq200_fpga_driver )) >= 0 &&
-	(rc = mk_sysfs( &acq200_fpga_driver.driver)) >= 0;
-	return rc;
+	if ((rc = pci_register_driver( &acq200_fpga_driver )) < 0){
+		return rc;
+	}
+	if ((rc = mk_sysfs( &acq200_fpga_driver.driver)) < 0){
+		return rc;
+	}
+	return 0;
 }
 
 
