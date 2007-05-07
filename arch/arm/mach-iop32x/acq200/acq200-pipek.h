@@ -6,9 +6,8 @@
  */
 
 
-
-/* acq200-fifo.h $Revision: 1.5 $ */
-#define CONSTS_VERSION       4
+/* acq200-fifo.h $Revision: 1.23 $ */
+#define CONSTS_VERSION       5
 #define FIQDEBUG             0
 #define RBLEN                16384
 #define DG_CAFEBABE            40 /* 0x28 */
