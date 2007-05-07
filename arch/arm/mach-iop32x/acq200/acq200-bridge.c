@@ -47,6 +47,7 @@
 
 #include <asm/arch-iop32x/iop321.h>
 
+#include "acqX00-port.h"
 #include "acq200.h"
 #include "acq200-bridge.h"
 
@@ -506,13 +507,9 @@ static struct pci_driver acq200_bridge_driver = {
 
 static int __init acq200_bridge_init( void )
 {
-	int rc;
-
 	acq200_debug = acq200_bridge_debug;
 
-	(rc = pci_register_driver( &acq200_bridge_driver )) >= 0;
-
-	return rc;
+	return pci_register_driver( &acq200_bridge_driver );
 }
 
 
