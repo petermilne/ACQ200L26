@@ -56,6 +56,7 @@
 /* keep debug local to this module */
 #define acq200_debug acq2xx_pwm_debug   
 
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
 
@@ -561,10 +562,14 @@ static struct platform_device acq2xx_pwm_device = {
 
 static int __init acq2xx_pwm_init( void )
 {
+	int rc;
 	acq200_debug = acq2xx_pwm_debug;
 
-	driver_register(&acq2xx_pwm_driver);
-	return platform_device_register(&acq2xx_pwm_device);
+	if ((rc = driver_register(&acq2xx_pwm_driver)) == 0){
+		return platform_device_register(&acq2xx_pwm_device);
+	}else{
+		return rc;
+	}
 }
 
 
