@@ -45,6 +45,7 @@
 #include <linux/module.h>
 #endif
 
+#include "acqX00-port.h"
 #include "acq200.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
