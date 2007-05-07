@@ -574,8 +574,7 @@ static void* ipc_seq_get(struct seq_file *s)
 		dbg(1, "EMPTY");
 		return NULL;
 	}else{
-		struct iop321_dma_desc *cursor;
-
+		struct iop321_dma_desc *cursor = 0;
 		
 		rb_get(&THIS(s)->rb, &cursor);
 		THIS(s)->cursor = cursor;
