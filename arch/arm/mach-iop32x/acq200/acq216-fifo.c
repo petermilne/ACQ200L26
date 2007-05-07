@@ -1218,7 +1218,7 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 	dbg( 2, "len %d *offset %d", len, (int)*offset );
 
-	copy_to_user( buf, va_buf_offset( DG, *offset ), len );
+	COPY_TO_USER( buf, va_buf_offset( DG, *offset ), len );
 	*offset += len;
 
 	return len;
@@ -1267,7 +1267,7 @@ acq200_fpga_live_read_one_frame_per_dcb(
 	dma_sync_single(DG->dev, dcb->handle+dcb->last_start, 
 			len, DMA_FROM_DEVICE);
 
-        copy_to_user(buf, base+dcb->last_start, len);
+        COPY_TO_USER(buf, base+dcb->last_start, len);
 	*offset += len;
 	
 	return len;
