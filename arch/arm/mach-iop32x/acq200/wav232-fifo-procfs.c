@@ -764,7 +764,9 @@ static ssize_t store_swap_alt_len(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	sscanf(buf, "0x%x", &swap_alt_len) || sscanf(buf, "%d", &swap_alt_len);
+	if (sscanf(buf, "0x%x", &swap_alt_len) == 0){
+		sscanf(buf, "%d", &swap_alt_len);
+	}
 	return strlen(buf);
 }
 
