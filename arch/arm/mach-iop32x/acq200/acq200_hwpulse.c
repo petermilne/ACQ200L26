@@ -38,7 +38,7 @@
 /* keep debug local to this module */
 #define acq200_debug acq200_pulse_debug   
 
-
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "acq200-fifo-local.h"     /* DG */
 
@@ -501,10 +501,10 @@ static DEVICE_ATTR(version, S_IRUGO, show_version, 0);
 
 static int mk_pulse_sysfs(struct device *dev)
 {
-	device_create_file(dev, &dev_attr_version);
-	device_create_file(dev, &dev_attr_pulse_def);
-	device_create_file(dev, &dev_attr_trig);
-	device_create_file(dev, &dev_attr_genDO);
+	DEVICE_CREATE_FILE(dev, &dev_attr_version);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_def);
+	DEVICE_CREATE_FILE(dev, &dev_attr_trig);
+	DEVICE_CREATE_FILE(dev, &dev_attr_genDO);
 	return 0;
 }
 
@@ -565,6 +565,7 @@ static struct platform_device acq200_pulse_device = {
 
 static int __init acq200_pulse_init( void )
 {
+	int rc;
 	acq200_debug = acq200_pulse_debug;
 
 	info("%s %s %s",
@@ -573,7 +574,9 @@ static int __init acq200_pulse_init( void )
 
 	init_signals();
 	start_work();
-	driver_register(&acq200_pulse_driver);
+	if ((rc = driver_register(&acq200_pulse_driver)) != 0){
+		return rc;
+	}
 	return platform_device_register(&acq200_pulse_device);
 }
 
