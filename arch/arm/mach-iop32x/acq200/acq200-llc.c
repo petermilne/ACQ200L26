@@ -65,6 +65,7 @@
 /* keep debug local to this module */
 #define acq200_debug acq200_llc_debug   
 
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "mask_iterator.h"
 
@@ -1037,7 +1038,9 @@ static ssize_t set_llc_mask(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	sscanf(buf, "0x%x", &dg.imask) || sscanf(buf, "%x", &dg.imask);
+	if (sscanf(buf, "0x%x", &dg.imask) == 0){
+		sscanf(buf, "%x", &dg.imask);
+	}
 
 	return strlen(buf);
 }
