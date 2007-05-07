@@ -96,6 +96,7 @@ static const char* VERID =
 static int acq200_debug;
 
 #include "acq200.h"
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 #include "acq200_minors.h"
 
