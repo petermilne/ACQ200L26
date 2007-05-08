@@ -53,7 +53,6 @@
 #include <asm/arch/iop321-irqs.h>
 #include <asm/arch/acqX00-irq.h>
 
-#include "acqX00-port.h"
 #include "acq200-fifo-top.h"
 #include "acq200-fifo-tblock.h"
 #include "acq200-stream-api.h"
@@ -522,22 +521,19 @@ static int woOnRefill(
 static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 {
 	struct list_head* clients = &DG->tbc.clients;
-	struct LOCK_LIST* pool = &DG->bigbuf.pool_tblocks;
+	struct list_head* pool = &DG->bigbuf.pool_tblocks;
 	spin_lock(&DG->tbc.lock);
 
 	if (!list_empty(clients)){
 		struct TblockConsumer *tbc;
 
 		list_for_each_entry(tbc, clients, list){
-			TBLE* tle = TBLE_LIST_ENTRY(pool->list.next);
+			TBLE* tle = TBLE_LIST_ENTRY(pool->next);
 
 			atomic_inc(&tblock->in_phase);
 			tle->tblock = tblock;
 
-			spin_lock(&pool->lock);
-			list_move_tail(pool->list.next, &tbc->tle_q);
-			spin_unlock(&pool->lock);
-
+			list_move_tail(pool->next, &tbc->tle_q);
 			wake_up_interruptible(&tbc->waitq);	
 		}
 	}
@@ -550,7 +546,7 @@ static struct TblockListElement* dmc_phase_add_tblock(
 	)
 /* append new tblock to phase. If phase is big enough, recycle one from tail */
 {
-	struct list_head* empty_tblocks = &DG->bigbuf.empty_tblocks.list; 
+	struct list_head* empty_tblocks = &DG->bigbuf.empty_tblocks; 
 
 	dbg(2, "");
 
@@ -573,8 +569,6 @@ static struct TblockListElement* dmc_phase_add_tblock(
 			_dmc_handle_tb_clients(
 				TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
 		}
-		
-		spin_lock(&DG->bigbuf.empty_tblocks.lock);
 		list_move_tail(empty_tblocks->next, &phase->tblocks);
 
 		*start_off = tle->tblock->offset;
@@ -596,14 +590,11 @@ static void share_tblock(
 	struct TblockListElement* src,
 	struct TblockListElement* dst )
 {
-	struct LOCK_LIST* pool = &DG->bigbuf.pool_tblocks;
+	struct list_head* pool_tblocks = &DG->bigbuf.pool_tblocks;
 
 	dst->tblock = src->tblock;
 	atomic_inc(&src->tblock->in_phase);
-
-	spin_lock(&pool->lock);
-	list_move_tail(pool->list.next, &np->tblocks);
-	spin_unlock(&pool->lock);
+	list_move_tail(pool_tblocks->next, &np->tblocks);
 }
 
 static void share_last_tblock(struct Phase* np, struct Phase* op)
@@ -612,7 +603,7 @@ static void share_last_tblock(struct Phase* np, struct Phase* op)
  * add to new phase, incrementing usage count
  */
 {
-	struct LOCK_LIST *pool = &DG->bigbuf.pool_tblocks;
+	struct list_head* pool_tblocks = &DG->bigbuf.pool_tblocks;
 	struct TblockListElement* src;
 	struct TblockListElement* dst;
 
@@ -621,13 +612,13 @@ static void share_last_tblock(struct Phase* np, struct Phase* op)
 		info("op %s list empty, drop out", op->name);
 		return;
 	}
-	if (unlikely(list_empty(&pool->list))){
+	if (unlikely(list_empty(pool_tblocks))){
 		finish_with_engines(-__LINE__);
 		return;
 	}
 
 	src = list_entry(op->tblocks.prev, struct TblockListElement, list);
-	dst = list_entry(pool->list.next, struct TblockListElement, list);
+	dst = list_entry(pool_tblocks->next, struct TblockListElement, list);
 
 	dbg(1, "src %p dst %p", src, dst);
 	share_tblock(np, src, dst);
@@ -889,24 +880,17 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 	unsigned this_empty = wo->next_empty;
 
 	if (unlikely(this_empty == 0)){
-		struct LOCK_LIST* free_blocks = &DG->bigbuf.free_tblocks;
-		struct LOCK_LIST* empty_tblocks = &DG->bigbuf.empty_tblocks; 
+		struct list_head* free_blocks = &DG->bigbuf.free_tblocks;
+		struct list_head* empty_tblocks = &DG->bigbuf.empty_tblocks; 
 
-		if (unlikely(list_empty(&free_blocks->list))){
+		if (unlikely(list_empty(free_blocks))){
 /** @@todo - this isn't necessarily the EOTW should drop out and try later */
 //			finish_with_engines(-__LINE__);
 			return ~1;
 		}else{
 			struct TblockListElement* tble = 
-				TBLE_LIST_ENTRY(free_blocks->list.next);
-
-			spin_lock(&free_blocks->lock);
-			spin_lock(&empty_tblocks->lock);
-			list_move_tail(free_blocks->list.next, 
-						&empty_tblocks->list);
-			spin_unlock(&empty_tblocks->lock);
-			spin_unlock(&free_blocks->lock);
-
+				TBLE_LIST_ENTRY(free_blocks->next);
+			list_move_tail(free_blocks->next, empty_tblocks);
 			this_empty = tble->tblock->offset;
 			wo->next_empty = this_empty + DMA_BLOCK_LEN;
 		}
@@ -929,12 +913,9 @@ unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
 	dbg(2, "01 %p", wo);
 
 	if (!bbb){
-		struct list_head* free_blocks = &DG->bigbuf.free_tblocks.list;
-
-		spin_lock(&DG->bigbuf.free_tblocks.lock);
+		struct list_head* free_blocks = &DG->bigbuf.free_tblocks;
 		bbb = TBLE_LIST_ENTRY(free_blocks->next);
 		list_del(&bbb->list);
-		spin_unlock(&DG->bigbuf.free_tblocks.lock);
 	}
 	
 	if (IPC->empties.nput < wo->bda_blocks.before){
@@ -956,10 +937,8 @@ unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
 static void bda_release_tblock(void)
 {
 	if (bbb){
-		struct LOCK_LIST* free_blocks = &DG->bigbuf.free_tblocks;
-		spin_lock(&free_blocks->lock);
-		list_add_tail(&bbb->list, &free_blocks->list);
-		spin_unlock(&free_blocks->lock);
+		struct list_head* free_blocks = &DG->bigbuf.free_tblocks;
+		list_add_tail(&bbb->list, free_blocks);
 		bbb = 0;
 	}
 }
@@ -1053,7 +1032,7 @@ static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
 		struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 		u32 local_pa = wo->pa + empty_offset;
 #if (ISR_ADDS_ENDSTOP == 0)
-		struct iop321_dma_desc *endstop = 0;
+		struct iop321_dma_desc *endstop;
 #endif
 
 		if (!dmad){
@@ -1220,7 +1199,7 @@ u32 acq200_get_fifsta(void) {
 	return *FIFSTAT;
 }
 
-#ifdef ACQ196
+
 static void run_dmc_early_action(u32 fifstat)
 /** executes at interrupt priority. We assume client list is short! - 
  * also, that the early_actions() can be called from interrupt state.
@@ -1238,7 +1217,7 @@ static void run_dmc_early_action(u32 fifstat)
 		}
 	}
 }
-#endif
+
 
 static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 {

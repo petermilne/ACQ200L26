@@ -103,12 +103,10 @@ int show_hook(struct ArgBlock *argBlock, char* buf, int maxbuf)
 }
 
 
-/*
 static int isspace(char c)
 {
 	return strchr( " \t", c) != 0;
 }
-*/
 #define MAXARGS 20
 
 int store_hook(struct ArgBlock *argBlock, const char* buf, int count)

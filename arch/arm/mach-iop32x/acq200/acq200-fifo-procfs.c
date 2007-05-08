@@ -31,7 +31,7 @@
 "Build 1078 " __DATE__ " "__TIME__
 
 
-#include "acqX00-port.h"
+
 #include "acq200-fifo-tblock.h"
 #include "dio_defs.h"
 
@@ -3002,7 +3002,7 @@ static int acq200_proc_free_tblocks(
 
 	PRINTF("list of free tblocks\n");
 
-	list_for_each_entry(tle, &DG->bigbuf.free_tblocks.list, list){
+	list_for_each_entry(tle, &DG->bigbuf.free_tblocks, list){
 		PRINTF("%2d %2d %08x\n", 
 		       iblock, tle->tblock->iblock, tle->tblock->offset);
 		++iblock;
@@ -3037,16 +3037,15 @@ static int acq200_proc_empty_tblocks(
 #define PRINTF(fmt, args...) len += sprintf(buf+len, fmt, ## args)
 
 	PRINTF("list of empty tblocks %d\n", 
-	       list_length(&DG->bigbuf.empty_tblocks.list) );
+	       list_length(&DG->bigbuf.empty_tblocks) );
 
-	list_for_each_entry(tle, &DG->bigbuf.empty_tblocks.list, list){
+	list_for_each_entry(tle, &DG->bigbuf.empty_tblocks, list){
 		PRINTF("%2d %2d %08x\n", 
 		       iblock, tle->tblock->iblock, tle->tblock->offset);
 		++iblock;
 	}
 
-	PRINTF("pool of tles: %d\n", 
-			list_length(&DG->bigbuf.pool_tblocks.list));
+	PRINTF("pool of tles: %d\n", list_length(&DG->bigbuf.pool_tblocks));
 #undef PRINTF
 	return len;
 }
