@@ -27,7 +27,7 @@
 
 #define DMA_BLOCK_LEN 0xdeadbeef  /* FIXME PLEASE - not used here */
 
-
+#include "acqX00-port.h"
 #include "acq200-fifo-local.h"
 #include "acq200_debug.h"
 
@@ -60,7 +60,7 @@ int tblock_raw_extractor(
 	offset *= NCHAN;
 
 	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
-		copy_to_user(ubuf+cplen, bblock_base + offset, sizeof(short));
+		COPY_TO_USER(ubuf+cplen, bblock_base + offset, sizeof(short));
 		offset += stride;
 	}
 
@@ -81,7 +81,7 @@ int tblock_cooked_extractor(
 
 	maxbuf = min(maxbuf, bblock_samples-offset);
 	if (stride == 1){
-		copy_to_user(ubuf, bblock_base + offset, maxbuf*2);
+		COPY_TO_USER(ubuf, bblock_base + offset, maxbuf*2);
 	}else{
 		int cplen;
 
@@ -89,7 +89,7 @@ int tblock_cooked_extractor(
 
 		for(cplen = 0; cplen < maxbuf && offset < this->length; 
 		    ++cplen){
-			copy_to_user(ubuf+cplen, 
+			COPY_TO_USER(ubuf+cplen, 
 				     bblock_base + offset, 
 				     sizeof(short));
 			offset += stride;
@@ -114,7 +114,7 @@ int tblock_raw_filler(
 	offset *= NCHAN;
 
 	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
-		copy_from_user(bblock_base+offset, ubuf+cplen, sizeof(short));
+		COPY_FROM_USER(bblock_base+offset, ubuf+cplen, sizeof(short));
 		offset += stride;
 	}
 
@@ -134,7 +134,7 @@ int tblock_cooked_filler(
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 
 	maxbuf = min(maxbuf, bblock_samples-offset);
-	copy_from_user(bblock_base + offset, ubuf, maxbuf*2);
+	COPY_FROM_USER(bblock_base + offset, ubuf, maxbuf*2);
 
 	DBG(1, "returns maxbuf %d", maxbuf);
 	return maxbuf;

@@ -1056,7 +1056,7 @@ static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
 		struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 		u32 local_pa = wo->pa + empty_offset;
 #if (ISR_ADDS_ENDSTOP == 0)
-		struct iop321_dma_desc *endstop;
+		struct iop321_dma_desc *endstop = 0;
 #endif
 
 		if (!dmad){
@@ -1223,7 +1223,7 @@ u32 acq200_get_fifsta(void) {
 	return *FIFSTAT;
 }
 
-
+#ifdef ACQ196
 static void run_dmc_early_action(u32 fifstat)
 /** executes at interrupt priority. We assume client list is short! - 
  * also, that the early_actions() can be called from interrupt state.
@@ -1241,7 +1241,7 @@ static void run_dmc_early_action(u32 fifstat)
 		}
 	}
 }
-
+#endif
 
 static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 {

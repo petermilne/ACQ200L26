@@ -46,6 +46,7 @@
 #include <linux/fs.h>     	/* This is where libfs stuff is declared */
 #include <asm/uaccess.h>	/* copy_to_user */
 
+#include "acqX00-port.h"
 /* keep debug local to this module */
 #define acq200_debug acq200_mean_debug   
 
