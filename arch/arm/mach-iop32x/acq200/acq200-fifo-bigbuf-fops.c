@@ -1140,20 +1140,6 @@ static int dma_tb_release (
 	return 0;
 }
 
-static unsigned int tb_poll(
-	struct file *file, struct poll_table_struct *poll_table)
-{
-	struct TblockConsumer *tbc = DCI_TBC(file);
-
-	if (list_empty(&tbc->tle_q)){
-		poll_wait(file, &tbc->waitq, poll_table);
-	}
-	if (!list_empty(&tbc->tle_q)){
-		return POLLIN | POLLRDNORM;
-	}else{
-		return 0;
-	}
-}
 static ssize_t dma_tb_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset)
 /** read output a mu_rma descriptor. 
@@ -1199,7 +1185,6 @@ static ssize_t dma_tb_read (
 	}
 	return ncopy;
 }
-
 
 static ssize_t status_tb_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset)
@@ -1468,14 +1453,12 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	static struct file_operations dma_tb_ops = {
 		.open = dma_tb_open,
 		.read = dma_tb_read,
-		.release = dma_tb_release,
-		.poll = tb_poll
+		.release = dma_tb_release
 	};
 	static struct file_operations dma_tbstatus_ops = {
 		.open = dma_tb_open,
 		.read = status_tb_read,
-		.release = dma_tb_release,
-		.poll = tb_poll
+		.release = dma_tb_release
 	};
 
 	static struct tree_descr front = {
