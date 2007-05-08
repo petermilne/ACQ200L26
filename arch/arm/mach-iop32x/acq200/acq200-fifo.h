@@ -508,6 +508,7 @@ struct DevGlobs {
 	int show_event;
 
 	struct BIGBUF {
+		spinlock_t tb_list_lock;	/* protects these lists: */
 		struct list_head free_tblocks;  /* unallocated */
 		struct list_head empty_tblocks; /* DMA_BLOCKS in empties Q */
 		struct list_head pool_tblocks;  /* pool of tblock wrappers */

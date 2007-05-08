@@ -221,14 +221,18 @@ static void tblock_clear(struct TBLOCK *tblock)
 void acq200_empties_release_tblocks(void)
 {
 	struct BIGBUF *bb = &DG->bigbuf;
-
+	unsigned long flags;
+	
+	spin_lock_irqsave(&bb->tb_list_lock, flags);
 	list_splice_init(&bb->empty_tblocks, &bb->free_tblocks);
+	spin_unlock_irqrestore(&bb->tb_list_lock, flags);	
 }
 
 void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 {
 	struct BIGBUF *bb = &DG->bigbuf;
 	struct TBLOCK* tblock = tle->tblock;
+	unsigned long flags;
 
 	DBG(1, "entry %d in_phase %d", tblock->iblock, TB_IN_PHASE(tblock));
 
@@ -245,13 +249,18 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 		    tle->list.next, tle->list.prev);
 
 		tblock_clear(tblock);
+
+		spin_lock_irqsave(&bb->tb_list_lock, flags);
 		list_move_tail(&tle->list, &bb->free_tblocks);
+		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 
 		DBG(1, "ret  list_move_tail %d", tblock->iblock);
 	}else{
 		DBG(1, "shared tblock stash wrapper in pool");
 
+		spin_lock_irqsave(&bb->tb_list_lock, flags);
 		list_move_tail(&tle->list, &bb->pool_tblocks);
+		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 	}
 }
 void acq200_phase_release_tblocks(struct Phase* phase)
@@ -277,6 +286,7 @@ void acq200_tblock_init_top(void)
 
 	build_tblock_list();
 
+	spin_lock_init(&bb->tb_list_lock);
 	INIT_LIST_HEAD(&bb->free_tblocks);
 	INIT_LIST_HEAD(&bb->empty_tblocks);
 

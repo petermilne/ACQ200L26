@@ -547,7 +547,8 @@ static struct TblockListElement* dmc_phase_add_tblock(
 	)
 /* append new tblock to phase. If phase is big enough, recycle one from tail */
 {
-	struct list_head* empty_tblocks = &DG->bigbuf.empty_tblocks; 
+	struct BIGBUF *bb = &DG->bigbuf;
+	struct list_head* empty_tblocks = &bb->empty_tblocks; 
 
 	dbg(2, "");
 
@@ -557,6 +558,7 @@ static struct TblockListElement* dmc_phase_add_tblock(
 	}else{
 		struct TblockListElement* tle =	
 			TBLE_LIST_ENTRY(empty_tblocks->next);
+		unsigned long flags;
 
 		if (atomic_read(&tle->tblock->in_phase)){	
 			err("in_phase != 0");
@@ -570,7 +572,9 @@ static struct TblockListElement* dmc_phase_add_tblock(
 			_dmc_handle_tb_clients(
 				TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
 		}
+		spin_lock_irqsave(&bb->tb_list_lock, flags);
 		list_move_tail(empty_tblocks->next, &phase->tblocks);
+		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 
 		*start_off = tle->tblock->offset;
 
@@ -591,11 +595,16 @@ static void share_tblock(
 	struct TblockListElement* src,
 	struct TblockListElement* dst )
 {
-	struct list_head* pool_tblocks = &DG->bigbuf.pool_tblocks;
+	struct BIGBUF *bb = &DG->bigbuf;
+	struct list_head* pool_tblocks = &bb->pool_tblocks;
+	unsigned long flags;
 
 	dst->tblock = src->tblock;
 	atomic_inc(&src->tblock->in_phase);
+
+	spin_lock_irqsave(&bb->tb_list_lock, flags);
 	list_move_tail(pool_tblocks->next, &np->tblocks);
+	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 }
 
 static void share_last_tblock(struct Phase* np, struct Phase* op)
@@ -889,9 +898,15 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 //			finish_with_engines(-__LINE__);
 			return ~1;
 		}else{
+			struct BIGBUF *bb = &DG->bigbuf;
 			struct TblockListElement* tble = 
 				TBLE_LIST_ENTRY(free_blocks->next);
+			unsigned long flags;
+
+			spin_lock_irqsave(&bb->tb_list_lock, flags);
 			list_move_tail(free_blocks->next, empty_tblocks);
+			spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+
 			this_empty = tble->tblock->offset;
 			wo->next_empty = this_empty + DMA_BLOCK_LEN;
 		}
@@ -914,9 +929,13 @@ unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
 	dbg(2, "01 %p", wo);
 
 	if (!bbb){
-		struct list_head* free_blocks = &DG->bigbuf.free_tblocks;
-		bbb = TBLE_LIST_ENTRY(free_blocks->next);
+		struct BIGBUF *bb = &DG->bigbuf;
+		unsigned long flags;
+
+		spin_lock_irqsave(&bb->tb_list_lock, flags);
+		bbb = TBLE_LIST_ENTRY(bb->free_tblocks.next);
 		list_del(&bbb->list);
+		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 	}
 	
 	if (IPC->empties.nput < wo->bda_blocks.before){
@@ -938,9 +957,13 @@ unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
 static void bda_release_tblock(void)
 {
 	if (bbb){
-		struct list_head* free_blocks = &DG->bigbuf.free_tblocks;
-		list_add_tail(&bbb->list, free_blocks);
+		struct BIGBUF *bb = &DG->bigbuf;
+		unsigned long flags;
+
+		spin_lock_irqsave(&bb->tb_list_lock, flags);
+		list_add_tail(&bbb->list, &bb->free_tblocks);
 		bbb = 0;
+		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 	}
 }
 

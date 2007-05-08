@@ -1170,15 +1170,22 @@ static ssize_t dma_tb_read (
 	if (tbc->c.tle){
 		headroom = tbc->c.tle->tblock->length - tbc->c.cursor;
 
+		dbg(1, "file %p tbc->c.tle %p headroom %d %s", 
+		    file, 
+		    tbc->c.tle, headroom, headroom==0? "release": "hold");
+
 		if (headroom == 0){
 			spin_lock(&DG->tbc.lock);
 			acq200_phase_release_tblock_entry(tbc->c.tle);
 			spin_unlock(&DG->tbc.lock);	
 			tbc->c.cursor = 0;
 		}
+	}else{
+		dbg(1, "file %p tbc->c.tle %d", file, 0);
 	}
 
 	if (headroom == 0){
+		dbg(1, "file %p wait", file);
 		wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
 
 		if (list_empty(&tbc->tle_q)){
@@ -1186,6 +1193,8 @@ static ssize_t dma_tb_read (
 		}
 		tbc->c.tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
 		headroom = tbc->c.tle->tblock->length;
+		dbg(1, "file %p tbc->c.tle %p wait over headroom %d", 
+		    file, tbc->c.tle, headroom);
 	}
 
 	ncopy = min(len, headroom);
@@ -1197,6 +1206,8 @@ static ssize_t dma_tb_read (
 	if (offset){
 		*offset += ncopy;
 	}
+
+	dbg(1, "file %p 99 return %d", file, ncopy);
 	return ncopy;
 }
 
