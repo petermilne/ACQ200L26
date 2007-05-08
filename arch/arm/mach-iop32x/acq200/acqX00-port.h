@@ -19,6 +19,7 @@
 /* ------------------------------------------------------------------------- */
 
 
+#include <linux/ctype.h>
 
 #define COPY_TO_USER(dest,src,size)			\
 	do {						\
@@ -27,3 +28,32 @@
 		}					\
 	}						\
 		while(0);
+
+#define COPY_FROM_USER(dest,src,size)			\
+	do {						\
+		if (copy_from_user(dest, src, size)){	\
+			return -EFAULT;			\
+		}					\
+	}						\
+		while(0);
+
+
+struct device;
+struct device_attribute;
+
+extern void acq200_device_create_file(
+	struct device * dev, struct device_attribute * attr,
+	const char *file, int line);
+
+#define DEVICE_CREATE_FILE(dev, attr) \
+	acq200_device_create_file(dev, attr, __FILE__, __LINE__)
+
+struct device_driver;
+struct driver_attribute;
+
+extern void acq200_driver_create_file(
+	struct device_driver *drv, struct driver_attribute * attr,
+	const char* file, int line);
+
+#define DRIVER_CREATE_FILE(drv, attr) \
+	acq200_driver_create_file(drv, attr, __FILE__, __LINE__)

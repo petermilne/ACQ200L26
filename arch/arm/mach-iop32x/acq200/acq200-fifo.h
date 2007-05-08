@@ -384,6 +384,16 @@ struct Transformer {
 };
 
 
+struct LOCK_LIST {
+	spinlock_t lock;
+	struct list_head list;
+};
+
+#define INIT_LOCK_LIST(ll) do {			\
+		INIT_LIST_HEAD(&ll.list);	\
+		spin_lock_init(&ll.lock);	\
+		} while(0)
+	
 /*
  * interface to hook user Transformers
  */
@@ -508,9 +518,10 @@ struct DevGlobs {
 	int show_event;
 
 	struct BIGBUF {
-		struct list_head free_tblocks;  /* unallocated */
-		struct list_head empty_tblocks; /* DMA_BLOCKS in empties Q */
-		struct list_head pool_tblocks;  /* pool of tblock wrappers */
+		/* apply locks in order L1, L2, L3 */
+		struct LOCK_LIST free_tblocks;  /* L2 unallocated */
+		struct LOCK_LIST empty_tblocks; /* L1 DMA_BLOCKS in empties Q*/
+		struct LOCK_LIST pool_tblocks;  /* L3 pool of tblock wrappers*/
 		struct resource resource;
 		const struct Transformer** transformers;
 		struct TBLOCKLIST {

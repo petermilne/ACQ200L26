@@ -7,6 +7,7 @@
 
 #include <linux/device.h>
 
+#include "acqX00-port.h"
 #include "acq200_debug.h"
 
 #ifdef __KERNEL__
@@ -39,20 +40,6 @@ int acq200_post_dmac_request(
 
 struct device_attribute;
 
-extern void acq200_device_create_file(
-	struct device * dev, struct device_attribute * attr,
-	const char *file, int line);
-
-#define DEVICE_CREATE_FILE(dev, attr) \
-	acq200_device_create_file(dev, attr, __FILE__, __LINE__)
-
-
-extern void acq200_driver_create_file(
-	struct device_driver *drv, struct driver_attribute * attr,
-	const char* file, int line);
-
-#define DRIVER_CREATE_FILE(drv, attr) \
-	acq200_driver_create_file(drv, attr, __FILE__, __LINE__)
 
 static inline int PO(int len)
 {

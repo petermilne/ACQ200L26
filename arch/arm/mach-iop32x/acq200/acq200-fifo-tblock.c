@@ -27,7 +27,7 @@
 
 #define DMA_BLOCK_LEN 0xdeadbeef  /* FIXME PLEASE - not used here */
 
-
+#include "acqX00-port.h"
 #include "acq200-fifo-local.h"
 #include "acq200_debug.h"
 
@@ -60,7 +60,7 @@ int tblock_raw_extractor(
 	offset *= NCHAN;
 
 	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
-		copy_to_user(ubuf+cplen, bblock_base + offset, sizeof(short));
+		COPY_TO_USER(ubuf+cplen, bblock_base + offset, sizeof(short));
 		offset += stride;
 	}
 
@@ -81,7 +81,7 @@ int tblock_cooked_extractor(
 
 	maxbuf = min(maxbuf, bblock_samples-offset);
 	if (stride == 1){
-		copy_to_user(ubuf, bblock_base + offset, maxbuf*2);
+		COPY_TO_USER(ubuf, bblock_base + offset, maxbuf*2);
 	}else{
 		int cplen;
 
@@ -89,7 +89,7 @@ int tblock_cooked_extractor(
 
 		for(cplen = 0; cplen < maxbuf && offset < this->length; 
 		    ++cplen){
-			copy_to_user(ubuf+cplen, 
+			COPY_TO_USER(ubuf+cplen, 
 				     bblock_base + offset, 
 				     sizeof(short));
 			offset += stride;
@@ -114,7 +114,7 @@ int tblock_raw_filler(
 	offset *= NCHAN;
 
 	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
-		copy_from_user(bblock_base+offset, ubuf+cplen, sizeof(short));
+		COPY_FROM_USER(bblock_base+offset, ubuf+cplen, sizeof(short));
 		offset += stride;
 	}
 
@@ -134,7 +134,7 @@ int tblock_cooked_filler(
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 
 	maxbuf = min(maxbuf, bblock_samples-offset);
-	copy_from_user(bblock_base + offset, ubuf, maxbuf*2);
+	COPY_FROM_USER(bblock_base + offset, ubuf, maxbuf*2);
 
 	DBG(1, "returns maxbuf %d", maxbuf);
 	return maxbuf;
@@ -222,7 +222,11 @@ void acq200_empties_release_tblocks(void)
 {
 	struct BIGBUF *bb = &DG->bigbuf;
 
-	list_splice_init(&bb->empty_tblocks, &bb->free_tblocks);
+	spin_lock(&bb->empty_tblocks.lock);
+	spin_lock(&bb->free_tblocks.lock);
+	list_splice_init(&bb->empty_tblocks.list, &bb->free_tblocks.list);
+	spin_unlock(&bb->free_tblocks.lock);
+	spin_unlock(&bb->empty_tblocks.lock);
 }
 
 void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
@@ -245,13 +249,18 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 		    tle->list.next, tle->list.prev);
 
 		tblock_clear(tblock);
-		list_move_tail(&tle->list, &bb->free_tblocks);
+
+		spin_lock(&bb->free_tblocks.lock);
+		list_move_tail(&tle->list, &bb->free_tblocks.list);
+		spin_unlock(&bb->free_tblocks.lock);
 
 		DBG(1, "ret  list_move_tail %d", tblock->iblock);
 	}else{
 		DBG(1, "shared tblock stash wrapper in pool");
 
-		list_move_tail(&tle->list, &bb->pool_tblocks);
+		spin_lock(&bb->pool_tblocks);
+		list_move_tail(&tle->list, &bb->pool_tblocks.list);
+		spin_unlock(&bb->pool_tblocks);
 	}
 }
 void acq200_phase_release_tblocks(struct Phase* phase)
@@ -277,8 +286,8 @@ void acq200_tblock_init_top(void)
 
 	build_tblock_list();
 
-	INIT_LIST_HEAD(&bb->free_tblocks);
-	INIT_LIST_HEAD(&bb->empty_tblocks);
+	INIT_LOCK_LIST(bb->free_tblocks);
+	INIT_LOCK_LIST(bb->empty_tblocks);
 
 	info("add %d tblocks",  DG->bigbuf.tblocks.nblocks);
 
@@ -288,17 +297,18 @@ void acq200_tblock_init_top(void)
 		memset(tle, 0, sizeof(struct TblockListElement));
 
 		tle->tblock = &DG->bigbuf.tblocks.the_tblocks[iblock];
-		list_add_tail(&tle->list, &bb->free_tblocks);
+		/* lock not required */
+		list_add_tail(&tle->list, &bb->free_tblocks.list);
 	}
 
-	INIT_LIST_HEAD(&bb->pool_tblocks);
+	INIT_LOCK_LIST(bb->pool_tblocks);
 
 	for (iblock = 0; iblock != MAX_TBLOCK_POOL; ++iblock){
 		struct TblockListElement* tle = 
 			kmalloc(sizeof(struct TblockListElement), GFP_KERNEL);
 		memset(tle, 0, sizeof(struct TblockListElement));
-
-		list_add_tail(&tle->list, &bb->pool_tblocks);
+		/* lock not required */
+		list_add_tail(&tle->list, &bb->pool_tblocks.list);
 	}	
 }
 
@@ -308,20 +318,20 @@ void acq200_tblock_remove(void)
 {
 	struct TblockListElement* tle;
 
-	list_for_each_entry(tle, &DG->bigbuf.free_tblocks, list){
+	list_for_each_entry(tle, &DG->bigbuf.free_tblocks.list, list){
 //		atomic_clear_mask(-1, &tle->tblock->in_phase);
 		DBG(1, "kfree %p", tle);
 		kfree(tle);		
 	}
 
-	list_for_each_entry(tle, &DG->bigbuf.empty_tblocks, list){
+	list_for_each_entry(tle, &DG->bigbuf.empty_tblocks.list, list){
 //		atomic_clear_mask(-1, &tle->tblock->in_phase);
 		DBG(1, "kfree %p", tle);
 		kfree(tle);		
 	}
 
 
-	list_for_each_entry(tle, &DG->bigbuf.pool_tblocks, list){
+	list_for_each_entry(tle, &DG->bigbuf.pool_tblocks.list, list){
 //		atomic_clear_mask(-1, &tle->tblock->in_phase);
 		DBG(1, "kfree %p", tle);
 		kfree(tle);		
