@@ -53,6 +53,7 @@
 #include <asm/arch/iop321-irqs.h>
 #include <asm/arch/acqX00-irq.h>
 
+#include "acqX00-port.h"
 #include "acq200-fifo-top.h"
 #include "acq200-fifo-tblock.h"
 #include "acq200-stream-api.h"
