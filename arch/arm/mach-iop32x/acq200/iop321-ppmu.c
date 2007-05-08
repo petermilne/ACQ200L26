@@ -55,13 +55,19 @@
 static int mode;
 static int is_running;
 
+static unsigned gtsr1;
+static unsigned gtsr2;
+static unsigned counters[15];
+
 void iop321_start_ppmu(void) 
 {
-#ifdef PGOMCOMOUT
+
 	*IOP321_ESR = 0;
 	*IOP321_ESR = mode;
+#ifdef PGOMCOMOUT
 	*IOP321_GTMR &= ~IOP321_GTMR_NGCE;
 #endif
+	gtsr1 = *IOP321_GTSR;
 	is_running = 1;
 }
 
@@ -71,6 +77,8 @@ void iop321_stop_ppmu(void)
 /* 2.6.18.2 - now used in timer gen */
 	*IOP321_GTMR = IOP321_GTMR_NGCE;
 #endif
+	gtsr2 = *IOP321_GTSR;
+	memcpy(counters, (void*)IOP321_PECR0, sizeof(counters));
 	is_running = 0;
 }
 
@@ -134,66 +142,67 @@ static DEVICE_ATTR(gtsr_us, S_IRUGO, show_gtsr_us, 0);
 struct PPMU_CONTROL {
 	int ix;
 	char *key;
+	int cycle_count;
 };
 
-static void tab_results(int mode, char* buf)
+static void tab_results(int mode, char* buf, unsigned delta)
 {
 	static struct PPMU_CONTROL controls[7][14] = {
 		{ {}, },      /* mode 0 */
 		{
-			{1,  "M1_PPCIBus_idle"},
-			{2,  "M1_PPCIBus_data"},
-			{3,  "M1_PCI_ATU_acq"},
-			{4,  "M1_PCI_ATU_own"},
-			{5,  "M1_PCI_ATU_data"},
-			{6,  "M1_PCI_ATU_gnt"},
-			{7,  "M1_PCI_ATU_retry"},
-			{9,  "M1_IBus_idle"},
-			{10, "M1_IBus_data"},
+			{1,  "M1_PPCIBus_idle", 1},
+			{2,  "M1_PPCIBus_data", 1},
+			{3,  "M1_PCI_ATU_acq",  1},
+			{4,  "M1_PCI_ATU_own",  1},
+			{5,  "M1_PCI_ATU_data", 1},
+			{6,  "M1_PCI_ATU_gnt",  0},
+			{7,  "M1_PCI_ATU_retry",0},
+			{9,  "M1_IBus_idle",    1},
+			{10, "M1_IBus_data",    1},
 		},
 		{
-			{1,  "M2_IBus_idle"},
-			{2,  "M2_IBus_data"},
-			{3,  "M2_AA_acq"},
-			{4,  "M2_AA_own"},
-			{5,  "M2_AA_data"},
-			{6,  "M2_AA_gnt"},
-			{7,  "M2_DMA0_acq"},
-			{8,  "M2_DMA0_own"},
-			{9,  "M2_DMA0_data"},
-			{10, "M2_DMA0_gnt"},
-			{11, "M2_DMA1_acq"},
-			{12, "M2_DMA1_own"},
-			{13, "M2_DMA1_data"},
-			{14, "M2_DMA1_gnt"},
+			{1,  "M2_IBus_idle",    1},
+			{2,  "M2_IBus_data",    1},
+			{3,  "M2_AA_acq",       1},
+			{4,  "M2_AA_own",       1},
+			{5,  "M2_AA_data",      1},
+			{6,  "M2_AA_gnt",       0},
+			{7,  "M2_DMA0_acq",	1},
+			{8,  "M2_DMA0_own",	1},
+			{9,  "M2_DMA0_data",	1},
+			{10, "M2_DMA0_gnt",	0},
+			{11, "M2_DMA1_acq",	1},
+			{12, "M2_DMA1_own",	1},
+			{13, "M2_DMA1_data",	1},
+			{14, "M2_DMA1_gnt",	0},
 		},
 		{
-			{1,  "M3_IBus_idle"},
-			{2,  "M3_IBus_data"},
-			{3,  "M3_ATU_acq"},
-			{4,  "M3_ATU_own"},
-			{5,  "M3_ATU_data"},
-			{6,  "M3_ATU_gnt"},
-			{7,  "M3_core_acq"},
-			{8,  "M3_core_own"},
-			{9,  "M3_core_data"},
-			{10, "M3_core_gnt"}
+			{1,  "M3_IBus_idle",	1},
+			{2,  "M3_IBus_data",	1},
+			{3,  "M3_ATU_acq",	1},
+			{4,  "M3_ATU_own",	1},
+			{5,  "M3_ATU_data",	1},
+			{6,  "M3_ATU_gnt",	0},
+			{7,  "M3_core_acq",	1},
+			{8,  "M3_core_own",	1},
+			{9,  "M3_core_data",	1},
+			{10, "M3_core_gnt",	0}
 		},
 		{
-			{1,  "M4_PPCIbus_idle"},
-			{2,  "M4_PPCIbus_data"},
-			{3,  "M4_core_sc"},
-			{4,  "M4_core_scd"},
-			{5,  "M4_DMA0_sc"},
-			{6,  "M4_DMA0_scd"},
-			{7,  "M4_DMA1_sc"},
-			{8,  "M4_DMA1_scd"},
-			{9,  "M4_ATU_sc"},
-			{10, "M4_ATU_scd"},
-			{11, "M4_ATU_ibsc"},
-			{12, "M4_ATU_ibscd"},
-			{13, "M4_ATU_splits"},
-			{14, "M4_ATU_fwl"}
+			{1,  "M4_PPCIbus_idle",	1},
+			{2,  "M4_PPCIbus_data",	1},
+			{3,  "M4_core_sc",	0},
+			{4,  "M4_core_scd",	0},
+			{5,  "M4_DMA0_sc",	0},
+			{6,  "M4_DMA0_scd",	0},
+			{7,  "M4_DMA1_sc",	0},
+			{8,  "M4_DMA1_scd",	0},
+			{9,  "M4_ATU_sc",	0},
+			{10, "M4_ATU_scd",	0},
+			{11, "M4_ATU_ibsc",	0},
+			{12, "M4_ATU_ibscd",	0},
+			{13, "M4_ATU_splits",	0},
+			{14, "M4_ATU_fwl",	0}
 		},
 		{
 			{1,  "M5_AA_retry"},
@@ -224,10 +233,19 @@ static void tab_results(int mode, char* buf)
 	if (mode <0 || mode >6 ) return;
 
 	for (; iresult != 14 && controls[mode][iresult].ix; ++iresult){
-		ibuf += sprintf( buf+ibuf, "[%2d] %30s : %10u\n",
+		unsigned count = counters[controls[mode][iresult].ix];
+		unsigned deltac = delta >> 6; /* /4 scale 256 */
+		
+		ibuf += sprintf( buf+ibuf, "[%2d] %30s : %10u",
 				 controls[mode][iresult].ix,
 				 controls[mode][iresult].key,
-				 (IOP321_PECR0)[controls[mode][iresult].ix] );
+			count);
+		if (deltac && controls[mode][iresult].cycle_count){
+			ibuf += sprintf( buf+ibuf, " : %2d %%\n",
+				 (100*(count>>8))/deltac );
+		}else{
+			ibuf += sprintf(buf+ibuf, "\n");
+		}
 	}
 }
 
@@ -237,10 +255,13 @@ static ssize_t show_results(
 	char * buf)
 {	
 	int len = 0;
+	unsigned delta = gtsr2 - gtsr1;
 
 	len += sprintf(buf+len, "%5s%30s : %d\n", "", "mode", mode );
+	len += sprintf(buf+len, "%5s%30s : %10u\n", "", "usecs", delta/50);
 	len += sprintf(buf+len, "%5s%30s : %10u\n", "", "GTSR", *IOP321_GTSR );
-	tab_results(mode, buf+len);
+	len += sprintf(buf+len, "%5s%30s : %10u\n", "", "delta", delta);
+	tab_results(mode, buf+len, delta);
 	return strlen(buf);
 }
 static DEVICE_ATTR(results, S_IRUGO|S_IWUGO, show_results, 0);

@@ -206,7 +206,7 @@ static void __init set_system_slot(char **p)
 }
 __early_param("sysslot=", set_system_slot);
 
-
+extern void iop32x_check_pci_bus_speed(void);
 
 static int __init acq100_pci_init(void)
 {
@@ -223,6 +223,7 @@ static int __init acq100_pci_init(void)
 			switch(acq100_get_pci_env()){
 			case ACQ100_PCIENV_PM:
 				printk("PCI:acq100 peripheral slot device\n");
+				iop32x_check_pci_bus_speed();
 				break;
 			case ACQ100_PCIENV_SAM:
 				printk("PCI:acq100 standalone device\n");

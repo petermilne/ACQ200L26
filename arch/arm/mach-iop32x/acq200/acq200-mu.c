@@ -65,9 +65,11 @@ static const char* VERID =
 #endif
 	;
 
+
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/kthread.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
@@ -93,19 +95,25 @@ static const char* VERID =
 #include <linux/module.h>
 #endif
 
+
+
 static int acq200_debug;
 
-#include "acq200.h"
+#include "acq32busprot.h"
 #include "acqX00-port.h"
+#include "acq200.h"
 #include "acq200_debug.h"
 #include "acq200_minors.h"
-
+#include "ringbuffer.h"
 #include "acq200-dmac.h"
 #include "acq200-mu.h"
+
 #include "acq200-mu-app.h"
+#define MAXCHAIN MAX_RMA_GROUP
+#include "acq200-inline-dma.h"
 
 
-#include "acq32busprot.h"
+
 
 #include <asm/arch/iop321.h>
 #include <asm/arch/iop321-irqs.h>
@@ -825,15 +833,10 @@ unsigned int acq200_mu_inbound_poll(
 }
 
 
-static ssize_t acq200_mu_outbound_write(
-	struct file *file, const char *buf, size_t len, loff_t *offset
+static MFA copy_user_to_mfa(
+	struct file *file, const char *buf, size_t len
 	)
-/*
- * Writes one message
- * block until free MFA available
- * copy the buffer to the MF
- * Post the MF
- */
+/* get and MFA and copy user data to it. return the MFA */
 {
 	dma_addr_t handle;
 	MFA mfa = acq200mu_get_free_ob();
@@ -853,7 +856,19 @@ static ssize_t acq200_mu_outbound_write(
 	memcpy_toio(mfa2va(mfa), LBUF(file), len);
 
 	dma_unmap_single(mug.dev, handle, len, DMA_TO_DEVICE);
-
+	return mfa;
+}
+static ssize_t acq200_mu_outbound_write(
+	struct file *file, const char *buf, size_t len, loff_t *offset
+	)
+/*
+ * Writes one message
+ * block until free MFA available
+ * copy the buffer to the MF
+ * Post the MF
+ */
+{
+	MFA mfa = copy_user_to_mfa(file, buf, len);
 	dbg(2,  "now post mfa 0x%08x", mfa );
 	acq200mu_post_ob(mfa);
 	return len;
@@ -951,7 +966,286 @@ static int post_dmac_outgoing_request(
 		DMA_CHANNEL, buf->laddr, offset, remaddr, bc, OUTGOING );
 }
 
+#define EOT_TO_TICKS (HZ/1)
 
+static int print_chain(struct DmaChannel* channel, char* buf)
+{
+	int ic;
+	int len = 0;
+	struct iop321_dma_desc* desc = channel->dmad[0];
+	
+	len += sprintf(buf+len, "[ ] %8s %8s %8s %8s %8s %8s\n",
+		       "NDA", "PDA", "PUAD", "LAD", "BC", "DC");
+
+	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
+		len += sprintf(buf+len, 
+			       "[%d] %08x %08x %08x %08x %08x %08x %s\n",
+			       ic, 
+			       desc->NDA, desc->PDA, desc->PUAD,
+			       desc->LAD, desc->BC, desc->DC,
+			       channel->description[ic]);
+	}	
+	return len;
+}
+/** chaining DMA operation. Single work task does all, then no locking issues*/
+
+#define DMA_ISYNC acq200_dma_getDmaChannelSync()[1].eoc
+
+DEFINE_DMA_CHANNEL(dma_channel, 1);
+static struct u32_ringbuffer DMADQ;
+static int new_chain_ready;
+
+static int acq200mu_EOT_task(void *nothing)
+{
+	struct InterruptSync * isync = &DMA_ISYNC;
+	spinlock_t lock = SPIN_LOCK_UNLOCKED;
+	unsigned long flags;
+	u32 stat;
+	struct DmaChannel *ch = &dma_channel;
+	struct iop321_dma_desc* last_dmad = 0;
+
+	while(!kthread_should_stop()) {
+		int new_chain_count;
+		u32 dar;
+		int ic = 0;
+		int timeout = wait_event_interruptible_timeout(
+			isync->waitq, 
+			isync->interrupted || new_chain_ready ||
+				kthread_should_stop(),
+			EOT_TO_TICKS) == 0;
+		int uptodate = 0;
+
+		dbg(1, "done wait %s %s %s %s",
+		    isync->interrupted? "EOC": "",
+		    new_chain_ready? "NEW": "",
+		    timeout? "TIMEOUT": "",
+		    kthread_should_stop()? "STOP": "");
+
+
+		/** first, update dma_channel chain to reflect DMA state */
+
+		spin_lock_irqsave(&lock, flags);
+		isync->interrupted = 0;
+		spin_unlock_irqrestore(&lock, flags);
+		
+		dar = DMA_REG(dma_channel, DMA_DAR);
+
+
+#define IMARK	dbg(2, "ic=%d %d", ic, __LINE__)
+
+		if (last_dmad && dar != last_dmad->pa){
+			IMARK;
+
+			acq200_dmad_free(last_dmad);	
+			last_dmad = 0;
+		}
+
+
+
+
+		for (; !uptodate && ic < dma_channel.nchain; ++ic){
+			if (dma_channel.dmad[ic] == 0){
+				IMARK;
+				continue;
+			}else if (dar == dma_channel.dmad[ic]->pa){
+				if (DMA_DONE(dma_channel, stat)){
+					IMARK;
+					last_dmad = 0;
+					uptodate = 1;
+				}else{
+					IMARK;
+					last_dmad = dma_channel.dmad[ic];
+					goto no_reset_chain;
+				}
+			}
+
+			/* here with completed dmad ... cleanup */
+			if (dma_channel.dmad[ic]->clidat){
+
+				dbg(2, "dmad %p POST %p",
+				    dma_channel.dmad[ic],
+				    dma_channel.dmad[ic]->clidat);
+
+				acq200mu_post_ob(
+					(MFA)dma_channel.dmad[ic]->clidat);
+			}
+			IMARK;
+			acq200_dmad_free(dma_channel.dmad[ic]);
+			dma_channel.dmad[ic] = 0;
+		}
+
+
+
+/*	reset_chain: */
+		dma_channel.nchain = 0;
+		dar = 0;			/* NO RELOAD */
+	no_reset_chain:
+
+		if ((new_chain_count = new_chain_ready) != 0){
+			new_chain_ready = 0;
+		}
+		/* now handle new requests */		
+
+		if (new_chain_count){
+			if (MAXCHAIN - dma_channel.nchain > new_chain_count){
+				struct iop321_dma_desc* dmad;
+
+				while (u32rb_get(&DMADQ, (u32*)&dmad)){
+					dbg(2, "dmad append %p M:%p", 
+							dmad, dmad->clidat);
+					dma_append_chain(ch, dmad, "data");
+				}
+				
+				if (acq200_debug > 1){
+					char *buf = kmalloc(4096, GFP_KERNEL);
+
+					info("dar %x", dar);
+					print_chain(&dma_channel, buf);
+					printk(buf);
+					kfree(buf);
+				}
+				if (dar == 0){
+					IMARK;
+					DMA_ARM(dma_channel);
+					DMA_FIRE(dma_channel);
+					IMARK;
+				}else{
+					IMARK;
+					DMA_RELOAD(dma_channel);
+				}
+			}else{
+				IMARK;
+				continue; /* no room, try later */
+			}
+		}
+	}
+
+#undef IMARK
+
+	err("requested to stop");
+	return 0;
+}
+
+
+static int acq200mu_queue_dma_desc(struct iop321_dma_desc* dmad)
+{
+/* Q the dmad (MFA in clidat), and post when the DMA transfer is DONE.
+ * problem :: which dma transfer?. 
+ * answer, Q the DAR as well, then post all MFA' up to last DAR.
+ * risk is, DAR has moved on ... in that case, just post the next one?.
+ */
+
+	return u32rb_put(&DMADQ, (u32)dmad);
+}
+	
+	
+
+
+static ssize_t acq200_mu_remote_write_chain(
+	struct file *file, const char *buf, size_t len, loff_t *offset
+	)
+{
+	struct mu_rma *rma = getRma();
+	struct iop321_dma_desc* dmad = 0;
+	int rc = 0;
+	int rlen = len;
+	int dmad_count = 0;
+#define BUF_PAYLOAD MU_RMA_PAYLOAD((struct mu_rma *)(buf))
+
+	while(rlen >= MU_RMA_SZ){
+		COPY_FROM_USER(rma, buf, sizeof(u32));
+		switch(MU_RMA_MAGIC(rma)){
+		case MU_MAGIC_BB: {
+			struct PCI_DMA_BUFFER dma_buf;
+			unsigned pci_addr;
+
+			COPY_FROM_USER(MU_RMA_PAYLOAD(rma), 
+				       BUF_PAYLOAD, MU_RMA_RESIDUE);
+
+			pci_addr = rma->bb_remote_pci_offset;
+			if (MU_RMA_IS_PCI_REL(rma)){			
+				pci_addr += mug.rma_base; /* rma offset */
+			}
+			dmad = acq200_dmad_alloc();
+			dma_buf.va = bbva(rma->buffer_offset);
+			if (MU_RMA_IS_HOSTBOUND(rma)){
+				dma_buf.direction = DMA_TO_DEVICE;
+				dmad->DC = DMA_DCR_PCI_MW;
+			}else{
+				dma_buf.direction = DMA_FROM_DEVICE;
+				dmad->DC = DMA_DCR_PCI_MR;
+			}
+	
+			dma_buf.laddr = dma_map_single(mug.dev, 
+				dma_buf.va, rma->length, dma_buf.direction);
+
+			dmad->NDA	= 0;
+			dmad->PDA	= pci_addr;
+			dmad->PUAD	= 0;
+			dmad->LAD	= dma_buf.laddr;
+			dmad->BC	= rma->length;
+			dmad->clidat    = 0;
+
+			dbg(1, "Q %p", dmad);
+			rc = acq200mu_queue_dma_desc(dmad);
+
+			++dmad_count; buf += MU_RMA_SZ;	rlen -= MU_RMA_SZ;
+			break;
+		}
+		case MU_MAGIC_OB: {
+			/* pull down an MF, fill the message, store the MFA */
+			MFA mfa = copy_user_to_mfa(file, BUF_PAYLOAD, rlen-4);
+
+			dbg(1, "MU_MAGIC_OB: %p M:%08x", dmad, mfa);
+			assert(mfa != 0); 
+
+			if (dmad){
+				dmad->clidat = (void*)mfa;
+				dmad->DC |= IOP321_DCR_IE;
+			}else{
+				acq200mu_post_ob(mfa);
+			}
+			rlen = 0;
+			break;
+		}
+		default:
+			BUG();
+		}
+	}			    
+
+	if (dmad_count){
+		new_chain_ready = dmad_count;
+		wake_up_interruptible(&DMA_ISYNC.waitq);
+	}
+
+	putRma(rma);
+
+	if (rc == 0){
+		*offset += len;
+		return len;
+	}else{
+		return rc;
+	}
+#undef BUF_PAYLOAD	
+}
+
+
+static void acq200_mu_EOT_start(int start)
+{
+	static struct task_struct *the_worker;
+
+	if (start){
+		if (the_worker == 0){
+			the_worker = kthread_run(
+					acq200mu_EOT_task, NULL, "mu_EOT");
+		}
+	}else{
+		if (the_worker != 0){
+			kthread_stop(the_worker);
+			the_worker = 0;
+		}
+	}
+}
 static ssize_t acq200_mu_remote_write(
 	struct file *file, const char *buf, size_t len, loff_t *offset
 	)
@@ -963,8 +1257,12 @@ static ssize_t acq200_mu_remote_write(
 	struct mu_rma *rma;
 	int rc = 0;
 
-	dbg(2, "" );
+	dbg(2, "len %u", len);
 	if (len < MU_RMA_SZ) return -E_MU_BAD_STRUCT;
+
+	if (len > MU_RMA_SZ) {
+		return acq200_mu_remote_write_chain(file, buf, len, offset);
+	}
 
 	rma = getRma();
 	if (copy_from_user(rma, buf, MU_RMA_SZ)){
@@ -1004,6 +1302,11 @@ static ssize_t acq200_mu_remote_write(
 	}
 	case MU_MAGIC_BB: {
 		struct PCI_DMA_BUFFER dma_buf;
+		unsigned pci_addr = rma->bb_remote_pci_offset;
+
+		if (MU_RMA_IS_PCI_REL(rma)){			
+			pci_addr += mug.rma_base; /* rma relative offset */
+		}
 		
 		dma_buf.va = bbva(rma->buffer_offset);
 		dma_buf.direction = MU_RMA_IS_HOSTBOUND(rma)?
@@ -1013,23 +1316,24 @@ static ssize_t acq200_mu_remote_write(
 			dma_buf.direction);
 		dma_buf.mapped = 1;
 
-		dbg(1, "MU_MAGIC_BB:%s src 0x%08x dst 0x%08x len %d",
-			MU_RMA_IS_ACQBOUND(rma)? "IN": "OUT",
-			dma_buf.laddr,
-			mug.rma_base+rma->bb_remote_pci_offset,
-			rma->length);
+
+		dbg(1, "MU_MAGIC_BB:%s src 0x%08x dst 0x%08x len %d %s",
+			    MU_RMA_IS_ACQBOUND(rma)? "IN": "OUT",
+			    dma_buf.laddr, pci_addr,
+			    rma->length,
+			    MU_RMA_IS_PCI_REL(rma)? "REL": "ABS");
 
 		if (MU_RMA_IS_ACQBOUND(rma)){
 			rc = post_dmac_incoming_request(
 				&dma_buf,
 			        0,
-				mug.rma_base+rma->bb_remote_pci_offset,
+				pci_addr,
 				rma->length );			
 		}else{
 			rc = post_dmac_outgoing_request(
 				&dma_buf,
 				0,
-				mug.rma_base+rma->bb_remote_pci_offset,
+				pci_addr,
 				rma->length );
 		}	
 		len = MU_RMA_SZ;
@@ -1062,6 +1366,7 @@ static int acq200_mu_null_open (struct inode *inode, struct file *file)
 static int acq200_mu_rma_open (struct inode *inode, struct file *file)
 {
 	dbg(1,  "null" );
+	acq200_mu_EOT_start(1);
 	return 0;
 }
 	
@@ -1097,6 +1402,7 @@ static int acq200_mu_rma_release(
 	struct inode *inode, struct file *file)
 {
 	dbg(1, "" );
+	acq200_mu_EOT_start(0);
 	return acq200_mu_release(inode, file);
 }
 
@@ -1451,12 +1757,13 @@ static int alloc_databufs(void)
 {
 	int ibuf;
 
+#if 0
 	if (HBLEN <= _HBLEN26){
 		if (HBBLOCK > _HBBLOCK26){
 			HBBLOCK = _HBBLOCK26;
 		}
 	}
-
+#endif
 	mug.databufs = kzalloc(DATABUFS_SZ, GFP_KERNEL);
 
 	for (ibuf = 0; ibuf != NDATABUFS; ++ibuf){
@@ -1632,6 +1939,8 @@ static int acq200_mu_probe(struct device * dev)
 		 */
 		mug.rma_base = ACQ216_BRIDGE_WINDOW_BASE;
 	}
+
+	u32rb_init(&DMADQ, 16);
 
 	info(": va:%p pa:0x%08x len:%08x", 
 	     mug.host_base_va, mug.host_base_pa, mug.host_base_len);

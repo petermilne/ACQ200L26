@@ -148,6 +148,7 @@ static unsigned check_fifstat(
 
 #define CHECK_FIFSTAT(wo, fifstat, offset) check_fifstat(wo, fifstat, offset)
 
+extern int iop32x_pci_bus_speed(void);
 
 static int set_ob_clock(int hz)
 /* set ICS307 clock */
@@ -158,20 +159,26 @@ static int set_ob_clock(int hz)
 		0
 	};
 
-	static char arg1[20];
-	static char *argv[4];
+	static char fout_def[20];
+	static char fin_def[20];
+	static char *argv[6];
 	int i;
+	int fin;
+
+	sprintf(fin_def, "%d", iop32x_pci_bus_speed());
 
 /** source OB clock from INT 16M, source int clock divider from OBC, 
  *  see store_ob_clock_word() 
  */
 	CAPDEF->ob_clk_src->DIx = ACQ200_CLKCON_DLL_CS_16M;
 
-	sprintf(arg1, "%d", hz/1000);
+	sprintf(fout_def, "%d", hz/1000);
 
         i = 0;
         argv[i++] = "/usr/local/bin/ob_calc";
-        argv[i++] = arg1;
+	argv[i++] = "--fin";
+	argv[i++] = fin_def;	
+        argv[i++] = fout_def;
 	argv[i++] = "/dev/dtacq/ob_clock_word";
         argv[i] = 0;
 
