@@ -138,6 +138,11 @@ module_param(HBBLOCK, int, 0444);
 int downstream_is_set = 0;
 module_param(downstream_is_set, int, 0444);
 
+
+int dma1_IE = 1;
+module_param(dma1_IE, int, 0644);
+
+
 #define DBDBG(lvl, format, args...) \
         if (acq200_databuf_debug>lvl ) info( "DBDBG:" format, ##args)
 
@@ -1003,6 +1008,7 @@ static int acq200mu_EOT_task(void *nothing)
 	u32 stat;
 	struct DmaChannel *ch = &dma_channel;
 	struct iop321_dma_desc* last_dmad = 0;
+	unsigned iter = 0;
 
 	while(!kthread_should_stop()) {
 		int new_chain_count;
@@ -1015,7 +1021,8 @@ static int acq200mu_EOT_task(void *nothing)
 			EOT_TO_TICKS) == 0;
 		int uptodate = 0;
 
-		dbg(1, "done wait %s %s %s %s",
+		dbg(timeout==0? 1: 3, "done wait [%8u] : %s %s %s %s",
+		    ++iter,
 		    isync->interrupted? "EOC": "",
 		    new_chain_ready? "NEW": "",
 		    timeout? "TIMEOUT": "",
@@ -1068,6 +1075,7 @@ static int acq200mu_EOT_task(void *nothing)
 
 				acq200mu_post_ob(
 					(MFA)dma_channel.dmad[ic]->clidat);
+				dma_channel.dmad[ic]->clidat = 0;
 			}
 			IMARK;
 			acq200_dmad_free(dma_channel.dmad[ic]);
@@ -1152,12 +1160,16 @@ static ssize_t acq200_mu_remote_write_chain(
 	int dmad_count = 0;
 #define BUF_PAYLOAD MU_RMA_PAYLOAD((struct mu_rma *)(buf))
 
+	dbg(1, "01");
+
 	while(rlen >= MU_RMA_SZ){
 		COPY_FROM_USER(rma, buf, sizeof(u32));
 		switch(MU_RMA_MAGIC(rma)){
 		case MU_MAGIC_BB: {
 			struct PCI_DMA_BUFFER dma_buf;
 			unsigned pci_addr;
+
+			dbg(1, "MU_MAGIC_BB, copy %d", MU_RMA_RESIDUE);
 
 			COPY_FROM_USER(MU_RMA_PAYLOAD(rma), 
 				       BUF_PAYLOAD, MU_RMA_RESIDUE);
@@ -1201,7 +1213,9 @@ static ssize_t acq200_mu_remote_write_chain(
 
 			if (dmad){
 				dmad->clidat = (void*)mfa;
-				dmad->DC |= IOP321_DCR_IE;
+				if (dma1_IE){
+					dmad->DC |= IOP321_DCR_IE;
+				}
 			}else{
 				acq200mu_post_ob(mfa);
 			}
@@ -1212,6 +1226,9 @@ static ssize_t acq200_mu_remote_write_chain(
 			BUG();
 		}
 	}			    
+
+	dbg(1, "dmad_count %d %s", dmad_count,
+		    dmad_count? "WAKEUP": "done");
 
 	if (dmad_count){
 		new_chain_ready = dmad_count;
@@ -1276,7 +1293,7 @@ static ssize_t acq200_mu_remote_write(
 	case MU_MAGIC: {
 		int ibuf = LOCAL_BUF_INDEX(rma);
 
-		dbg(1, "ibuf %d", ibuf );
+		dbg(1, "MU_MAGIC ibuf %d", ibuf );
 
 		if ( ibuf < 0 || ibuf > NDATABUFS ){
 			rc = -EFAULT;
