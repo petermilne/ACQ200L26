@@ -465,6 +465,35 @@ static ssize_t set_OIMR(
 
 static DEVICE_ATTR(OIMR, S_IRUGO|S_IWUSR, show_OIMR, set_OIMR);
 
+static unsigned dmad_alloc_count;
+static unsigned dmad_free_count;
+
+typedef struct iop321_dma_desc *DMAD;
+
+static inline struct iop321_dma_desc *dmad_alloc(void)
+{
+	++dmad_alloc_count;
+	return acq200_dmad_alloc();
+}
+
+void dmad_free(struct iop321_dma_desc* dmad)
+{
+	++dmad_free_count;
+	acq200_dmad_free(dmad);
+}
+static ssize_t show_dmad_counts(	
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf( buf, "dmad: a: %u p: %u out:%u\n",
+			dmad_alloc_count, dmad_free_count, 
+			dmad_alloc_count - dmad_free_count);
+}
+
+static DEVICE_ATTR(dmad_counts, S_IRUGO|S_IWUSR, show_dmad_counts, 0);
+
+
 static ssize_t show_version(
 	struct device_driver *driver, char * buf)
 {
@@ -487,6 +516,7 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_acq200_databuf_debug);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mu_ipq_int_enable);
 	DEVICE_CREATE_FILE(dev, &dev_attr_OIMR);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_counts);
 
 	DRIVER_CREATE_FILE(dev->driver, &driver_attr_version);
 }
@@ -1008,13 +1038,11 @@ static int acq200mu_EOT_task(void *nothing)
 	unsigned long flags;
 	u32 stat;
 	struct DmaChannel *ch = &dma_channel;
-	struct iop321_dma_desc* last_dmad = 0;
 	unsigned iter = 0;
 
 	while(!kthread_should_stop()) {
 		int new_chain_count;
 		int was_interrupted;
-		int ic = 0;
 		int timeout = wait_event_interruptible_timeout(
 			isync->waitq, 
 			isync->interrupted || new_chain_ready ||
@@ -1040,51 +1068,43 @@ static int acq200mu_EOT_task(void *nothing)
 		}
 		spin_unlock_irqrestore(&eot_lock, flags);
 
-#define IMARK	dbg(2, "ic=%d %d", ic, __LINE__)
+#define IMARK	dbg(2, "%d", __LINE__)
 
 		if (was_interrupted || DMA_DONE(dma_channel, stat)){
-			if (last_dmad && dar != last_dmad->pa){
-				IMARK;
-
-				acq200_dmad_free(last_dmad);	
-				last_dmad = 0;
-			}
-
+			int ic = 0;
 			for (; !uptodate && ic < dma_channel.nchain; ++ic){
-				if (dma_channel.dmad[ic] == 0){
+				DMAD dmad = dma_channel.dmad[ic];
+
+				if (dmad == 0){
 					IMARK;
 					continue;
-				}else if (dar == dma_channel.dmad[ic]->pa){
+				}else if (dar == dmad->pa){
 					if (DMA_DONE(dma_channel, stat)){
 						IMARK;
-						last_dmad = 0;
 						uptodate = 1;
 					}else{
 						IMARK;
-						last_dmad = 
-							dma_channel.dmad[ic];
 						goto no_reset_chain;
 					}
 				}
 
 				/* here with completed dmad ... cleanup */
-				if (dma_channel.dmad[ic]->clidat){
+				if (dmad->clidat){
+					dbg(2, "dmad %p POST %p", 
+							dmad, dmad->clidat);
 
-					dbg(2, "dmad %p POST %p",
-					    dma_channel.dmad[ic],
-					    dma_channel.dmad[ic]->clidat);
-
-					acq200mu_post_ob(
-						(MFA)dma_channel.dmad[ic]->clidat);
+					acq200mu_post_ob((MFA)dmad->clidat);
 					/* critical: */
-					dma_channel.dmad[ic]->clidat = 0;
+					dmad->clidat = 0;
 				}
 				IMARK;
-				acq200_dmad_free(dma_channel.dmad[ic]);
+				dmad_free(dmad);
 				dma_channel.dmad[ic] = 0;
 			}
 /*	reset_chain: */
-			dma_channel.nchain = 0;
+			if (ic == dma_channel.nchain){
+				dma_channel.nchain = 0;
+			}
 			dar = 0;			/* NO RELOAD */
 		no_reset_chain:
 			;
@@ -1097,37 +1117,35 @@ static int acq200mu_EOT_task(void *nothing)
 		spin_unlock(&eot_lock);
 		/* now handle new requests */		
 
-		if (new_chain_count){
-			if (MAXCHAIN - dma_channel.nchain > new_chain_count){
-				struct iop321_dma_desc* dmad;
+		if (new_chain_count && 
+			MAXCHAIN - dma_channel.nchain > new_chain_count){
+			DMAD dmad;
 
-				while (u32rb_get(&DMADQ, (u32*)&dmad)){
-					dbg(2, "dmad append %p M:%p", 
-							dmad, dmad->clidat);
-					dma_append_chain(ch, dmad, "data");
-				}
+			while (u32rb_get(&DMADQ, (u32*)&dmad)){
+				dbg(2, "dmad append %p M:%p", 
+						dmad, dmad->clidat);
+				dma_append_chain(ch, dmad, "data");
+			}
 				
-				if (acq200_debug > 1){
-					char *buf = kmalloc(4096, GFP_KERNEL);
-
-					info("dar %x", dar);
-					print_chain(&dma_channel, buf);
-					printk(buf);
-					kfree(buf);
-				}
-				if (dar == 0){
-					IMARK;
-					DMA_ARM(dma_channel);
-					DMA_FIRE(dma_channel);
-					IMARK;
-				}else{
-					IMARK;
-					DMA_RELOAD(dma_channel);
-				}
+			if (acq200_debug > 1){
+				char *buf = kmalloc(4096, GFP_KERNEL);
+				info("dar %x", dar);
+				print_chain(&dma_channel, buf);
+				printk(buf);
+				kfree(buf);
+			}
+			if (dar == 0){
+				IMARK;
+				DMA_ARM(dma_channel);
+				DMA_FIRE(dma_channel);
+				IMARK;
 			}else{
 				IMARK;
-				continue; /* no room, try later */
+				DMA_RELOAD(dma_channel);
 			}
+		}else{
+			IMARK;
+			continue; /* no room, try later */
 		}
 	}
 
@@ -1181,7 +1199,7 @@ static ssize_t acq200_mu_remote_write_chain(
 			if (MU_RMA_IS_PCI_REL(rma)){			
 				pci_addr += mug.rma_base; /* rma offset */
 			}
-			dmad = acq200_dmad_alloc();
+			dmad = dmad_alloc();
 			dma_buf.va = bbva(rma->buffer_offset);
 			if (MU_RMA_IS_HOSTBOUND(rma)){
 				dma_buf.direction = DMA_TO_DEVICE;

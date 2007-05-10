@@ -94,6 +94,7 @@ static struct TblockConsumer *newTBC(void)
 static void deleteTBC(struct TblockConsumer *tbc)
 {
 	struct TblockListElement *cursor, *tmp;
+	int tblock_backlog = 0;
 
 	spin_lock(&DG->tbc.lock);
 	list_del(&tbc->list);
@@ -102,10 +103,16 @@ static void deleteTBC(struct TblockConsumer *tbc)
 	/* flush and free any waiting tblocks. 
 	 * list disconnected, no need to lock */
 	list_for_each_entry_safe(cursor, tmp, &tbc->tle_q, list){
+		dbg(1, "release tblock %d", cursor->tblock->iblock);
 		acq200_phase_release_tblock_entry(cursor);
+		tblock_backlog++;
 	}
 	
 	kfree(tbc);
+
+	if (tblock_backlog > 10){
+		err("TBLOCK BACKLOG %d", tblock_backlog);
+	}
 }
 
 
@@ -1168,6 +1175,8 @@ static ssize_t dma_tb_read (
 	int ncopy;
 
 	if (tbc->c.tle){
+		assert(tbc->c.tle->tblock->length >= tbc->c.cursor);
+
 		headroom = tbc->c.tle->tblock->length - tbc->c.cursor;
 
 		dbg(1, "file %p tbc->c.tle %p headroom %d %s", 

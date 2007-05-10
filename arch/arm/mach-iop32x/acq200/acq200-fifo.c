@@ -758,6 +758,7 @@ static struct TblockListElement* bbb;  /* bit bucket block */
 static void poll_dma_done(void);
 #endif
 
+#define IS_MFA(p) (((unsigned)p & 0xff000000) == 0)
 
 static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 {
@@ -783,6 +784,12 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 			struct PrebuiltChain* pbc = 
 				(struct PrebuiltChain*)pbuf->clidat;
 
+			if (IS_MFA(pbc)){
+				/* this is a gross error. log it */
+				err("MFA in clidat 0x%08x", (unsigned)pbc);
+				goto no_clidat;
+			}
+
 
 #ifdef ACQ216
 			/** do not interfere with DMAD in flight! 
@@ -797,7 +804,7 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 			pbc->the_chain[pbc->fifo_to_local] = 0;
 			rb_put(&IPC->endstops, &pbc->desc);
 		}
-
+	no_clidat:
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
 #ifndef WAV232
@@ -3428,38 +3435,21 @@ acqX00_fpga_driver_init(struct device *dev, int irq)
 	}
 
 	DTACQ_MACH_DRIVER_INIT(dev);	
-
-#if defined ACQ196C
-#warning ACQ196C setting dma_block_len
-#if (DMA_BLOCK_LEN==192)
-#warning yes, DMA_BLOCK_LEN==192
-#endif
-#endif
 	DG->dma_block_len = DMA_BLOCK_LEN;
 	return 0;
 } 
 
-
-
-
-
 extern void acq200_fixup_irqs(struct pci_dev* dev);
 
-
-#ifdef ACQ196M
-#define MTTR2 0x80
-#warning CUSTOM MTTR2 for MAC ops
-#else
-#define MTTR2 0xf0
-#endif
 
 int init_arbiter(void)
 {
 	*IOP321_ATULT = 0xf0;         /* Maximum Latency Timer */
-	*IOP321_IACR  = 0x00000402;   /* CORE=MED ATU=LO */
+	*IOP321_IACR  = 0x00000482;   /* CORE=MED DMA1=LO ATU=LO */
 	*IOP321_MTTR1 = 0x08;         /* minimise bus grant to core */
+#ifdef MTTR2
 	*IOP321_MTTR2 = MTTR2;        /* Max int bus grant for DMAC */
-
+#endif
 	return 0;
 }
 
