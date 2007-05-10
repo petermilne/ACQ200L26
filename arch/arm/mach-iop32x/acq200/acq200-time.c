@@ -127,8 +127,28 @@ static struct irqaction iop3xx_timer_irq = {
 	.flags		= IRQF_DISABLED | IRQF_TIMER,
 };
 
-#define AUX_HZ	1000
+#define AUX_HZ	100
 
+static int aux_hz = AUX_HZ;
+
+unsigned acq200_setAuxClock(unsigned hz)
+/* we can run the tick any speed > Hz, because the ISR has absolute ref in tmr1
+ */
+{
+	u32 timer_load;
+
+	if (hz < HZ){
+		hz = HZ;
+	}
+
+	timer_load = ticks_per_jiffy * HZ/hz;
+	write_trr0(timer_load);	
+}
+
+unsigned acq200_getAuxClock(void)
+{
+	return aux_hz;
+}
 
 void __init acq200_init_time(unsigned long tick_rate)
 {

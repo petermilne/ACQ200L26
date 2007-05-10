@@ -662,6 +662,34 @@ static ssize_t show_ticks(
 }
 static DEVICE_ATTR(ticks, S_IRUGO, show_ticks, 0);
 
+extern unsigned acq200_setAuxClock(unsigned hz);
+extern unsigned acq200_getAuxClock(void);
+
+static	ssize_t set_auxClock(
+	struct device *device,
+	struct device_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	unsigned hz;
+
+	if (sscanf(buf, "%u", &hz) == 1){
+		acq200_setAuxClock(hz);
+	}
+	return count;
+}
+
+static ssize_t show_auxClock(
+	struct device * device, 
+	struct device_attribute *attr, 
+	char * buf)
+{
+	return sprintf(buf, "%u\n", acq200_getAuxClock());
+}
+
+static DEVICE_ATTR(auxClock, S_IRUSR|S_IWUSR, show_auxClock, set_auxClock);
+
+
 static  ssize_t show_pci_env(
 	struct device * device, struct device_attribute *attr, char * buf)
 {
@@ -725,6 +753,7 @@ static void mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_cpld_rev);
 	DEVICE_CREATE_FILE(dev, &dev_attr_hpi_mask);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ticks);
+	DEVICE_CREATE_FILE(dev, &dev_attr_auxClock);
 
 	MK_DEV_FILE(ATUVID);
 	MK_DEV_FILE(ATUCMD);
