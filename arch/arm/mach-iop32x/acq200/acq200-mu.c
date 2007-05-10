@@ -971,7 +971,7 @@ static int post_dmac_outgoing_request(
 		DMA_CHANNEL, buf->laddr, offset, remaddr, bc, OUTGOING );
 }
 
-#define EOT_TO_TICKS (HZ/1)
+#define EOT_TO_TICKS (HZ/10)
 
 static int print_chain(struct DmaChannel* channel, char* buf)
 {
@@ -999,11 +999,12 @@ static int print_chain(struct DmaChannel* channel, char* buf)
 DEFINE_DMA_CHANNEL(dma_channel, 1);
 static struct u32_ringbuffer DMADQ;
 static int new_chain_ready;
+static spinlock_t eot_lock = SPIN_LOCK_UNLOCKED;
 
 static int acq200mu_EOT_task(void *nothing)
 {
 	struct InterruptSync * isync = &DMA_ISYNC;
-	spinlock_t lock = SPIN_LOCK_UNLOCKED;
+
 	unsigned long flags;
 	u32 stat;
 	struct DmaChannel *ch = &dma_channel;
@@ -1012,7 +1013,7 @@ static int acq200mu_EOT_task(void *nothing)
 
 	while(!kthread_should_stop()) {
 		int new_chain_count;
-		u32 dar;
+		int was_interrupted;
 		int ic = 0;
 		int timeout = wait_event_interruptible_timeout(
 			isync->waitq, 
@@ -1020,6 +1021,8 @@ static int acq200mu_EOT_task(void *nothing)
 				kthread_should_stop(),
 			EOT_TO_TICKS) == 0;
 		int uptodate = 0;
+		u32 dar = DMA_REG(dma_channel, DMA_DAR);
+
 
 		dbg(timeout==0? 1: 3, "done wait [%8u] : %s %s %s %s",
 		    ++iter,
@@ -1031,67 +1034,67 @@ static int acq200mu_EOT_task(void *nothing)
 
 		/** first, update dma_channel chain to reflect DMA state */
 
-		spin_lock_irqsave(&lock, flags);
-		isync->interrupted = 0;
-		spin_unlock_irqrestore(&lock, flags);
-		
-		dar = DMA_REG(dma_channel, DMA_DAR);
-
+		spin_lock_irqsave(&eot_lock, flags);
+		if ((was_interrupted = isync->interrupted) != 0){
+			isync->interrupted = 0;
+		}
+		spin_unlock_irqrestore(&eot_lock, flags);
 
 #define IMARK	dbg(2, "ic=%d %d", ic, __LINE__)
 
-		if (last_dmad && dar != last_dmad->pa){
-			IMARK;
-
-			acq200_dmad_free(last_dmad);	
-			last_dmad = 0;
-		}
-
-
-
-
-		for (; !uptodate && ic < dma_channel.nchain; ++ic){
-			if (dma_channel.dmad[ic] == 0){
+		if (was_interrupted || DMA_DONE(dma_channel, stat)){
+			if (last_dmad && dar != last_dmad->pa){
 				IMARK;
-				continue;
-			}else if (dar == dma_channel.dmad[ic]->pa){
-				if (DMA_DONE(dma_channel, stat)){
+
+				acq200_dmad_free(last_dmad);	
+				last_dmad = 0;
+			}
+
+			for (; !uptodate && ic < dma_channel.nchain; ++ic){
+				if (dma_channel.dmad[ic] == 0){
 					IMARK;
-					last_dmad = 0;
-					uptodate = 1;
-				}else{
-					IMARK;
-					last_dmad = dma_channel.dmad[ic];
-					goto no_reset_chain;
+					continue;
+				}else if (dar == dma_channel.dmad[ic]->pa){
+					if (DMA_DONE(dma_channel, stat)){
+						IMARK;
+						last_dmad = 0;
+						uptodate = 1;
+					}else{
+						IMARK;
+						last_dmad = 
+							dma_channel.dmad[ic];
+						goto no_reset_chain;
+					}
 				}
+
+				/* here with completed dmad ... cleanup */
+				if (dma_channel.dmad[ic]->clidat){
+
+					dbg(2, "dmad %p POST %p",
+					    dma_channel.dmad[ic],
+					    dma_channel.dmad[ic]->clidat);
+
+					acq200mu_post_ob(
+						(MFA)dma_channel.dmad[ic]->clidat);
+					/* critical: */
+					dma_channel.dmad[ic]->clidat = 0;
+				}
+				IMARK;
+				acq200_dmad_free(dma_channel.dmad[ic]);
+				dma_channel.dmad[ic] = 0;
 			}
-
-			/* here with completed dmad ... cleanup */
-			if (dma_channel.dmad[ic]->clidat){
-
-				dbg(2, "dmad %p POST %p",
-				    dma_channel.dmad[ic],
-				    dma_channel.dmad[ic]->clidat);
-
-				acq200mu_post_ob(
-					(MFA)dma_channel.dmad[ic]->clidat);
-				dma_channel.dmad[ic]->clidat = 0;
-			}
-			IMARK;
-			acq200_dmad_free(dma_channel.dmad[ic]);
-			dma_channel.dmad[ic] = 0;
+/*	reset_chain: */
+			dma_channel.nchain = 0;
+			dar = 0;			/* NO RELOAD */
+		no_reset_chain:
+			;
 		}
 
-
-
-/*	reset_chain: */
-		dma_channel.nchain = 0;
-		dar = 0;			/* NO RELOAD */
-	no_reset_chain:
-
+		spin_lock(&eot_lock);
 		if ((new_chain_count = new_chain_ready) != 0){
 			new_chain_ready = 0;
 		}
+		spin_unlock(&eot_lock);
 		/* now handle new requests */		
 
 		if (new_chain_count){
@@ -1231,7 +1234,9 @@ static ssize_t acq200_mu_remote_write_chain(
 		    dmad_count? "WAKEUP": "done");
 
 	if (dmad_count){
+		spin_lock(&eot_lock);
 		new_chain_ready = dmad_count;
+		spin_unlock(&eot_lock);
 		wake_up_interruptible(&DMA_ISYNC.waitq);
 	}
 
