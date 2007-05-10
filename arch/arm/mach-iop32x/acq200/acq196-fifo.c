@@ -29,6 +29,8 @@
 
 #define ACQ196_VERID "$Revision: 1.13 $ " __DATE__ " " __TIME__
 
+#define MTTR2	0x80
+
 #include <linux/platform_device.h>
 
 #include "acq200-fifo-top.h"

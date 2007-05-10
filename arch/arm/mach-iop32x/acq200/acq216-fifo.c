@@ -31,7 +31,7 @@
 #define FPGA_INT IRQ_ACQ200_FP
 #define FPGA_INT_MASK (1<<FPGA_INT)
 
-
+#define MTTR2	0xfe		/* maximse DMA block len on bus */
 #include "acq200-fifo-local.h"
 
 #define AICHAN_DEFAULT 16
