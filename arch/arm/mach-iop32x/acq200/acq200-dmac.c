@@ -345,6 +345,8 @@ static int __devinit map_local_resource(struct device * dev)
 			u32rb_put(&DP.rb, item);
 		}
 	}
+	info("acq200-dmac put %d descriptors", DP.rb.nput);
+	DP.rb.nput = DP.rb.nget = 0;
 	return 0;
 }
 
