@@ -30,7 +30,7 @@
 DEFINE_MUTEX(pm_mutex);
 
 struct pm_ops *pm_ops;
-suspend_disk_method_t pm_disk_mode = PM_DISK_PLATFORM;
+suspend_disk_method_t pm_disk_mode = PM_DISK_SHUTDOWN;
 
 /**
  *	pm_set_ops - Set the global power method table. 
@@ -41,8 +41,25 @@ void pm_set_ops(struct pm_ops * ops)
 {
 	mutex_lock(&pm_mutex);
 	pm_ops = ops;
+	if (ops && ops->pm_disk_mode != PM_DISK_INVALID) {
+		pm_disk_mode = ops->pm_disk_mode;
+	} else
+		pm_disk_mode = PM_DISK_SHUTDOWN;
 	mutex_unlock(&pm_mutex);
 }
+
+/**
+ * pm_valid_only_mem - generic memory-only valid callback
+ *
+ * pm_ops drivers that implement mem suspend only and only need
+ * to check for that in their .valid callback can use this instead
+ * of rolling their own .valid callback.
+ */
+int pm_valid_only_mem(suspend_state_t state)
+{
+	return state == PM_SUSPEND_MEM;
+}
+
 
 static inline void pm_finish(suspend_state_t state)
 {
@@ -167,22 +184,26 @@ static void suspend_finish(suspend_state_t state)
 static const char * const pm_states[PM_SUSPEND_MAX] = {
 	[PM_SUSPEND_STANDBY]	= "standby",
 	[PM_SUSPEND_MEM]	= "mem",
-#ifdef CONFIG_SOFTWARE_SUSPEND
 	[PM_SUSPEND_DISK]	= "disk",
-#endif
 };
 
 static inline int valid_state(suspend_state_t state)
 {
 	/* Suspend-to-disk does not really need low-level support.
-	 * It can work with reboot if needed. */
+	 * It can work with shutdown/reboot if needed. If it isn't
+	 * configured, then it cannot be supported.
+	 */
 	if (state == PM_SUSPEND_DISK)
+#ifdef CONFIG_SOFTWARE_SUSPEND
 		return 1;
+#else
+		return 0;
+#endif
 
 	/* all other states need lowlevel support and need to be
 	 * valid to the lowlevel implementation, no valid callback
-	 * implies that all are valid. */
-	if (!pm_ops || (pm_ops->valid && !pm_ops->valid(state)))
+	 * implies that none are valid. */
+	if (!pm_ops || !pm_ops->valid || !pm_ops->valid(state))
 		return 0;
 	return 1;
 }
@@ -227,15 +248,6 @@ static int enter_state(suspend_state_t state)
 	return error;
 }
 
-/*
- * This is main interface to the outside world. It needs to be
- * called from process context.
- */
-int software_suspend(void)
-{
-	return enter_state(PM_SUSPEND_DISK);
-}
-
 
 /**
  *	pm_suspend - Externally visible function for suspending system.
@@ -268,7 +280,7 @@ decl_subsys(power,NULL,NULL);
  *	proper enumerated value, and initiates a suspend transition.
  */
 
-static ssize_t state_show(struct subsystem * subsys, char * buf)
+static ssize_t state_show(struct kset *kset, char *buf)
 {
 	int i;
 	char * s = buf;
@@ -281,7 +293,7 @@ static ssize_t state_show(struct subsystem * subsys, char * buf)
 	return (s - buf);
 }
 
-static ssize_t state_store(struct subsystem * subsys, const char * buf, size_t n)
+static ssize_t state_store(struct kset *kset, const char *buf, size_t n)
 {
 	suspend_state_t state = PM_SUSPEND_STANDBY;
 	const char * const *s;
@@ -308,13 +320,13 @@ power_attr(state);
 #ifdef CONFIG_PM_TRACE
 int pm_trace_enabled;
 
-static ssize_t pm_trace_show(struct subsystem * subsys, char * buf)
+static ssize_t pm_trace_show(struct kset *kset, char *buf)
 {
 	return sprintf(buf, "%d\n", pm_trace_enabled);
 }
 
 static ssize_t
-pm_trace_store(struct subsystem * subsys, const char * buf, size_t n)
+pm_trace_store(struct kset *kset, const char *buf, size_t n)
 {
 	int val;
 
@@ -348,7 +360,7 @@ static int __init pm_init(void)
 {
 	int error = subsystem_register(&power_subsys);
 	if (!error)
-		error = sysfs_create_group(&power_subsys.kset.kobj,&attr_group);
+		error = sysfs_create_group(&power_subsys.kobj,&attr_group);
 	return error;
 }
 
