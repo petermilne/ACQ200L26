@@ -39,6 +39,11 @@
 
 #include "pcf8575.h"
 
+#define DEVICE_CREATE_FILE(dev, attr)					\
+	do {								\
+		if (device_create_file(dev, attr) != 0) return -ENODEV;	\
+	} while(0)
+
 /* Addresses to scan */
 static unsigned short normal_i2c[] = { 
 	0x20, 0x21, 0x22, 0x23, 0x24, 0x25, I2C_CLIENT_END };
@@ -198,8 +203,8 @@ int pcf8575_detect(struct i2c_adapter *adapter, int address, int kind)
 	pcf8575_init_client(new_client);
 
 	/* Register sysfs hooks */
-	device_create_file(&new_client->dev, &dev_attr_read);
-	device_create_file(&new_client->dev, &dev_attr_write);
+	DEVICE_CREATE_FILE(&new_client->dev, &dev_attr_read);
+	DEVICE_CREATE_FILE(&new_client->dev, &dev_attr_write);
 	return 0;
 
 /* OK, this is not exactly good programming practice, usually. But it is

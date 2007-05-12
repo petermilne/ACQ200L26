@@ -3472,7 +3472,7 @@ acqX00_fpga_probe(struct device *dev, int irq)
  * sounds like a good idea to me
  */
 	if (!IPC->is_fpga.requested){
-		if ( request_irq( irq, fpga_fifo_isr, SA_INTERRUPT, 
+		if ( request_irq( irq, fpga_fifo_isr, 0, 
 				  "fpga_fifo", (void*)&IPC->is_fpga ) != 0 ){
 			err( "request_irq() failed for %d\n", irq );
 			return -ENODEV;

@@ -33,6 +33,12 @@
 * Not sure how to autodetect an AD5282 anyway
 */
 
+#define DEVICE_CREATE_FILE(dev, attr)					\
+	do {								\
+		if (device_create_file(dev, attr) != 0) return -ENODEV;	\
+	} while(0)
+
+
 #include <linux/module.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
@@ -216,9 +222,9 @@ int ad5280_probe(struct i2c_adapter *adapter, int address, int kind)
 	ad5280_init_client(new_client);
 
 	/* Register sysfs hooks */
-	device_create_file(&new_client->dev, &dev_attr_read);
-	device_create_file(&new_client->dev, &dev_attr_write);
-	device_create_file(&new_client->dev, &dev_attr_wiper);
+	DEVICE_CREATE_FILE(&new_client->dev, &dev_attr_read);
+	DEVICE_CREATE_FILE(&new_client->dev, &dev_attr_write);
+	DEVICE_CREATE_FILE(&new_client->dev, &dev_attr_wiper);
 	return 0;
 
 /* OK, this is not exactly good programming practice, usually. But it is

@@ -367,21 +367,26 @@ sysfs_channel(15,14);
 sysfs_channel(16,15);
 #endif
 
+#define DEVICE_CREATE_FILE(dev, attr)					\
+	do {								\
+		if (device_create_file(dev, attr) != 0) return -ENODEV;	\
+	} while(0)
+
 
 #define device_create_file_reset(client) \
-        device_create_file(&client->dev, &dev_attr_reset);
+        DEVICE_CREATE_FILE(&client->dev, &dev_attr_reset);
 
 #define device_create_file_debug(client) \
-        device_create_file(&client->dev, &dev_attr_debug);
+        DEVICE_CREATE_FILE(&client->dev, &dev_attr_debug);
 
 #define device_create_file_channel(client, chans) \
 do { \
-        device_create_file(&client->dev, &dev_attr_ch##chans); \
-        device_create_file(&client->dev, &dev_attr__m##chans); \
-        device_create_file(&client->dev, &dev_attr__c##chans); \
+        DEVICE_CREATE_FILE(&client->dev, &dev_attr_ch##chans); \
+        DEVICE_CREATE_FILE(&client->dev, &dev_attr__m##chans); \
+        DEVICE_CREATE_FILE(&client->dev, &dev_attr__c##chans); \
 } while(0)
 
-static void ad539x_mk_sysfs(struct i2c_client *client)
+static int ad539x_mk_sysfs(struct i2c_client *client)
 {
 	device_create_file_reset(client);
 	device_create_file_debug(client);
@@ -404,6 +409,7 @@ static void ad539x_mk_sysfs(struct i2c_client *client)
 	device_create_file_channel(client, 15);
 	device_create_file_channel(client, 16);
 #endif
+	return 0;
 }
 
 

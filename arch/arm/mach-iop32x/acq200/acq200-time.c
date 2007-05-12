@@ -143,6 +143,7 @@ unsigned acq200_setAuxClock(unsigned hz)
 
 	timer_load = ticks_per_jiffy * HZ/hz;
 	write_trr0(timer_load);	
+	return hz;
 }
 
 unsigned acq200_getAuxClock(void)
