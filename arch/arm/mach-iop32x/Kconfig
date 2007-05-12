@@ -67,6 +67,13 @@ config ARCH_IOP321
 	depends on ARCH_ACQX00
 	help
 	  Hidden option
+config IOP3XX_ATU
+        bool "Enable the PCI Controller"
+        default y
+        help
+          Say Y here if you want the IOP to initialize its PCI Controller.
+          Say N if the IOP is an add in card, the host system owns the PCI
+          bus in this case.
 
 endmenu
 
