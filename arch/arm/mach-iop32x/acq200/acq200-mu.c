@@ -1757,13 +1757,6 @@ run_mu_mknod_helper( int major )
 	return 0;
 }
 
-#define IRQ_IOP321_MSG_IPQ 26
-
-#define DISABLE_IRQ( irq ) \
-       info( "disable %20s %d\n", #irq, irq ); disable_irq( irq );
-
-
-
 static void free_databufs(void)
 {
 	int ibuf;
