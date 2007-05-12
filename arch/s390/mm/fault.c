@@ -20,6 +20,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
+#include <linux/kdebug.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/console.h>
@@ -30,7 +31,6 @@
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
-#include <asm/kdebug.h>
 #include <asm/s390_ext.h>
 
 #ifndef CONFIG_64BIT
@@ -253,7 +253,10 @@ static int signal_return(struct mm_struct *mm, struct pt_regs *regs,
 			 unsigned long address, unsigned long error_code)
 {
 	u16 instruction;
-	int rc, compat;
+	int rc;
+#ifdef CONFIG_COMPAT
+	int compat;
+#endif
 
 	pagefault_disable();
 	rc = __get_user(instruction, (u16 __user *) regs->psw.addr);

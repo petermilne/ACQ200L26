@@ -18,7 +18,6 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/major.h>
-#include <linux/smp_lock.h>
 #include <linux/device.h>
 #include <linux/compat.h>
 
@@ -337,7 +336,7 @@ static int bits_to_user(unsigned long *bits, unsigned int maxbit,
 
 	if (compat) {
 		len = NBITS_COMPAT(maxbit) * sizeof(compat_long_t);
-		if (len < maxlen)
+		if (len > maxlen)
 			len = maxlen;
 
 		for (i = 0; i < len / sizeof(compat_long_t); i++)
@@ -512,7 +511,7 @@ static long evdev_ioctl_handler(struct file *file, unsigned int cmd,
 
 				if ((_IOC_NR(cmd) & ~EV_MAX) == _IOC_NR(EVIOCGBIT(0,0))) {
 
-					long *bits;
+					unsigned long *bits;
 					int len;
 
 					switch (_IOC_NR(cmd) & EV_MAX) {
@@ -557,7 +556,7 @@ static long evdev_ioctl_handler(struct file *file, unsigned int cmd,
 
 				if ((_IOC_NR(cmd) & ~ABS_MAX) == _IOC_NR(EVIOCGABS(0))) {
 
-					int t = _IOC_NR(cmd) & ABS_MAX;
+					t = _IOC_NR(cmd) & ABS_MAX;
 
 					abs.value = dev->abs[t];
 					abs.minimum = dev->absmin[t];
@@ -577,7 +576,7 @@ static long evdev_ioctl_handler(struct file *file, unsigned int cmd,
 
 				if ((_IOC_NR(cmd) & ~ABS_MAX) == _IOC_NR(EVIOCSABS(0))) {
 
-					int t = _IOC_NR(cmd) & ABS_MAX;
+					t = _IOC_NR(cmd) & ABS_MAX;
 
 					if (copy_from_user(&abs, p, sizeof(struct input_absinfo)))
 						return -EFAULT;

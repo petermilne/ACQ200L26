@@ -31,6 +31,10 @@ config ZONE_DMA
 	def_bool y
 	depends on !IA64_SGI_SN2
 
+config QUICKLIST
+	bool
+	default y
+
 config MMU
 	bool
 	default y
@@ -468,7 +472,7 @@ config KEXEC
 	help
 	  kexec is a system call that implements the ability to shutdown your
 	  current kernel, and to start another kernel.  It is like a reboot
-	  but it is indepedent of the system firmware.   And like a reboot
+	  but it is independent of the system firmware.   And like a reboot
 	  you can start any kernel with it, not just Linux.
 
 	  The name comes from the similiarity to the exec system call.

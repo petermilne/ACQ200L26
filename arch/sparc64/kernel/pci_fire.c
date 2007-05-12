@@ -7,7 +7,6 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 
-#include <asm/pbm.h>
 #include <asm/oplib.h>
 #include <asm/prom.h>
 
@@ -28,153 +27,9 @@
 			       "i" (ASI_PHYS_BYPASS_EC_E) \
 			     : "memory")
 
-/* Fire config space address format is nearly identical to
- * that of SCHIZO and PSYCHO, except that in order to accomodate
- * PCI-E extended config space the encoding can handle 12 bits
- * of register address:
- *
- *  32     28 27 20 19    15 14      12 11  2  1 0
- * -------------------------------------------------
- * |0 0 0 0 0| bus | device | function | reg | 0 0 |
- * -------------------------------------------------
- */
-#define FIRE_CONFIG_BASE(PBM)	((PBM)->config_space)
-#define FIRE_CONFIG_ENCODE(BUS, DEVFN, REG)	\
-	(((unsigned long)(BUS)   << 20) |	\
-	 ((unsigned long)(DEVFN) << 12)  |	\
-	 ((unsigned long)(REG)))
-
-static void *fire_pci_config_mkaddr(struct pci_pbm_info *pbm,
-				      unsigned char bus,
-				      unsigned int devfn,
-				      int where)
-{
-	if (!pbm)
-		return NULL;
-	return (void *)
-		(FIRE_CONFIG_BASE(pbm) |
-		 FIRE_CONFIG_ENCODE(bus, devfn, where));
-}
-
-/* FIRE PCI configuration space accessors. */
-
-static int fire_read_pci_cfg(struct pci_bus *bus_dev, unsigned int devfn,
-			     int where, int size, u32 *value)
-{
-	struct pci_pbm_info *pbm = bus_dev->sysdata;
-	unsigned char bus = bus_dev->number;
-	u32 *addr;
-	u16 tmp16;
-	u8 tmp8;
-
-	if (bus_dev == pbm->pci_bus && devfn == 0x00)
-		return pci_host_bridge_read_pci_cfg(bus_dev, devfn, where,
-						    size, value);
-	switch (size) {
-	case 1:
-		*value = 0xff;
-		break;
-	case 2:
-		*value = 0xffff;
-		break;
-	case 4:
-		*value = 0xffffffff;
-		break;
-	}
-
-	addr = fire_pci_config_mkaddr(pbm, bus, devfn, where);
-	if (!addr)
-		return PCIBIOS_SUCCESSFUL;
-
-	switch (size) {
-	case 1:
-		pci_config_read8((u8 *)addr, &tmp8);
-		*value = tmp8;
-		break;
-
-	case 2:
-		if (where & 0x01) {
-			printk("pci_read_config_word: misaligned reg [%x]\n",
-			       where);
-			return PCIBIOS_SUCCESSFUL;
-		}
-		pci_config_read16((u16 *)addr, &tmp16);
-		*value = tmp16;
-		break;
-
-	case 4:
-		if (where & 0x03) {
-			printk("pci_read_config_dword: misaligned reg [%x]\n",
-			       where);
-			return PCIBIOS_SUCCESSFUL;
-		}
-
-		pci_config_read32(addr, value);
-		break;
-	}
-	return PCIBIOS_SUCCESSFUL;
-}
-
-static int fire_write_pci_cfg(struct pci_bus *bus_dev, unsigned int devfn,
-			      int where, int size, u32 value)
-{
-	struct pci_pbm_info *pbm = bus_dev->sysdata;
-	unsigned char bus = bus_dev->number;
-	u32 *addr;
-
-	if (bus_dev == pbm->pci_bus && devfn == 0x00)
-		return pci_host_bridge_write_pci_cfg(bus_dev, devfn, where,
-						     size, value);
-	addr = fire_pci_config_mkaddr(pbm, bus, devfn, where);
-	if (!addr)
-		return PCIBIOS_SUCCESSFUL;
-
-	switch (size) {
-	case 1:
-		pci_config_write8((u8 *)addr, value);
-		break;
-
-	case 2:
-		if (where & 0x01) {
-			printk("pci_write_config_word: misaligned reg [%x]\n",
-			       where);
-			return PCIBIOS_SUCCESSFUL;
-		}
-		pci_config_write16((u16 *)addr, value);
-		break;
-
-	case 4:
-		if (where & 0x03) {
-			printk("pci_write_config_dword: misaligned reg [%x]\n",
-			       where);
-			return PCIBIOS_SUCCESSFUL;
-		}
-
-		pci_config_write32(addr, value);
-	}
-	return PCIBIOS_SUCCESSFUL;
-}
-
-static struct pci_ops pci_fire_ops = {
-	.read	=	fire_read_pci_cfg,
-	.write	=	fire_write_pci_cfg,
-};
-
-static void pbm_scan_bus(struct pci_controller_info *p,
-			 struct pci_pbm_info *pbm)
+static void pci_fire_scan_bus(struct pci_pbm_info *pbm)
 {
 	pbm->pci_bus = pci_scan_one_pbm(pbm);
-}
-
-static void pci_fire_scan_bus(struct pci_controller_info *p)
-{
-	struct device_node *dp;
-
-	if ((dp = p->pbm_A.prom_node) != NULL)
-		pbm_scan_bus(p, &p->pbm_A);
-
-	if ((dp = p->pbm_B.prom_node) != NULL)
-		pbm_scan_bus(p, &p->pbm_B);
 
 	/* XXX register error interrupt handlers XXX */
 }
@@ -313,17 +168,24 @@ static void pci_fire_hw_init(struct pci_pbm_info *pbm)
 }
 
 static void pci_fire_pbm_init(struct pci_controller_info *p,
-				struct device_node *dp, u32 portid)
+			      struct device_node *dp, u32 portid)
 {
 	const struct linux_prom64_registers *regs;
 	struct pci_pbm_info *pbm;
-	const u32 *ino_bitmap;
-	const unsigned int *busrange;
 
 	if ((portid & 1) == 0)
 		pbm = &p->pbm_A;
 	else
 		pbm = &p->pbm_B;
+
+	pbm->next = pci_pbm_root;
+	pci_pbm_root = pbm;
+
+	pbm->scan_bus = pci_fire_scan_bus;
+	pbm->pci_ops = &sun4u_pci_ops;
+	pbm->config_space_reg_bits = 12;
+
+	pbm->index = pci_num_pbms++;
 
 	pbm->portid = portid;
 	pbm->parent = p;
@@ -338,13 +200,7 @@ static void pci_fire_pbm_init(struct pci_controller_info *p,
 
 	pci_determine_mem_io_space(pbm);
 
-	ino_bitmap = of_get_property(dp, "ino-bitmap", NULL);
-	pbm->ino_bitmap = (((u64)ino_bitmap[1] << 32UL) |
-			   ((u64)ino_bitmap[0] <<  0UL));
-
-	busrange = of_get_property(dp, "bus-range", NULL);
-	pbm->pci_first_busno = busrange[0];
-	pbm->pci_last_busno = busrange[1];
+	pci_get_pbm_props(pbm);
 
 	pci_fire_hw_init(pbm);
 	pci_fire_pbm_iommu_init(pbm);
@@ -362,19 +218,11 @@ void fire_pci_init(struct device_node *dp, const char *model_name)
 	struct pci_controller_info *p;
 	u32 portid = of_getintprop_default(dp, "portid", 0xff);
 	struct iommu *iommu;
+	struct pci_pbm_info *pbm;
 
-	for (p = pci_controller_root; p; p = p->next) {
-		struct pci_pbm_info *pbm;
-
-		if (p->pbm_A.prom_node && p->pbm_B.prom_node)
-			continue;
-
-		pbm = (p->pbm_A.prom_node ?
-		       &p->pbm_A :
-		       &p->pbm_B);
-
+	for (pbm = pci_pbm_root; pbm; pbm = pbm->next) {
 		if (portid_compare(pbm->portid, portid)) {
-			pci_fire_pbm_init(p, dp, portid);
+			pci_fire_pbm_init(pbm->parent, dp, portid);
 			return;
 		}
 	}
@@ -395,14 +243,7 @@ void fire_pci_init(struct device_node *dp, const char *model_name)
 
 	p->pbm_B.iommu = iommu;
 
-	p->next = pci_controller_root;
-	pci_controller_root = p;
-
-	p->index = pci_num_controllers++;
-
-	p->scan_bus = pci_fire_scan_bus;
 	/* XXX MSI support XXX */
-	p->pci_ops = &pci_fire_ops;
 
 	/* Like PSYCHO and SCHIZO we have a 2GB aligned area
 	 * for memory space.

@@ -236,9 +236,11 @@ static int __cpuinit err_inject_cpu_callback(struct notifier_block *nfb,
 	sys_dev = get_cpu_sysdev(cpu);
 	switch (action) {
 	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
 		err_inject_add_dev(sys_dev);
 		break;
 	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
 		err_inject_remove_dev(sys_dev);
 		break;
 	}
@@ -289,5 +291,5 @@ module_init(err_inject_init);
 module_exit(err_inject_exit);
 
 MODULE_AUTHOR("Fenghua Yu <fenghua.yu@intel.com>");
-MODULE_DESCRIPTION("MC error injection kenrel sysfs interface");
+MODULE_DESCRIPTION("MC error injection kernel sysfs interface");
 MODULE_LICENSE("GPL");

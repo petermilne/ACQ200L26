@@ -222,11 +222,6 @@ struct paravirt_ops
 	void (*iret)(void);
 };
 
-/* Mark a paravirt probe function. */
-#define paravirt_probe(fn)						\
- static asmlinkage void (*__paravirtprobe_##fn)(void) __attribute_used__ \
-		__attribute__((__section__(".paravirtprobe"))) = fn
-
 extern struct paravirt_ops paravirt_ops;
 
 #define PARAVIRT_PATCH(x)					\
@@ -560,11 +555,6 @@ static inline u64 paravirt_read_tsc(void)
 {
 	return PVOP_CALL0(u64, read_tsc);
 }
-#define rdtsc(low,high) do {			\
-	u64 _l = paravirt_read_tsc();		\
-	low = (u32)_l;				\
-	high = _l >> 32;			\
-} while(0)
 
 #define rdtscl(low) do {			\
 	u64 _l = paravirt_read_tsc();		\
