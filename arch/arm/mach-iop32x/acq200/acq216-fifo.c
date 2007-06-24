@@ -163,9 +163,9 @@ static int set_ob_clock(int hz)
 	static char fin_def[20];
 	static char *argv[6];
 	int i;
-	int fin;
+	int fin = iop32x_pci_bus_speed()/4/1000; /* input clk in kHz */
 
-	sprintf(fin_def, "%d", iop32x_pci_bus_speed());
+	sprintf(fin_def, "%d", fin);
 
 /** source OB clock from INT 16M, source int clock divider from OBC, 
  *  see store_ob_clock_word() 
