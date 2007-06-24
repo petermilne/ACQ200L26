@@ -28,9 +28,9 @@
 #endif
 #define VERID \
 "$Id: acq200-fifo-procfs.c,v 1.27 2006/10/04 09:07:43 pgm Exp $\n"\
-"Build 1078 " __DATE__ " "__TIME__
+"Build 1079 " __DATE__ " "__TIME__
 
-
+#include <linux/seq_file.h>
 
 #include "acq200-fifo-tblock.h"
 #include "dio_defs.h"
@@ -3051,47 +3051,93 @@ static int acq200_proc_empty_tblocks(
 }
 
 
-static int acq200_proc_tblocks(
-	char *buf, char **start, off_t offset, int len,
-                int* eof, void* data )
+
+static void *tblocks_seq_start(struct seq_file *sfile, loff_t *pos)
+/* *pos == iblock. returns next TBLOCK* */
 {
-	int ib;
-#define PRINTF(fmt, args...) sprintf(buf+len, fmt, ## args)
-#define DGPRINTF( field, fmt ) \
-        len += PRINTF( "%30s: "fmt"\n", #field, DG->field )
-
-	len = 0;
-
-	for (ib = 0; ib != DG->bigbuf.tblocks.nblocks; ++ib){
-		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[ib];
-		const char* stat = "-";
-
-		tblock_lock(tblock);
-		switch(atomic_read(&tblock->in_phase)){
-		case 1:			
-			if (tblock->touched){
-				stat = "C";
-			}else{
-				stat = "R";
-			}
-			break;
-		case 0:
-			stat = "-"; 
-			break;
-		default:
-			stat = "B";             /* C/R would be nicer */
-		}
-
-		len += PRINTF( "<bl id=\"%2d\" addr=\"%08x\" st=\"%s\"/>\n", 
-			       ib, tblock->offset, stat);
-		tblock_unlock(tblock);
-	}  
-	return len;
-#undef DGPRINTF
-#undef PRINTF
+	if (*pos >= DG->bigbuf.tblocks.nblocks){
+		return NULL;
+	}else{
+		return pos;
+	}
 }
 
+static void *tblocks_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	(*pos)++;
+	if (*pos >= DG->bigbuf.tblocks.nblocks){
+		return NULL;
+	}else{
+		return pos;
+	}
+}
 
+static void tblocks_seq_stop(struct seq_file *s, void *v)
+{
+
+}
+
+static int tblocks_seq_show(struct seq_file *sfile, void *v)
+{
+	int ib = *(int*)v;
+	struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[ib];
+	unsigned offset;
+	const char* stat = "-";
+	int len;
+
+	tblock_lock(tblock);
+	switch(atomic_read(&tblock->in_phase)){
+	case 1:			
+		if (tblock->touched){
+			stat = "C";
+		}else{
+			stat = "R";
+		}
+		break;
+	case 0:
+		stat = "-"; 
+		break;
+	default:
+		stat = "B";             /* C/R would be nicer */
+	}
+	offset = tblock->offset;
+	tblock_unlock(tblock);
+
+
+	len = seq_printf(sfile,
+			"<bl id=\"%2d\" addr=\"%08x\" st=\"%s\"/>\n", 
+		       ib, offset, stat);
+
+	return len;
+}
+
+static int tblocks_proc_open(struct inode *inode, struct file *file)
+{
+	static struct seq_operations tblocks_seq_ops = {
+		.start = tblocks_seq_start,
+		.next  = tblocks_seq_next,
+		.stop  = tblocks_seq_stop,
+		.show  = tblocks_seq_show
+	};
+	return seq_open(file, &tblocks_seq_ops);
+}
+
+static void acq200_create_proc_tblocks(
+	struct proc_dir_entry* root, const char *fname)
+{
+	static struct file_operations tblocks_proc_fops = {
+		.owner = THIS_MODULE,
+		.open = tblocks_proc_open,
+		.read = seq_read,
+		.llseek = seq_lseek,
+		.release = seq_release
+	};
+	struct proc_dir_entry *tblocks_entry =
+		create_proc_entry(fname, S_IRUGO, root);	
+	if (tblocks_entry){
+		tblocks_entry->proc_fops = &tblocks_proc_fops;
+	}
+}
 
 
 static int acq200_proc_tblocks_brief(
@@ -3496,8 +3542,7 @@ void create_proc_entries(void)
 #else
 	CPRE("hotpoint_histo_detail",acq200_proc_hotpoint_histo_detail);
 #endif
-	CPRE("tblock_cursor", acq200_proc_tblock_cursor);
-	CPRE("tblocks", acq200_proc_tblocks);
+	acq200_create_proc_tblocks(proc_acq200, "tblocks");
 	CPRE("tbmap", acq200_proc_tblocks_brief);
 	CPRE("tblocks_free", acq200_proc_free_tblocks);
 	CPRE("tblocks_empty", acq200_proc_empty_tblocks);

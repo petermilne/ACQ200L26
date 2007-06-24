@@ -955,11 +955,12 @@ static void bf_transform(short *to, short *from, int nwords, int stride)
 	if (S_first_time){
 		onFirstTime();
 	}
-	for (ps = from; ps - from < nwords, ps += stride){
+#if 0
+	for (ps = from; ps - from < nwords; ps += stride){
 		int flags;
 
 		if (triggerFound(ps, &th)){
-			offinblock = ps - from;   /** @@todo */
+			unsigned offinblock = ps - from;   /** @@todo */
 			flags - COMB_PULSE_FOUND;
 			elp = allocData(S_pulse_count+1, 
 					tble, offinblock,
@@ -978,6 +979,8 @@ static void bf_transform(short *to, short *from, int nwords, int stride)
 	
 		}
 	}
+#endif
+#warning STUB ONLY WORKTODO
 }
 
 static ssize_t store_clear(
@@ -1362,7 +1365,7 @@ static struct device_driver eb_ppcustom_driver;
 static struct Transformer bf_transformer = {
 	.name = "bf_search",
 	.transform = bf_transform,
-	t_flags = TF_RESULT_IS_RAW|TF_INPLACE
+	.t_flags = TF_RESULT_IS_RAW|TF_INPLACE
 };
 
 static 	struct Transformer transformer = {
@@ -1386,7 +1389,7 @@ static int eb_ppcustom_probe(struct device *dev)
 		err("transformer NOT registered");
 	}
 
-	if  = acq200_registerTransformer(&bf_transformer):
+	it  = acq200_registerTransformer(&bf_transformer);
 	if (it < 0 ){
 		err("transformer NOT registered");
 	}
