@@ -947,7 +947,38 @@ static void ppcustom_transform(short *to, short *from, int nwords, int stride)
 }
 
 
+static void bf_transform(short *to, short *from, int nwords, int stride)
+{
+	short *ps;
+	struct TriggerHistory th = {};
 
+	if (S_first_time){
+		onFirstTime();
+	}
+	for (ps = from; ps - from < nwords, ps += stride){
+		int flags;
+
+		if (triggerFound(ps, &th)){
+			offinblock = ps - from;   /** @@todo */
+			flags - COMB_PULSE_FOUND;
+			elp = allocData(S_pulse_count+1, 
+					tble, offinblock,
+					S_sample_number, flags);
+
+			if (!elp){
+				err("game over");
+				return;
+			}
+			if (processEvent(elp) == 0){
+				++S_pulse_count;
+			}else{
+				err("processEvent failed, drop out");
+				return;
+			}
+	
+		}
+	}
+}
 
 static ssize_t store_clear(
 	struct device * dev, 
@@ -1328,6 +1359,12 @@ static void eb_init_statics(void)
 
 static struct device_driver eb_ppcustom_driver;
 
+static struct Transformer bf_transformer = {
+	.name = "bf_search",
+	.transform = bf_transform,
+	t_flags = TF_RESULT_IS_RAW|TF_INPLACE
+};
+
 static 	struct Transformer transformer = {
 	.name = "ppcustom",
 	.transform = ppcustom_transform,
@@ -1348,6 +1385,11 @@ static int eb_ppcustom_probe(struct device *dev)
 	}else{
 		err("transformer NOT registered");
 	}
+
+	if  = acq200_registerTransformer(&bf_transformer):
+	if (it < 0 ){
+		err("transformer NOT registered");
+	}
 	eb_init_statics();
 	mk_ppcustom_fs();
 	mk_ppcustom_sysfs(dev);
@@ -1361,6 +1403,7 @@ static int eb_ppcustom_remove(struct device *dev)
 	rm_ppcustom_fs();
 
 	acq200_unregisterTransformer(&transformer);
+	acq200_unregisterTransformer(&bf_transformer);
 	return 0;
 }
 
