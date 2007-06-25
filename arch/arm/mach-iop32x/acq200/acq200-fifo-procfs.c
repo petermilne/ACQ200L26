@@ -1923,6 +1923,10 @@ static ssize_t store_finalize_phases(
 	}	
 
 	list_for_each_entry(phase, &DMC_WO->phases, list){
+
+		dbg(1, "phase \"%s\" %p len %d",
+		    phase, phase->name, phase_len(phase));
+
 		if (phase_len(phase)){
 			acq200_phase_gather_tblocks(phase);
 			phase->start_sample = start_sample;
