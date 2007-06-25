@@ -473,6 +473,9 @@ static int woOnRefill(
 	    phase? phase->actual_len:0, 
 	    phase? phase->demand_len:0);
 
+	if (!phase){
+		return 0;
+	}
 	if (phase->actual_len == 0){
 		phase->start_off = *offset;
 	}
@@ -507,7 +510,12 @@ static int woOnRefill(
 	
 	if (phase == wo->now){
 		if (phase_end(phase)){
-			wo->now = NEXT_PHASE(phase);
+			struct Phase *np = NEXT_PHASE(phase);
+			if (np){
+				wo->now = NEXT_PHASE(phase);
+			}else{
+				return 1;
+			}
 		}else{
 			; /* no action */
 		}
@@ -1503,8 +1511,8 @@ static void init_phases(void)
 		DMC_WO->post = &phases[1];
 		break;
 	default:
-		init_phase(&phases[0], CAPDEF->demand_len, 1);
 		init_phase(&null_phase, 0, 1);
+		init_phase(&phases[0], CAPDEF->demand_len, 1);
 		DMC_WO->pre = &null_phase;
 		DMC_WO->post = &phases[0];
 	}
