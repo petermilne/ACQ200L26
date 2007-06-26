@@ -281,7 +281,11 @@ struct DMC_WORK_ORDER {
 	int next_load;
 	int triggered;
 	int oneshot;
-	void (* trigger)(void);
+	int (*trigger_detect)(void);
+	struct {
+		spinlock_t lock;
+		int done;
+	} onEnable;
 	char* error;
 
 	int pit_stop;     /* stop after this number of pits */

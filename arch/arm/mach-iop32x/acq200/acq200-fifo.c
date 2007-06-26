@@ -65,6 +65,7 @@
 #include <asm-arm/arch-iop32x/acq200.h>
 
 #include <linux/moduleparam.h>
+#include <linux/workqueue.h>
 
 
 #define VERID \
@@ -157,9 +158,7 @@ static void preEnable(void);   /* call immediately BEFORE trigger en */
 static void onEnable(void);    /* call immediately AFTER trigger     */
 static int try_fiq(void);
 static void initPhaseDiagBuf(void);
-
-
-
+static void schedule_dmc0_timeout(unsigned long arg);
 static void increment_scc(struct SampleClockCounter *scc);
 
 
@@ -175,6 +174,7 @@ struct CAPDEF *CAPDEF = (struct CAPDEF*)0xdeadbeef;
 struct DevGlobs* DG; 
 
 int use_endstop = 0;
+
 
 /*
  * acq200-fifoi.h - defs private to acq200-fifo.c
@@ -374,6 +374,7 @@ void finish_with_engines(int ifinish)
 	if (!DG->finished_with_engines){
 		stop_capture();
 		call_end_of_shot_hooks();
+		schedule_dmc0_timeout(0);
 		if (DG->shot == 0 || ifinish < 0){
 			DMC_WO->state = ST_STOP;
 		}else{
@@ -381,6 +382,8 @@ void finish_with_engines(int ifinish)
 			DMC_WO->state = uses_ST_CAPDONE? ST_CAPDONE: ST_STOP;
 		}
 		iop321_stop_ppmu();
+
+
 		DG->stats.end_gtsr = *IOP321_GTSR;
 		DG->stats.end_jiffies = jiffies;
 		DG->finished_with_engines = ifinish;
@@ -396,7 +399,6 @@ void finish_with_engines(int ifinish)
 		if (DG->bh_unmasks_eoc){
 			unmask_eoc();
 		}
-		
 		wake_up_interruptible(&IPC->finished_waitq);
 	}
 }	
@@ -464,8 +466,9 @@ static inline unsigned phase_increment(unsigned offset)
 
 static int woOnRefill(
 	struct DMC_WORK_ORDER *wo, u32* fifstat, unsigned* offset )
-/* returns 1 on phase change */
+/* returns 1 on phase change or END_OF_PHASE */
 {
+#define END_OF_PHASE 1
 	struct Phase* phase = wo->now;
 
 	dbg(3, "wo %p phase %p act %d demand %d",
@@ -474,7 +477,7 @@ static int woOnRefill(
 	    phase? phase->demand_len:0);
 
 	if (!phase){
-		return 0;
+		return END_OF_PHASE;
 	}
 	if (phase->actual_len == 0){
 		phase->start_off = *offset;
@@ -514,7 +517,7 @@ static int woOnRefill(
 			if (np){
 				wo->now = NEXT_PHASE(phase);
 			}else{
-				return 1;
+				return END_OF_PHASE;
 			}
 		}else{
 			; /* no action */
@@ -847,9 +850,6 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		}
 
 		acq200_dmad_free(pbuf);
-		if (DMC_WO->triggered == 0){
-			DMC_WO->triggered = 1;
-		}
 
 		if (end_of_phase){
 			dbg(1, "phase_end d:%d l:%d", 
@@ -1361,15 +1361,11 @@ static void acq200_dmc0( unsigned long arg )
 		sprintf(errbuf, "FIFERR detected 0x%08x", DG->fiferr);
 		wo->error = errbuf;
 		finish_with_engines(-__LINE__);
-	}else if ( wo->trigger != 0 ){
-		void (* trigger)(void) = wo->trigger;
-
-		dbg(2, "trigger %p\n", wo->trigger);
-
-		wo->trigger = 0;
-		trigger();
-		onEnable();
 	}else{
+		if (DMC_WO->triggered == 0 && DMC_WO->trigger_detect()){
+			onEnable();
+		}
+
 		dbg( 4, "active %s empties %s", 
 		     RB_IS_EMPTY(IPC->active)? "EMPTY": "active",
 		     RB_IS_FULL(IPC->empties)? "FULL": "active");
@@ -1404,6 +1400,34 @@ static void acq200_dmc0( unsigned long arg )
 	}
 }
 
+static void dmc0_timeout(unsigned long arg);
+
+static void schedule_dmc0_timeout(unsigned long arg)
+{
+	static struct timer_list timeout;
+
+	if (timeout.function == 0){
+		init_timer(&timeout);
+		timeout.function = dmc0_timeout;
+	}
+
+	if (arg != 0){
+		timeout.data = arg;		
+		timeout.expires = jiffies + 3;
+		add_timer(&timeout);
+	}else{
+		del_timer_sync(&timeout);
+	}
+}
+
+
+static void dmc0_timeout(unsigned long arg)
+{
+	if (!DG->finished_with_engines){
+		acq200_dmc0(arg);
+		schedule_dmc0_timeout(arg);
+	}
+}
 
 
 
@@ -1588,6 +1612,7 @@ static void preEnable(void)
 	dbg(1, "ICR=%x", 0);
 
 	run_pre_arm_hook();
+	schedule_dmc0_timeout((unsigned long)&DMC_WO);
 
 	DMC_WO->state = ST_ARM;
 	*ACQ200_ICR = 0;
@@ -1619,19 +1644,36 @@ static void call_post_arm_hooks(void)
 		hookup->the_hook(hookup->clidata);
 	}
 }
-static void onEnable(void)
-{
-	iop321_start_ppmu();
-	DG->stats.start_gtsr = *IOP321_GTSR;
-	DG->stats.start_jiffies = jiffies;
-	DMC_WO->state = ST_RUN;
-	DG->shot++;
 
+static void onEnableAction(struct work_struct *not_used)
+{
 	call_post_arm_hooks();	
 	run_post_arm_hook();
 }
 
+static struct work_struct onEnable_work;
 
+static void onEnable(void)
+{
+	unsigned long flags;
+	int my_turn = 0;
+
+	spin_lock_irqsave(&DMC_WO->onEnable.lock, flags);
+	if (DMC_WO->onEnable.done == 0){
+		DMC_WO->triggered = 1;
+		my_turn = DMC_WO->onEnable.done = 1;
+	}
+	spin_unlock_irqrestore(&DMC_WO->onEnable.lock, flags);
+
+	if (my_turn){
+		iop321_start_ppmu();
+		DG->stats.start_gtsr = *IOP321_GTSR;
+		DG->stats.start_jiffies = jiffies;
+		DMC_WO->state = ST_RUN;
+		DG->shot++;
+		schedule_work(&onEnable_work);
+	}
+}
 
 static int soft_trigger_retry;
 
@@ -1865,6 +1907,11 @@ static void init_bda(void)
 	DMC_WO->bda_blocks.during = DG->bda_samples.during/spb;
 	DMC_WO->bda_blocks.after  = DG->bda_samples.after/spb;
 }
+
+static int null_trigger_detect(void) {
+	return 0;
+}
+
 static void clear_buffers(void)
 {
 	void* getNextEmpty = DMC_WO->getNextEmpty;
@@ -1875,6 +1922,8 @@ static void clear_buffers(void)
 
 	release_phases();
 	DMC_CLEAN(DMC_WO);
+	spin_lock_init(&DMC_WO->onEnable.lock);
+	DMC_WO->trigger_detect = null_trigger_detect;
 	DMC_WO->state = ST_STOP;
 	DMC_WO->getNextEmpty = getNextEmpty;
 	init_bda();
@@ -3556,6 +3605,8 @@ static void init_dg(void)
 
 	INIT_LIST_HEAD(&DG->tbc.clients);
 	spin_lock_init(&DG->tbc.lock);
+
+	INIT_WORK(&onEnable_work, onEnableAction);
 }
 
 static void delete_dg(void)

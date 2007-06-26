@@ -84,6 +84,11 @@ static int enable_hard_trigger(void);
         *SYSCON, *ACQ196_FIFCON, *FIFSTAT, s)
 
 
+static int acq196_trigger_detect(void)
+{
+	return (*SYSCON & ACQ196_SYSCON_TRIGGERED) != 0;
+}
+
 static unsigned check_fifstat(
 	struct DMC_WORK_ORDER *wo, u32 fifstat, u32* offset)
 /* returns 1 if trigger handled */
@@ -350,7 +355,7 @@ static void enable_acq196_start(void)
 	*ACQ196_SYSCON_ADC |= ACQ196_SYSCON_LOWLAT;
 #endif
 #endif
-	if ( (*SYSCON & ACQ196_SYSCON_TRIGGERED) != 0){
+	if (acq196_trigger_detect()){
 		err("WOAAH - triggered already, an not yet enabled not good\n"
 		      "FIFCON: 0x%08x\n"
 		      "FIFSTAT:0x%08x\n"
@@ -361,7 +366,7 @@ static void enable_acq196_start(void)
 	DBGSF("set ACQEN");
 	enable_acq();
 
-	if ( (*SYSCON & ACQ196_SYSCON_TRIGGERED) != 0){
+	if (acq196_trigger_detect()){
 		err("WOAAH - triggered already, not good\n"
 		      "FIFCON: 0x%08x\n"
 		      "FIFSTAT:0x%08x\n"
@@ -370,6 +375,7 @@ static void enable_acq196_start(void)
 		finish_with_engines(-__LINE__);
 	}
 
+	DMC_WO->trigger_detect = acq196_trigger_detect;
 
 	DBGSF("set events");
 	signalCommit(CAPDEF->ev[0]);
@@ -390,7 +396,7 @@ static void enable_acq196_start(void)
 		rc = enable_soft_trigger();
 	}
 
-	if (rc == 1){
+	if (DMC_WO->trigger_detect()){
 		onEnable();
 	}
 }
@@ -419,8 +425,7 @@ static int enable_soft_trigger(void)
 		nwait = 0;
 
 		do {
-			if ((acq196_getSyscon()&ACQ196_SYSCON_TRIGGERED) != 0){
-			/* FIFO_NOT_EMPTY => TRIGGERED! */
+			if (acq196_trigger_detect()){
 				return 1;
 			}
 
@@ -445,14 +450,13 @@ static int enable_soft_trigger(void)
 
 static int enable_hard_trigger(void)
 {
-	volatile u32 syscon;
 	int nloop = 0;
 
 	DBGSF("ACQEN...");
 
 	signalCommit(CAPDEF->trig);
 
-	while(((syscon = acq196_getSyscon())&ACQ196_SYSCON_TRIGGERED) == 0){
+	while(!acq196_trigger_detect()){
 		if (DG->finished_with_engines){
 			return -1;
 		}

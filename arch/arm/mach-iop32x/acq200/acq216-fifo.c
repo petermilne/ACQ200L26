@@ -88,6 +88,11 @@ static int has_triggered = 0;
 static int transient_dma_block_count;   
 
 
+static int acq216_trigger_detect(void)
+{
+	return (*ACQ200_SYSCON & ACQ200_SYSCON_TR) != 0;
+}
+
 #define CAPCOM_LENGTH (ACQ216_BLOCKID_OFFSET+8-ACQ216_TCR_IMM_OFFSET)
 
 #define CAPCOM_PDA (DG->fpga.regs.pa + ACQ216_TCR_IMM_OFFSET)    /** @todo. */
@@ -378,6 +383,7 @@ static void enable_acq216_start(void)
 {
 	int rc;
 
+	DMC_WO->trigger_detect = acq216_trigger_detect;
 	dbg(3, "OK: let's trigger FIFCON: 0x%08x SYSCON: 0x%08x", 
 	    *ACQ200_FIFCON, *ACQ200_SYSCON);
 
@@ -398,7 +404,7 @@ static void enable_acq216_start(void)
 		rc = enable_soft_trigger();
 	}
 
-	if (rc == 1){
+	if (DMC_WO->trigger_detect()){
 		onEnable();
 	}
 }
@@ -695,7 +701,7 @@ static int enable_soft_trigger(void)
 
 		nsleep( 2000 );
 
-		if ((*ACQ200_SYSCON & ACQ200_SYSCON_TR) != 0 ||
+		if (DMC_WO->trigger_detect() ||
 		     (*ACQ200_FIFCON&FIFO_EMPTY) == 0			){
 			return 1;
 		}
@@ -715,7 +721,7 @@ static int enable_hard_trigger(void)
 
 	*ACQ200_SYSCON |= ACQ200_SYSCON_DAQEN;
 
-	while((*ACQ200_SYSCON & ACQ200_SYSCON_TR) == 0){
+	while(!DMC_WO->trigger_detect()){
 		if (has_triggered){
 			return 1;
 		}
@@ -773,7 +779,6 @@ static int fifo_read_init_action(void)
 
 	dbg(1, "%10s reset: F:0x%08x S:0x%08x", 
 	    "AFTER", *ACQ200_FIFCON, *ACQ200_SYSCON);
-
 
 /*
  * pgm 20040125: keep soft trigger high (then it cannot be construed as
