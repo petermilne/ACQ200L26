@@ -693,26 +693,33 @@ static int _show_measured_sample_rate(
 {
 	int process_us = calc_process_us();
 
-	if (process_us>1000){
+	if (process_us > 1000){
 		unsigned long long tot_samples = ELAPSED_SAMPLES;
-		unsigned long long xx = tot_samples;
+		unsigned long long xx = tot_samples * 10;
 		unsigned srate;
 
-		do_div(xx, process_us/10);
+		do_div(xx, process_us);
 		srate = xx;
 
-		if (srate > 10 ){
+		if (srate > 10){
 			return snprintf(buf, maxbuf, "%2d.%d MHz\n", 
 						srate/10, srate%10);
 		}else{
-			if (process_us > 1000){
+			process_us = calc_process_us();
+			if (process_us > 1000000){
+				process_us /= 1000;
 				xx = tot_samples;
-				do_div(xx, process_us/1000);
+				do_div(xx, process_us);
 				srate = xx;
 			}else{
-				srate = 0;
+				xx = tot_samples * 1000;       /* result kHz */
+				do_div(xx, process_us);
+				srate = xx;
 			}
-			return snprintf(buf, maxbuf, "%3d kHz\n", srate);
+			if (srate < 1000){
+				return snprintf(buf, maxbuf, "%3d kHz\n", 
+									srate);
+			}
 		}
 	}
 
@@ -3369,6 +3376,7 @@ static int acq200_proc_stat_timing(
 	int process_ms = 10*(DG->stats.end_jiffies-DG->stats.start_jiffies);
 	int process_us = calc_process_us();
 	int iblock;
+	char nbuf[20];
 #define PRINTF(fmt, args...) sprintf(buf+len, fmt, ## args)
 #define FMT "%30s: "
 #define DPRINTF( field, fmt ) \
@@ -3430,11 +3438,9 @@ static int acq200_proc_stat_timing(
 	}else{
 		LPRINTF("%c", "fifo usecs/int", 'X' );
 	}	
-	if (process_us>10){
-		char nbuf[20];
-		_show_measured_sample_rate(nbuf, sizeof(nbuf));
-		LPRINTF("%s", "measured sample rate", nbuf);
-	}
+	_show_measured_sample_rate(nbuf, sizeof(nbuf));
+	LPRINTF("%s", "measured sample rate", nbuf);
+
 	return len;
 #undef DPRINTF
 #undef LPRINTF
