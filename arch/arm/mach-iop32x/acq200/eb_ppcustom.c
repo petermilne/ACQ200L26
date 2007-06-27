@@ -919,6 +919,67 @@ static void find_the_pulses(void *start)
 #undef MYTB
 }
 
+static int bf_process_trigger(
+	struct TblockListElement *tble,
+	short *ps)
+{
+	unsigned offinblock = ((void*)ps - va_buf(DG)) - tble->tblock->offset;
+	struct EventLocator *elp; 
+
+	dbg(1, "allocData("
+	    "%d, block:%d offinblock %06x sample %d)",
+	    S_pulse_count+1, tble->tblock->iblock, 
+		offinblock, S_sample_number);
+	
+	elp = allocData(S_pulse_count+1, tble, offinblock,
+			S_sample_number, COMB_PULSE_FOUND);
+
+	if (!elp){
+		err("game over");
+		return -1;
+	}else if (processEvent(elp) == 0){
+		++S_pulse_count;
+		return 0;
+	}else{
+		err("processEvent failed, drop out");
+		return -1;
+	}	
+}
+
+static void bf_find_the_pulses(void *start, int nwords, int stride)
+{
+	struct TriggerHistory th = {};
+	struct TblockListElement *tble = 
+		getTble(DMC_WO->post, TBLOCK_INDEX(start - va_buf(DG)));
+	short *ps;
+	int pulses_in_block = 0;
+
+	if (S_first_time){
+		onFirstTime();
+		S_first_time = 0;
+	}
+
+	if (S_sample_number == SAMPLE_CHECK_INITIAL){
+		S_sample_number = 0;
+	}
+
+	dbg(1, "tblock 01:%d start:%p len %d stride %d", 
+	    tble->tblock->iblock, start, nwords, stride);
+
+	for (ps = start; nwords > 0; 
+	     ps += stride, nwords -= stride, ++S_sample_number){
+		if (triggerFound(ps, &th)){
+			if (bf_process_trigger(tble, ps) < 0){
+				return;
+			}
+			++pulses_in_block;
+		}
+	}
+
+	dbg(1, "tblock 99:%d start:%p len %d stride %d pulses %d", 
+	    tble->tblock->iblock, start, nwords, stride, pulses_in_block);
+
+}
 
 struct CUSTOM_DATA;
 #define GET_CUSTOM_DATA
@@ -949,38 +1010,7 @@ static void ppcustom_transform(short *to, short *from, int nwords, int stride)
 
 static void bf_transform(short *to, short *from, int nwords, int stride)
 {
-	short *ps;
-	struct TriggerHistory th = {};
-
-	if (S_first_time){
-		onFirstTime();
-	}
-#if 0
-	for (ps = from; ps - from < nwords; ps += stride){
-		int flags;
-
-		if (triggerFound(ps, &th)){
-			unsigned offinblock = ps - from;   /** @@todo */
-			flags - COMB_PULSE_FOUND;
-			elp = allocData(S_pulse_count+1, 
-					tble, offinblock,
-					S_sample_number, flags);
-
-			if (!elp){
-				err("game over");
-				return;
-			}
-			if (processEvent(elp) == 0){
-				++S_pulse_count;
-			}else{
-				err("processEvent failed, drop out");
-				return;
-			}
-	
-		}
-	}
-#endif
-#warning STUB ONLY WORKTODO
+	bf_find_the_pulses(from, nwords, stride);
 }
 
 static ssize_t store_clear(
@@ -1306,6 +1336,7 @@ static int eb_ppcustom_fill_super (
 		.release = ver_release
 	};
 	static struct tree_descr static_files[] = {
+		{ NULL, NULL, 0	},
 		{ NULL, NULL, 0	},
 		{ .name = "version", .ops = &ver_ops, .mode = S_IRUGO },
 		{ "", NULL, 0	},		

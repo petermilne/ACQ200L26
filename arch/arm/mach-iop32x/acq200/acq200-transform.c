@@ -29,7 +29,7 @@
 
 #include <linux/dma-mapping.h>
 
-#define MAX_TRANSFORMS 8
+#define MAX_TRANSFORMS 16
 
 void transform1(short *to, short *from, int nwords, int stride);
 void transform2(short *to, short *from, int nwords, int stride);
@@ -405,7 +405,7 @@ static ssize_t store_transformer_transform(
 	int itransform;
 
 	if (sscanf(buf, "%d", &itransform) == 1 &&
-	    IN_RANGE(itransform, 1, MAX_TRANSFORMS) &&
+	    IN_RANGE(itransform, 0, MAX_TRANSFORMS-1) &&
 	    pt[itransform] != 0){
 		tbl->transform = pt[itransform]->transform;
 	}
@@ -507,6 +507,28 @@ void acq200_resetBigBufCursor(void)
 	DG->bigbuf.tblocks.cursor = 0;
 }
 
+static int acq200_proc_transformers(
+	char *buf, char **start, off_t offset, int len,
+                int* eof, void* data )
+{
+	char *bp = buf;
+	int it;
+	struct TBLOCKLIST *tbl = &DG->bigbuf.tblocks;
+	const struct Transformer **pt = DG->bigbuf.transformers;
+#define PRINTF(fmt, args...) bp += sprintf(bp, fmt, ## args)
+	
+	for (it = 0; it < MAX_TRANSFORMS; ++it){
+		const struct Transformer *cursor = pt[it];
+		PRINTF("%02d %s \"%s\"\n", 
+			it,  
+		       cursor? cursor->transform == tbl->transform?"*":"-":" ",
+		       cursor? cursor->name: "");
+	}
+#undef PRTREG
+#undef PRINTF
+	return bp-buf;
+}
+
 void acq200_transform_init(void)
 {
 	static struct Transformer defaults[] = {
@@ -528,10 +550,14 @@ void acq200_transform_init(void)
 	for (ireg = 0; ireg != NDEFAULTS; ++ireg){
 		acq200_registerTransformer(&defaults[ireg]);
 	}
+
+	create_proc_read_entry(
+		"transformers", 0, proc_acq200, acq200_proc_transformers, 0 );
 }
 void acq200_transform_destroy(void)
 {
-	kfree(DG->bigbuf.transformers);
+	remove_proc_entry("transformers", proc_acq200);
+	kfree(DG->bigbuf.transformers);     
 }
 
 

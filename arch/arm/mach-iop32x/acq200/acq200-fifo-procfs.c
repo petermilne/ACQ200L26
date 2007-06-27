@@ -1932,7 +1932,7 @@ static ssize_t store_finalize_phases(
 	list_for_each_entry(phase, &DMC_WO->phases, list){
 
 		dbg(1, "phase \"%s\" %p len %d",
-		    phase, phase->name, phase_len(phase));
+		    phase->name, phase, phase_len(phase));
 
 		if (phase_len(phase)){
 			acq200_phase_gather_tblocks(phase);
@@ -3553,6 +3553,7 @@ void create_proc_entries(void)
 	CPRE("hotpoint_histo_detail",acq200_proc_hotpoint_histo_detail);
 #endif
 	acq200_create_proc_tblocks(proc_acq200, "tblocks");
+	CPRE("tblocks2", acq200_proc_tblock_cursor);
 	CPRE("tbmap", acq200_proc_tblocks_brief);
 	CPRE("tblocks_free", acq200_proc_free_tblocks);
 	CPRE("tblocks_empty", acq200_proc_empty_tblocks);
@@ -3589,6 +3590,7 @@ void delete_proc_entries(void)
 	RMP("coldpoint_histo_detail");
 	RMP("tbblock_cursor");
 	RMP("tblocks");
+	RMP("tblocks2");
 	RMP("tbcount");
 	RMP("capdef");
 	RMP("phases");

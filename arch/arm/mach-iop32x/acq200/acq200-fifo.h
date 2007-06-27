@@ -1216,4 +1216,6 @@ extern int show_hook(struct ArgBlock *argBlock, char* buf, int maxbuf);
 extern int store_hook(
 	struct ArgBlock *argBlock, const char* buf, int count);
 
+extern struct proc_dir_entry* proc_acq200;
+
 #endif /* ACQ200_FIFO_H__ */
