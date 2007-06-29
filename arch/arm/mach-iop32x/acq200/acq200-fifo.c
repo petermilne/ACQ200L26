@@ -1412,9 +1412,12 @@ static void schedule_dmc0_timeout(unsigned long arg)
 	}
 
 	if (arg != 0){
-		timeout.data = arg;		
-		timeout.expires = jiffies + 3;
-		add_timer(&timeout);
+		if (!timer_pending(&timeout)){
+			timeout.data = arg;		
+			timeout.expires = jiffies + 3;
+			add_timer(&timeout);
+		}
+		/* else, somehow it was already running, so leave it */
 	}else{
 		del_timer_sync(&timeout);
 	}
