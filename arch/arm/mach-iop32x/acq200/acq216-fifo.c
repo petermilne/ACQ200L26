@@ -694,6 +694,8 @@ static int enable_soft_trigger(void)
 	    ++soft_trigger_retry) {
 		*ACQ200_SYSCON |= ACQ200_SYSCON_DAQEN|ACQ200_SYSCON_SOFTTRG;
 
+		nsleep( 1000 );
+
 		dbg( 1, "set DAQEN and SOFTTRG %08x next, drop %08x", 
 		     *ACQ200_SYSCON, ACQ200_SYSCON_SOFTTRG );	
 
