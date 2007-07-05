@@ -90,7 +90,11 @@ extern int acq200_lookup_pchan(int lchannel);
 #define SIZE_12C	(12*sizeof(short))
 #define SIZE_16C	(16*sizeof(short))
 
-#define ES_SIZE  (sample_size()==SIZE_12C? SIZE_12C: SIZE_16C)
+/* acq216 uses double sample ES to cope with double read cycle 123321 */
+#define ES_SIZE_12C	(2*SIZE_12C)
+#define ES_SIZE_16C	(2*SIZE_16C)
+#define ES_SIZE_MAX	(ES_SIZE_16C)
+#define ES_SIZE  (sample_size()==SIZE_12C? ES_SIZE_12C: ES_SIZE_16C)
 
 #define EVENT_MAGIC_EXEMPT(ipair) (ipair>=6)
 
@@ -108,8 +112,7 @@ extern int acq200_lookup_pchan(int lchannel);
 #define EVENT_TRIG   0x10
 #define EVENT_EVENT  0x0f
 
-#define ES_LONGS	(sample_size()/sizeof(unsigned))
-
+#define ES_LONGS	(ES_SIZE/sizeof(unsigned))
 #define SAMPLE_LONGS	(sample_size()/sizeof(unsigned))
 
 #define IS_EVENT_MAGIC(x) (((x)&~EVENT_MAGIC_MASK) == EVENT_MAGIC)

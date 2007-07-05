@@ -479,10 +479,9 @@ static void acq216_event_adjust(
 	int cold_bytes = ACQ216_ES_COLD_QUADS(es) * 8;
 	int cold_samples = cold_bytes/ssb;
 	int cold_pairs = 0;
-
 	unsigned es_len = *last - *first;
 
-	char ES_BUF[32];                /** @@todo this is a huge SWAG */
+	static char ES_BUF[ES_SIZE_MAX];
 
 	if (cold_samples*ssb < cold_bytes){
 		cold_samples++;

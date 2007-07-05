@@ -334,7 +334,7 @@ void transform5(short *to, short *from, int nwords, int stride)
 * 12 13 14 15  00 01 02 03 08 09 10 11 04 05 06 07
 * 04 05 06 07  08 09 10 11 00 01 02 03 12 13 14 15
 */
- 
+
 void transform12344321(short *to, short *from, int nwords, int stride)
 {
 	int ns = nwords/stride;
