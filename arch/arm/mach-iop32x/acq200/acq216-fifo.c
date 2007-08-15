@@ -23,6 +23,8 @@
 #define ACQ216 
 #define ACQ_IS_INPUT 1
 
+#include <linux/delay.h>
+
 #define MODEL_VERID \
 	"$Id: acq216-fifo.c,v 1.26 2006/07/28 14:46:14 pgm Exp $\n"
 
@@ -693,7 +695,7 @@ static int enable_soft_trigger(void)
 	    ++soft_trigger_retry) {
 		*ACQ200_SYSCON |= ACQ200_SYSCON_DAQEN|ACQ200_SYSCON_SOFTTRG;
 
-		nsleep( 1000 );
+		msleep(50);
 
 		dbg( 1, "set DAQEN and SOFTTRG %08x next, drop %08x", 
 		     *ACQ200_SYSCON, ACQ200_SYSCON_SOFTTRG );	
