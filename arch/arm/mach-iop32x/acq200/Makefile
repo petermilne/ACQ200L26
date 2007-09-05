@@ -12,6 +12,7 @@ CONFIG_ARCH_DTACQ_ACQ196=m
 CONFIG_ARCH_DTACQ_ACQ196m=m
 CONFIG_ARCH_DTACQ_ACQ196f=m
 CONFIG_ARCH_DTACQ_ACQ196c=m
+CONFIG_ARCH_DTACQ_ACQ132=m
 CONFIG_ARCH_DTACQ_BRIDGE=m
 #CONFIG_ARCH_DTACQ_DMAC=m
 CONFIG_ARCH_DTACQ_MU=m
@@ -73,6 +74,8 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ196m) += acq196m.o
 obj-$(CONFIG_ARCH_DTACQ_ACQ196f) += acq196f.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ196c) += acq196c.o
+
+obj-$(CONFIG_ARCH_DTACQ_ACQ132) += acq132.o
 
 obj-$(CONFIG_ARCH_DTACQ_MU) += acq200-mu.o
 
@@ -149,6 +152,9 @@ acq196f-objs := acq196-fifo-f.o acq196-fiq-f.o \
 	acq196-fifo-procfs-f.o acq196-offset.o acq196-AO.o \
 	$(ACQ2XX_FIFO_COMMON)
 
+acq132-objs := acq132-fifo.o acq132-fiq.o \
+	acq132-fifo-procfs.o acq132-offset.o acq196-AO.o \
+	$(ACQ2XX_FIFO_COMMON)
 
 wav232-objs := wav232-fifo.o wav232-fiq.o \
 	wav232-fifo-procfs.o acq2xx-fifo.o \
