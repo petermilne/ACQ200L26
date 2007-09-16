@@ -142,6 +142,9 @@ module_param(downstream_is_set, int, 0444);
 int dma1_IE = 1;
 module_param(dma1_IE, int, 0644);
 
+#define EOT_TO_TICKS (HZ/10)
+int eot_to_ticks = EOT_TO_TICKS;
+module_param(eot_to_ticks, int, 0644);
 
 #define DBDBG(lvl, format, args...) \
         if (acq200_databuf_debug>lvl ) info( "DBDBG:" format, ##args)
@@ -501,6 +504,51 @@ static ssize_t show_version(
 }
 static DRIVER_ATTR(version,S_IRUGO,show_version,0);
 
+struct EOT_stats {
+	unsigned new_chain;
+	unsigned interrupted;
+	unsigned timeout;
+	unsigned uptodate;
+	unsigned reload;
+	unsigned fire;
+} S_EOT_stats;
+
+
+static ssize_t set_EOT_stats(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	unsigned mask;
+
+	if (sscanf( buf, "0x%x", &mask ) == 1 && mask ==1){
+		memset(&S_EOT_stats, 0, sizeof(S_EOT_stats));		
+	}
+	return strlen(buf);
+}
+
+static ssize_t show_EOT_stats(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+#define UF	"%5u"
+	return sprintf(buf, UF "," UF "," UF "," UF "," UF "," UF "\n",
+		       S_EOT_stats.new_chain,	
+		       S_EOT_stats.interrupted,	
+		       S_EOT_stats.timeout,	
+		       S_EOT_stats.uptodate,
+		       S_EOT_stats.reload,	
+		       S_EOT_stats.fire);
+}
+
+static DEVICE_ATTR(EOT_stats, S_IRUGO|S_IWUGO, show_EOT_stats, set_EOT_stats);
+
+
+#define UPSTATS(field, bf)  if (bf){ S_EOT_stats . field ++; }
+
+
 static void mk_sysfs(struct device *dev)
 {
 	dbg(1,  "calling device_create_file dev %p", dev );
@@ -517,6 +565,7 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_mu_ipq_int_enable);
 	DEVICE_CREATE_FILE(dev, &dev_attr_OIMR);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_counts);
+	DEVICE_CREATE_FILE(dev, &dev_attr_EOT_stats);
 
 	DRIVER_CREATE_FILE(dev->driver, &driver_attr_version);
 }
@@ -1001,7 +1050,7 @@ static int post_dmac_outgoing_request(
 		DMA_CHANNEL, buf->laddr, offset, remaddr, bc, OUTGOING );
 }
 
-#define EOT_TO_TICKS (HZ/10)
+
 
 static int print_chain(struct DmaChannel* channel, char* buf)
 {
@@ -1026,10 +1075,14 @@ static int print_chain(struct DmaChannel* channel, char* buf)
 
 #define DMA_ISYNC acq200_dma_getDmaChannelSync()[1].eoc
 
+
+
 DEFINE_DMA_CHANNEL(dma_channel, 1);
 static struct u32_ringbuffer DMADQ;
 static int new_chain_ready;
 static spinlock_t eot_lock = SPIN_LOCK_UNLOCKED;
+
+
 
 static int acq200mu_EOT_task(void *nothing)
 {
@@ -1047,10 +1100,9 @@ static int acq200mu_EOT_task(void *nothing)
 			isync->waitq, 
 			isync->interrupted || new_chain_ready ||
 				kthread_should_stop(),
-			EOT_TO_TICKS) == 0;
+			eot_to_ticks) == 0;
 		int uptodate = 0;
 		u32 dar = DMA_REG(dma_channel, DMA_DAR);
-
 
 		dbg(timeout==0? 1: 3, "done wait [%8u] : %s %s %s %s",
 		    ++iter,
@@ -1068,6 +1120,11 @@ static int acq200mu_EOT_task(void *nothing)
 		}
 		spin_unlock_irqrestore(&eot_lock, flags);
 
+		UPSTATS(new_chain, new_chain_ready);
+		UPSTATS(timeout, timeout);
+		UPSTATS(interrupted, was_interrupted);
+
+
 #define IMARK	dbg(2, "%d", __LINE__)
 
 		if (was_interrupted || DMA_DONE(dma_channel, stat)){
@@ -1082,11 +1139,13 @@ static int acq200mu_EOT_task(void *nothing)
 					if (DMA_DONE(dma_channel, stat)){
 						IMARK;
 						uptodate = 1;
+						UPSTATS(uptodate, uptodate);
 					}else{
 						IMARK;
 						goto no_reset_chain;
 					}
 				}
+				/* else != pa - DMAC has gone past, free it */
 
 				/* here with completed dmad ... cleanup */
 				if (dmad->clidat){
@@ -1139,9 +1198,11 @@ static int acq200mu_EOT_task(void *nothing)
 				DMA_ARM(dma_channel);
 				DMA_FIRE(dma_channel);
 				IMARK;
+				UPSTATS(fire, 1);
 			}else{
 				IMARK;
 				DMA_RELOAD(dma_channel);
+				UPSTATS(reload, 1);
 			}
 		}else{
 			IMARK;
@@ -1226,7 +1287,7 @@ static ssize_t acq200_mu_remote_write_chain(
 			break;
 		}
 		case MU_MAGIC_OB: {
-			/* pull down an MF, fill the message, store the MFA */
+			/* pull down a MF, fill the message, store the MFA */
 			MFA mfa = copy_user_to_mfa(file, BUF_PAYLOAD, rlen-4);
 
 			dbg(1, "MU_MAGIC_OB: %p M:%08x", dmad, mfa);
