@@ -73,6 +73,8 @@
 __DATE__ " "__TIME__ MODEL_VERID
 
 
+#define XMARK dbg(1, "xm:%d", __LINE__)
+
 char *acq200_fifo_verid(void) { return VERID; }
 
 char* verid = VERID;
@@ -176,6 +178,27 @@ struct DevGlobs* DG;
 int use_endstop = 0;
 
 
+#include <linux/kthread.h>
+
+static struct DMC0 {
+	struct task_struct* task;
+	unsigned long v;
+	wait_queue_head_t waitq;
+} dmc0;
+
+#define DMC0_RUN_REQUEST 0
+#define DMC_TO	(HZ)
+
+
+static void wake_dmc0(void)
+{
+	dbg(2, "01");
+	set_bit(DMC0_RUN_REQUEST, &dmc0.v);
+	wake_up_interruptible(&dmc0.waitq);
+	dbg(2, "99");
+}
+
+
 /*
  * acq200-fifoi.h - defs private to acq200-fifo.c
  */
@@ -211,8 +234,6 @@ static void acq200_global_mask_op(u32 mask, int maskon)
 
 #define HITIDE (DG->hitide)
 #define LOTIDE (DG->lotide)
-
-
 
 
 
@@ -788,7 +809,7 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		assert(pbuf);
 
 		if (pbuf->clidat){
-
+			
 			/** return pbc to endstops, passing fifo_to_local
                          *  to regular downstream processing.
 			 */
@@ -818,10 +839,10 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 	no_clidat:
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
-#ifndef WAV232
-		increment_scc(&DMC_WO->scc);
 
-		
+#ifndef WAV232
+		increment_scc(&wo->scc);
+
 		if (bbb && TBLOCK_INDEX(offset) == bbb->tblock->iblock){
 			if (TBLOCK_OFFSET(offset) == BDA_FIN){
 				end_of_phase = 1;
@@ -841,29 +862,28 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 			++DG->stats.refill_blocks;
 			++nrefills;
 #ifndef WAV232	
-			if (DMC_WO->prep_now){
+			if (wo->prep_now){
 				dmc_handle_prep(
-					DMC_WO->prep_now, phase, pbuf, offset);
+					wo->prep_now, phase, pbuf, offset);
 			}
 			_dmc_handle_dcb(pbuf, offset);
 #endif
 		}
 
 		acq200_dmad_free(pbuf);
-
 		if (end_of_phase){
 			dbg(1, "phase_end d:%d l:%d", 
 			    phase->demand_len, phase_len(phase));
 
 			if (bda_fin){
-				DMC_WO->finished_code = 1;
+				wo->finished_code = 1;
 				dbg( 1,"all done - shut down and wake caller");
 				finish_with_engines(__LINE__);
 				break;
 			}else if (wo->now != 0 && !phase_end(wo->now)){
 				share_last_tblock(wo->now, phase);
 			}else{
-				DMC_WO->finished_code = 1;
+				wo->finished_code = 1;
 				dbg( 1,"all done - shut down and wake caller");
 				finish_with_engines(__LINE__);
 				break;
@@ -1141,9 +1161,7 @@ static irqreturn_t dma_irq_eot(int irq, void *dev_id)
 
 
 
-static void acq200_dmc0( unsigned long arg );
-DECLARE_TASKLET(acq200_dmc_tasklet0, acq200_dmc0, (unsigned long)&DMC_WO);
-
+static void acq200_dmc0(struct DMC_WORK_ORDER *wo);
 
 void acq200_eoc_bh1( unsigned long arg )
 {
@@ -1303,7 +1321,7 @@ static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 	}else{
 		if (RB_ELEMENT_COUNT(IPC->empties) < EMPTY_FILL_THRESHOLD ||
 		    RB_ELEMENT_COUNT(IPC->active) > ACTIVE_BATCH_THRESHOLD  ){
-			tasklet_schedule(&acq200_dmc_tasklet0);
+			wake_dmc0();
 			DG->stats.num_eoc_bh++;
 		}
 	}
@@ -1352,11 +1370,10 @@ static int pci_abort(void)
 
 
 
-static void acq200_dmc0( unsigned long arg )
+
+void acq200_dmc0(struct DMC_WORK_ORDER *wo)
 /* Data Movement Controller */
 {
-	struct DMC_WORK_ORDER *wo = *(struct DMC_WORK_ORDER**)arg;
-
 	if (DG->fiferr){
 		sprintf(errbuf, "FIFERR detected 0x%08x", DG->fiferr);
 		wo->error = errbuf;
@@ -1369,7 +1386,6 @@ static void acq200_dmc0( unsigned long arg )
 		dbg( 4, "active %s empties %s", 
 		     RB_IS_EMPTY(IPC->active)? "EMPTY": "active",
 		     RB_IS_FULL(IPC->empties)? "FULL": "active");
-
 #ifdef WAV232
 /* @@todo THEORY: packets are in short supply in WAV. so recycle them first */
 		/* handle active */
@@ -1424,15 +1440,62 @@ static void schedule_dmc0_timeout(unsigned long arg)
 }
 
 
+
 static void dmc0_timeout(unsigned long arg)
 {
 	if (!DG->finished_with_engines){
-		acq200_dmc0(arg);
+		if (dmc0.task){
+			wake_dmc0();
+		}
 		schedule_dmc0_timeout(arg);
 	}
 }
 
+/*
+ || 
+  */
 
+static int acq200_dmc0_task(void *arg)
+{
+	while(1){
+		int run_request;
+		int timeout = wait_event_interruptible_timeout(
+			dmc0.waitq,
+			(run_request = test_and_clear_bit(
+				 DMC0_RUN_REQUEST, &dmc0.v)) ||
+			kthread_should_stop(),
+			DMC_TO) == 0;
+
+		if (kthread_should_stop()){
+			return 0;
+		}
+		dbg(2, "run: %s %s", 
+		    timeout? "TIMEOUT": "",
+		    run_request? "RUN_REQUEST": "");
+
+		if (run_request){
+			acq200_dmc0(DMC_WO);
+		}
+	}
+	return 0;
+}
+
+static void dmc0_start(int start)
+{
+	if (start){
+		if (dmc0.task != 0){
+			dmc0_start(0);
+		}
+		init_waitqueue_head(&dmc0.waitq);
+		dmc0.v = 0;
+		dmc0.task = kthread_run(acq200_dmc0_task, DMC_WO, "dmc0");
+	}else{
+		if (dmc0.task != 0){
+			kthread_stop(dmc0.task);
+			dmc0.task = 0;
+		}
+	}
+}
 
 static struct Phase *onPIT_default(
 	struct Phase *phase, u32 status, u32* offset)
@@ -1615,7 +1678,6 @@ static void preEnable(void)
 	dbg(1, "ICR=%x", 0);
 
 	run_pre_arm_hook();
-	schedule_dmc0_timeout((unsigned long)&DMC_WO);
 
 	DMC_WO->state = ST_ARM;
 	*ACQ200_ICR = 0;
@@ -1635,6 +1697,8 @@ static void preEnable(void)
 	*ACQ200_ICR = ACQ_INTEN;
 
 	check_int_status();
+	dmc0_start(1);
+	schedule_dmc0_timeout((unsigned long)&DMC_WO);
 }
 
 static void call_post_arm_hooks(void)
@@ -1919,6 +1983,7 @@ static void clear_buffers(void)
 {
 	void* getNextEmpty = DMC_WO->getNextEmpty;
 
+	dmc0_start(0);
 	DG->ifill = 0;
 	DG->finished_with_engines = 0;
 	DG->fiferr = 0;
@@ -3614,6 +3679,7 @@ static void init_dg(void)
 
 static void delete_dg(void)
 {
+	dmc0_start(0);
 	acq200_transform_destroy();
 	kfree(DMC_WO);
 	kfree(IPC);
