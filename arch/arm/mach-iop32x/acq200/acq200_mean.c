@@ -69,10 +69,10 @@ module_param(nskips, int, 0444);
 int stub = 0;
 module_param(stub, int, 0664);
 
-#define VERID "$Revision: 1.5 $ build B1000 "
+#define VERID "$Revision: 1.5 $ build B1001 "
 
 #define TD_SZ (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+1+1+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((1+(numchan)+1+2+1)*TD_SZ)
 
 #define MEANFS_MAGIC 0xbea02005
 #define TMPSIZE 20
@@ -82,6 +82,9 @@ char acq200_mean_driver_string[] = "rolling mean of captured data";
 char acq200_mean_driver_version[] = VERID __DATE__;
 char acq200_mean_copyright[] = "Copyright (c) 2005 D-TACQ Solutions Ltd";
 
+
+/* convert ino to channel - ch01 is at ino 2 */
+#define INO2CH(ch) (int)((ch) - 1)  
 
 static void on_arm(void);
 
@@ -325,7 +328,10 @@ static int getMean(int lchan)
 
 static int ch_open(struct inode *inode, struct file *filp) 
 {
-	filp->private_data = (void*)inode->i_ino;
+	int ch = INO2CH(inode->i_ino);
+
+	dbg(1, "ch %d", ch);
+	filp->private_data = (void*)ch;
 	return 0;
 }
 
@@ -340,6 +346,27 @@ static ssize_t ch_read(
 	}
 	return 0;
 }
+
+static ssize_t xx_read(	
+	struct file *filp, char *buf, size_t count, loff_t *offset)
+/** read a single sample and return */
+/** WARNING: NO EOF, so it only makes sense to read on timer */
+{
+	int nread = 0;
+	int ichan;
+
+	if (count > mds.sample_size*sizeof(int)){
+		count = mds.sample_size*sizeof(int);
+	}
+
+	for (ichan = 1; nread < count; nread += sizeof(int), ++ichan){
+		int my_mean = getMean(ichan);
+		COPY_TO_USER(buf+nread, &my_mean, sizeof(int));
+	}
+
+	return count;
+}
+
 
 static int ch_release(struct inode *inode, struct file *filp) 
 {
@@ -379,6 +406,11 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 		.read = ch_read,
 		.release = ch_release
 	};
+	static struct file_operations xxops = {
+		.open = ch_open,
+		.read = xx_read,
+		.release = ch_release
+	};
 	static struct file_operations enops = {
 		.write = enable_write,
 		.read = enable_read
@@ -392,23 +424,30 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 
 	int nchan = CAPDEF_get_nchan();
 	int ichan;
+	int fn = 0;
 
 
-	memcpy(&my_files[0], &front, TD_SZ);
+	memcpy(&my_files[fn++], &front, TD_SZ);
+	memcpy(&my_files[fn++], &front, TD_SZ);
 
-	for (ichan = 1; ichan <= nchan; ++ichan){
+	for (ichan = 1; ichan <= nchan; ++ichan, ++fn){
 		sprintf(my_names[ichan].name, "%02d", ichan);
-		my_files[ichan].name = my_names[ichan].name;
-		my_files[ichan].ops = &chops;
-		my_files[ichan].mode = S_IRUGO;
+		my_files[fn].name = my_names[ichan].name;
+		my_files[fn].ops = &chops;
+		my_files[fn].mode = S_IRUGO;
 	}
 
-	my_files[ichan].name = "enable";
-	my_files[ichan].ops = &enops;
-	my_files[ichan].mode = S_IRUGO|S_IWUGO;
-	ichan++;
+	my_files[fn].name = "XX";
+	my_files[fn].ops = &xxops;
+	my_files[fn].mode = S_IRUGO;
+	fn++;
 
-	memcpy(&my_files[ichan], &backstop, TD_SZ);
+	my_files[fn].name = "enable";
+	my_files[fn].ops = &enops;
+	my_files[fn].mode = S_IRUGO|S_IWUGO;
+	fn++;
+
+	memcpy(&my_files[fn], &backstop, TD_SZ);
 
 	return simple_fill_super(sb, MEANFS_MAGIC, my_files);
 }
@@ -445,7 +484,7 @@ static void init_buffers(void)
 	int entry;
 
 	my_files = kmalloc(MY_FILES_SZ(nchan), GFP_KERNEL);
-	my_names = kmalloc((1+nchan)*sizeof(struct CHNAME), GFP_KERNEL);
+	my_names = kmalloc((2+nchan)*sizeof(struct CHNAME), GFP_KERNEL);
 	mds.the_sums = kmalloc((nchan)*sizeof(int), GFP_KERNEL);
 	mds.entries = 
 		kmalloc(max(nmean,64)*sizeof(struct DataEntry), GFP_KERNEL);
