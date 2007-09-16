@@ -35,6 +35,7 @@
 
 #include "acq200-fifo-top.h"
 
+#include "acq200_debug.h"
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
 #include "acq196.h"
@@ -51,7 +52,7 @@
 #define LFS_MAGIC 0xa196a196
 
 #define TD_SZ  (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+1+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((2+(numchan)+1+1)*TD_SZ)
 
 
 #define MAXCHAN 96
@@ -64,6 +65,8 @@
 #define NDACSBLOCK 4
 #define NDACSCHIP  8
 
+/* convert ino to channel - ch01 is at ino 2 */
+#define INO2CH(ch) (int)((ch) - 1)  
 /*
  * map chip, dac to channel in block
  */
@@ -200,6 +203,9 @@ static inline unsigned short *key2offset(int ikey)
 	int lchan = (ikey-1)%NCHANNELSBLOCK + 1;
 	int pchan = acq200_lookup_pchan(lchan);
 
+	dbg(1, "key2offset key %d block %d lchan %d pchan %d",
+	    ikey, block, lchan, pchan);
+
 	return &offsets[block][pchan+1];
 }
 static void set_offset(int ikey, unsigned short offset)
@@ -284,10 +290,12 @@ static void write_all(void)
 
 static int access_open(struct inode *inode, struct file *filp)
 {
-	if (inode->i_ino == 0 || inode->i_ino > MAXCHAN){
+	int ch = INO2CH(inode->i_ino);
+
+	if (ch < 1 || ch > MAXCHAN){
 		return -ENODEV;
 	}
-	filp->private_data = (void*)inode->i_ino;
+	filp->private_data = (void*)ch;
 	return 0;
 }
 
@@ -422,6 +430,7 @@ static int offsetfs_fill_super (struct super_block *sb, void *data, int silent)
 	static char names[MAXCHAN+1][4];
 
 	int ichan;
+	int fn = 0;	/* file number in fs */
 
 	for (ichan = 1; ichan <= MAXCHAN; ++ichan){
 		sprintf(names[ichan], "%02d", ichan);
@@ -429,16 +438,17 @@ static int offsetfs_fill_super (struct super_block *sb, void *data, int silent)
 
 	my_files = kmalloc(MY_FILES_SZ(NCHAN), GFP_KERNEL);
 
-	memcpy(&my_files[0], &front, TD_SZ);
+	memcpy(&my_files[fn++], &front, TD_SZ);
+	memcpy(&my_files[fn++], &front, TD_SZ);
 	
-	for (ichan = 1; ichan <= NCHAN; ++ichan){
-		my_files[ichan].name = names[ichan];
-		my_files[ichan].ops  = &access_ops;
-		my_files[ichan].mode = S_IWUSR|S_IRUGO;
+	for (ichan = 1; ichan <= NCHAN; ++ichan, fn++){
+		my_files[fn].name = names[ichan];
+		my_files[fn].ops  = &access_ops;
+		my_files[fn].mode = S_IWUSR|S_IRUGO;
 	}
 
-	memcpy(&my_files[ichan++], &commit, TD_SZ);
-	memcpy(&my_files[ichan++], &backstop, TD_SZ);
+	memcpy(&my_files[fn++], &commit, TD_SZ);
+	memcpy(&my_files[fn++], &backstop, TD_SZ);
 	
 	return simple_fill_super(sb, LFS_MAGIC, my_files);
 }
