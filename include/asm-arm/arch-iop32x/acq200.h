@@ -187,6 +187,7 @@ extern void acq200_init_irq(void);
 
 extern void acq100_map_io(void);
 extern void acq100_init_irq(void);
+extern void acq132_init_irq(void);
 
 extern void acqX00_init(void);
 
