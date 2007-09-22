@@ -49,6 +49,13 @@ config MACH_ACQ100
 	help
 	  Say Y here to run kernel on the D-TACQ ACQ100 intelligent
 	  data acquisition blades. (use IOP321) www.d-tacq.com
+
+config MACH_ACQ132
+	bool "Enable support for ACQ132"
+	select ARCH_ACQX00
+	help
+	  Say Y here to run kernel on the D-TACQ ACQ132 digitizer
+	  (uses IOP321) www.d-tacq.com
 	
 config ARCH_ACQX00
 	bool
