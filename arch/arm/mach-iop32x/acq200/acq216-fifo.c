@@ -398,7 +398,8 @@ static void enable_acq216_start(void)
 
 	has_triggered = 0;
 	transient_dma_block_count = 0;
-	
+
+	onEnable();	
 
 	if (CAPDEF->trig->is_active){
 		rc = enable_hard_trigger();
@@ -407,7 +408,7 @@ static void enable_acq216_start(void)
 	}
 
 	if (DMC_WO->trigger_detect()){
-		onEnable();
+		onTrigger();
 	}
 }
 

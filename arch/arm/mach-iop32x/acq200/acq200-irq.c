@@ -106,6 +106,13 @@ void __init acq100_init_irq(void)
 	init_hpi_chip(cpld_unmask_acq200);
 }
 
+void __init acq132_init_irq(void)
+/** @@todo */
+{
+	__acq2xx_init_irq();
+	init_hpi_chip(cpld_unmask_acq200);
+}
+
 /*
  * IRQ31 MUX pattern
 Slot 1: 0x8

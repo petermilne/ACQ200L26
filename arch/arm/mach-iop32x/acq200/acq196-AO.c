@@ -536,7 +536,7 @@ static void service_fawg(struct Sawg *sawg)
 				
 				if (nwrite > 60){
 					sawg->stats.zero_fifo_at = 
-						sawg->stats.writeups;		
+						sawg->stats.writeups;
 				}
 			}else{
 				++sawg->stats.dma_busy;	
@@ -545,9 +545,9 @@ static void service_fawg(struct Sawg *sawg)
 done_writing:
 		++sawg->stats.updates;
 		update_gtsr(sawg, *IOP321_GTSR, gtsr1);
-		sawg->timer_running = 1;
 	}else{
-		sawg->timer_running = 0;
+		iop321_hookAuxTimer(&sawg->atc, 0);
+		sawg->timer_running = 0;		
 	}	
 }
 static void sawg_action(unsigned long clidata)
@@ -605,6 +605,7 @@ static void sawg_timer_arm(struct SawgBuffer *sb)
 		sawg->fifo_va = DG->fpga.fifo.va;
 		sawg->atc.func = sawg_action;
 		sawg->atc.clidata = (unsigned long)sawg;
+		sawg->timer_running = 1;
 		iop321_hookAuxTimer(&sawg->atc, sawg->hz);
 	}
 	spin_unlock_irqrestore(&sawg->lock, flags);

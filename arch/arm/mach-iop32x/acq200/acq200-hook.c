@@ -64,7 +64,7 @@ void run_pre_arm_hook(void)
 }
 void run_post_arm_hook(void)
 {
-	_run_helper(&DG->post_arm_hook, 0);
+	_run_helper(&DG->post_arm_hook, 1);
 }
 
 void run_post_shot_hook(void)

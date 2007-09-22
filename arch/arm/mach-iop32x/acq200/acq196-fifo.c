@@ -390,6 +390,8 @@ static void enable_acq196_start(void)
 	dbg(3, "use hard trigger if enabled %s", 
 	      CAPDEF->trig->is_active? "HARD": "soft");
 
+	onEnable();
+
 	if (CAPDEF->trig->is_active){
 		rc = enable_hard_trigger();
 	}else{
@@ -397,7 +399,7 @@ static void enable_acq196_start(void)
 	}
 
 	if (DMC_WO->trigger_detect()){
-		onEnable();
+		onTrigger();
 	}
 }
 

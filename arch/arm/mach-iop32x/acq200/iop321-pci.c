@@ -132,6 +132,34 @@ iop321_read_config(struct pci_bus *bus, unsigned int devfn, int where,
 }
 
 static int
+acq132_read_config(struct pci_bus *bus, unsigned int devfn, int where,
+		int size, u32 *value)
+{
+	unsigned long addr = iop321_cfg_address(bus, devfn, where);
+	u32 val = 0xffffffff;
+
+
+	if (G_iop321_pci_debug){
+		printk("acq132_read_config addr 0x%08x\n", addr);
+		if (G_iop321_pci_debug > 1){
+			goto done99;				
+		}
+	}
+	if (addr != 0x00010000){
+		val = iop321_read(addr) >> ((where & 3) * 8);		
+		if(iop321_pci_status()){
+			val = 0xffffffff;
+		}
+	}
+
+done99:
+	*value = val;
+
+	return PCIBIOS_SUCCESSFUL;
+}
+
+
+static int
 iop321_write_config(struct pci_bus *bus, unsigned int devfn, int where,
 		int size, u32 value)
 {
@@ -167,10 +195,45 @@ iop321_write_config(struct pci_bus *bus, unsigned int devfn, int where,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+/** standard */
 static struct pci_ops iop321_ops = {
 	.read	= iop321_read_config,
 	.write	= iop321_write_config,
 };
+
+/*
+ * Scan an IOP321 PCI bus.  sys->bus defines which bus we scan.
+ */
+struct pci_bus *iop321_scan_bus(int nr, struct pci_sys_data *sys)
+{
+	struct pci_bus *the_bus;
+
+	G_iop321_pci_debug--;
+	the_bus = pci_scan_bus(sys->busnr, &iop321_ops, sys);
+	G_iop321_pci_debug++;
+	
+	return the_bus;
+}
+
+
+/** alternate */
+static struct pci_ops acq132_ops = {
+	.read	= acq132_read_config,
+	.write	= iop321_write_config,
+};
+
+struct pci_bus *acq132_scan_bus(int nr, struct pci_sys_data *sys)
+{
+	struct pci_bus *the_bus;
+
+	G_iop321_pci_debug--;
+	the_bus = pci_scan_bus(sys->busnr, &acq132_ops, sys);
+	G_iop321_pci_debug++;
+	
+	return the_bus;
+}
+
+
 
 static u32 getFSR(void)
 {
@@ -254,20 +317,6 @@ iop321_pci_abort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		regs->ARM_pc += 4;
 
 	return 0;
-}
-
-/*
- * Scan an IOP321 PCI bus.  sys->bus defines which bus we scan.
- */
-struct pci_bus *iop321_scan_bus(int nr, struct pci_sys_data *sys)
-{
-	struct pci_bus *the_bus;
-
-	G_iop321_pci_debug--;
-	the_bus = pci_scan_bus(sys->busnr, &iop321_ops, sys);
-	G_iop321_pci_debug++;
-	
-	return the_bus;
 }
 
 

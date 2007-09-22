@@ -1722,6 +1722,11 @@ static struct work_struct onEnable_work;
 
 static void onEnable(void)
 {
+	schedule_work(&onEnable_work);
+}
+
+static void onTrigger(void)
+{
 	unsigned long flags;
 	int my_turn = 0;
 
@@ -1738,10 +1743,8 @@ static void onEnable(void)
 		DG->stats.start_jiffies = jiffies;
 		DMC_WO->state = ST_RUN;
 		DG->shot++;
-		schedule_work(&onEnable_work);
 	}
 }
-
 static int soft_trigger_retry;
 
 

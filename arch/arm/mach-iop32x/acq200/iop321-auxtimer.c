@@ -48,6 +48,8 @@
 static struct AuxTimerClient* timer1_client;
 static int timer1_hz;
 
+extern unsigned acq200_setAuxClock(unsigned hz);
+extern unsigned acq200_getAuxClock(void);
 
 void iop321_auxtimer_func(void)
 {
@@ -72,7 +74,12 @@ int iop321_hookAuxTimer(struct AuxTimerClient* client, int hz)
 		timer1_client = 0;
 		return 0;
 	}else{
+		int oldhz = acq200_getAuxClock();
+
 		timer1_client = client;
+		if (hz != oldhz){
+			acq200_setAuxClock(hz);
+		}
 		return 0;
 	}
 }
