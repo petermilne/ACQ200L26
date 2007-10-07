@@ -107,6 +107,7 @@ struct TblockConsumer {
 		struct TblockListElement *tle;
 		unsigned cursor;
 	} c;
+	unsigned flags;
 };
 
 struct DataConsumerBuffer {
@@ -1136,7 +1137,11 @@ struct DataChannelInfo {
 		struct Phase* phase;          /** phase (if known) */
 		struct TblockConsumer* tbc;
 	} _u;
+	unsigned flags;
+	struct TblockListElement *tle_current;
 };
+
+#define DCI_FLAGS_NORELEASE_ON_READ 0x00000001
 
 #define DCI(file) ((struct DataChannelInfo *)file->private_data)
 #define DCI_PHASE(file) (DCI(file)->_u.phase)

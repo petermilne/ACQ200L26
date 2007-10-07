@@ -1251,7 +1251,11 @@ static ssize_t status_tb_read (
 	}
 
 	spin_lock(&DG->tbc.lock);
-	acq200_phase_release_tblock_entry(tle);
+	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
+		acq200_phase_release_tblock_entry(tle);
+	}else{
+		DCI(file)->tle_current = tle;
+	}
 	spin_unlock(&DG->tbc.lock);	
 
 	COPY_TO_USER(buf, lbuf, rc);
@@ -1259,7 +1263,26 @@ static ssize_t status_tb_read (
 }
 
 
+static ssize_t status_tb_write(
+	struct file *file, const char *buf, size_t len, loff_t *offset)
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle = DCI(file)->tle_current;
+	
+	/** @todo should check iblock on input; */
 
+	/** lazy init - first write sets mode flag */
+	DCI(file)->flags |= DCI_FLAGS_NORELEASE_ON_READ;
+
+	if (tle != 0){
+		spin_lock(&DG->tbc.lock);
+		acq200_phase_release_tblock_entry(tle);
+		DCI(file)->tle_current = 0;
+		spin_unlock(&DG->tbc.lock);			
+	}
+
+	return len;
+}
 
 
 /**
@@ -1498,6 +1521,7 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	static struct file_operations dma_tbstatus_ops = {
 		.open = dma_tb_open,
 		.read = status_tb_read,
+		.write = status_tb_write,
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
