@@ -75,7 +75,7 @@ char acq200_tblockfs_driver_version[] = VERID __DATE__;
 char acq200_tblockfs_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 
 
-
+#define INO2TBLOCK(ino) ((ino)-2)
 
 
 
@@ -102,14 +102,75 @@ static int mk_tblock_sysfs(struct device *dev)
 }
 
 
+static ssize_t tblock_data_extractPages(
+	struct TBLOCK *this,
+	int maxbytes,
+	int offset,
+	read_descriptor_t * desc,
+	read_actor_t actor	
+	)
+{
+	char* tblock_base = (va_buf(DG) + this->offset);
+	char* cursor = (char*)(tblock_base + offset);
+
+	unsigned long cplen = 0;
+
+	while (cplen < maxbytes){
+		struct page *page = virt_to_page(cursor);
+		unsigned poff = (unsigned)(cursor)&(PAGE_SIZE-1);
+		unsigned long len = min(PAGE_SIZE, maxbytes-cplen);
+
+		actor(desc, page, poff, len);
+		
+		cplen += len;
+		cursor += len;
+	}
+
+	return cplen;
+}
+
+static ssize_t tblock_data_mapping_read ( 
+	struct file * file, loff_t *offset,
+	read_descriptor_t * desc,
+	read_actor_t actor
+)
+/** read a linear buffer. len, offset in bytes pass the data a page at a time
+ *  to actor.
+ */
+/*
+ * BEWARE: this is a nightmare of mixed units
+ *
+ * contract with caller: read bytes, return bytes
+ * contract with extract: units are words
+ *
+ */
+{
+	struct TBLOCK* tb = (struct TBLOCK*)file->private_data;
+	int maxbytes = min(TBLOCK_LEN, (int)desc->count);
+
+	int rc = tblock_data_extractPages(
+		tb, 
+		maxbytes,
+		*offset,
+		desc,
+		actor);
+
+	if (rc > 0){
+		*offset += rc;
+	}
+	return rc;
+}
+
+
 
 
 static int tblock_data_open(struct inode *inode, struct file *filp)
 {
-	if (inode->i_ino == 0 || inode->i_ino > MAX_TBLOCK){
+	int blocknum = INO2TBLOCK(inode->i_ino);
+
+	if (!IN_RANGE(blocknum, 0, MAX_TBLOCK-1)){
 		return -ENODEV;
 	}else{
-		int blocknum = inode->i_ino + 1;
 		filp->private_data = &DG->bigbuf.tblocks.the_tblocks[blocknum];
 		return 0;
 	}
@@ -150,10 +211,44 @@ static int tblock_data_mmap(struct file *filp, struct vm_area_struct *vma)
 	);
 }
 
+static ssize_t tblock_data_sendfile(struct file *in_file, loff_t *ppos,
+			 size_t count, read_actor_t actor, void __user *target)
+{
+	read_descriptor_t desc = {
+		.written = 0,
+		.count = count,
+		.arg.data = target,
+		.error = 0
+	};
+	ssize_t rc;
 
+	if (!count)
+		return 0;
 
+	dbg(1, "STEP:A1 count %d", count);
 
+	while (desc.written < count){
+		rc = tblock_data_mapping_read(
+			in_file, ppos, &desc, actor);
 
+		if (rc == 0){
+			break;
+		}else if (rc < 0){
+			dbg(1, "ERROR returning %d", rc);
+			return rc;
+		}
+
+		dbg(1, "desc.written %d count %d rc %d desc.count %d", 
+		    desc.written, count, rc, desc.count);
+	}
+		
+	dbg(1, "returning %d", desc.written);
+
+	if (desc.written > 0){
+		DG->stats.sendfile_bytes += desc.written;
+	}
+	return desc.written;
+}
 
 
 
@@ -173,7 +268,8 @@ static int acq200_tblockfs_fill_super (
 	static struct file_operations access_ops = {
 		.open = tblock_data_open,
 		.read = tblock_data_read,
-		.mmap = tblock_data_mmap
+		.mmap = tblock_data_mmap,
+		.sendfile = tblock_data_sendfile
 	};
 
 	static struct tree_descr front = {
@@ -182,8 +278,9 @@ static int acq200_tblockfs_fill_super (
 	static struct tree_descr backstop = {
 		"", NULL, 0
 	};
-
+	int ino = 0;
 	int iblock;
+	int rc;
 
 	info("create tree for %d tblocks", MAX_TBLOCK);
 	my_files = kmalloc(MY_FILES_SZ(MAX_TBLOCK), GFP_KERNEL);
@@ -201,19 +298,31 @@ static int acq200_tblockfs_fill_super (
 		return -ENOMEM;
 	}
 
-	memcpy(&my_files[0], &front, TD_SZ);
+	memcpy(&my_files[ino++], &front, TD_SZ);
+	memcpy(&my_files[ino++], &front, TD_SZ);
 	
-	for (iblock = 1; iblock <= MAX_TBLOCK; ++iblock){
-		sprintf(my_names[iblock], "%02d", iblock);
-		my_files[iblock].name = my_names[iblock];
-		my_files[iblock].ops  = &access_ops;
-		my_files[iblock].mode = S_IRUGO;
+	for (iblock = 0; iblock < MAX_TBLOCK; ++iblock, ++ino){
+		sprintf(my_names[iblock], "%03d", iblock);
+		my_files[ino].name = my_names[iblock];
+		my_files[ino].ops  = &access_ops;
+		my_files[ino].mode = S_IRUGO;
 	}
 
-	memcpy(&my_files[iblock++], &backstop, TD_SZ);
+	memcpy(&my_files[ino++], &backstop, TD_SZ);
 
-	info("call simple_fill_super");
-	return simple_fill_super(sb, TBFS_MAGIC, my_files);
+	rc = simple_fill_super(sb, TBFS_MAGIC, my_files);
+
+
+	if (rc == 0){
+		struct inode *inode;
+
+		list_for_each_entry(inode, &sb->s_inodes, i_sb_list){
+			if (IN_RANGE(INO2TBLOCK(inode->i_ino), 0, MAX_TBLOCK)){
+				inode->i_size = TBLOCK_LEN;
+			}
+		}		
+	}
+	return rc;
 }
 
 
