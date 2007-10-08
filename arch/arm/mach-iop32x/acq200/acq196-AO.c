@@ -154,10 +154,7 @@ struct Globs {
 };
 
 
-#define SAWG_MAX_SAMPLES (16384)	/* 8s at 2kHz */
-#define SAWG_CHANNEL_SZ (SAWG_MAX_SAMPLES*sizeof(u16))
-#define SAWG_BLOCK_SZ (SAWG_CHANNEL_SZ * MAX_AO_CHAN)
-
+#define _SAWG_MAX_SAMPLES (16384)	/* 8s at 2kHz */
 #define SAWG_BUFFER_CURRENT_LEN(sb) ((void*)sb->last - (void*)sb->block)
 
 #define SAWG_DMA_SAMPLES	16
@@ -170,14 +167,28 @@ DEFINE_DMA_CHANNEL(dmac1, 1);
 int fawg_debug = 0;
 module_param(fawg_debug, int, 0664);
 
-int fawg_max_samples = SAWG_MAX_SAMPLES;
+int fawg_max_samples = _SAWG_MAX_SAMPLES;
 module_param(fawg_max_samples, int, 0444);
 
-static inline int SAWG_PAGE_ORDER(void)
+int fawg_dma_len = SAWG_DMA_LEN;
+module_param(fawg_dma_len, int, 0644);
+
+int AO_channels = 16;
+module_param(AO_channels, int, 0444);
+
+
+#define FAWG_CHANNEL_SZ (fawg_max_samples*sizeof(u16))
+#define FAWG_BLOCK_SZ (FAWG_CHANNEL_SZ * AO_channels)
+
+
+#define INO2DC_CHAN(ino) (ino)
+#define INO2F_CHAN(ino) ((ino) - AO_channels)
+
+static inline int FAWG_PAGE_ORDER(void)
 {
 	int order = 0;
 
-	for (; (1 << order) * PAGE_SIZE < SAWG_BLOCK_SZ; ++order){
+	for (; (1 << order) * PAGE_SIZE < FAWG_BLOCK_SZ; ++order){
 		;
 	}
 	return order;
@@ -187,7 +198,7 @@ static inline int CHANNEL_PAGE_ORDER(void)
 {
 	int order = 0;
 
-	for (; (1 << order) * PAGE_SIZE < SAWG_CHANNEL_SZ; ++order){
+	for (; (1 << order) * PAGE_SIZE < FAWG_CHANNEL_SZ; ++order){
 		;
 	}
 	return order;
@@ -201,7 +212,7 @@ static inline int fbLen(struct FunctionBuf* fb)
 }
 static inline int fbFree(struct FunctionBuf* fb)
 {
-	return SAWG_MAX_SAMPLES - fbLen(fb);
+	return fawg_max_samples - fbLen(fb);
 }
 
 static void *fbCursor(struct FunctionBuf* fb, int offset_bytes)
@@ -253,11 +264,7 @@ static void write_all(void)
 	u32* dst = DG->fpga.fifo.va;
 	int ichan;
 	int double_dc_reset_count = 0;
-#ifdef MONITOR_DODGY_FPGA
-	volatile u32 syscon_dac = *ACQ196_SYSCON_DAC;
 
-	*ACQ196_SYSCON_DAC = syscon_dac | ACQ196_SYSCON_DAC_UPD;
-#endif
 
 #ifdef DODGY_DOUBLE_DC_RESET
 	while(double_dc_reset_count++ <= double_dc_reset){
@@ -274,13 +281,6 @@ static void write_all(void)
 		__dac_arm();
 		__dac_softtrig();
 #endif
-#if 0
-		__dac_disarm();
-		__dac_reset();
-		__dac_arm();		
-		*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_LOWLAT;
-		writeAll(dst, src);
-#endif
 	}
 
 	if (acq200_debug>2){
@@ -290,20 +290,6 @@ static void write_all(void)
 			    ichan+1, &dst[ichan], src[ichan]);
 		}
 	}
-#ifdef MONITOR_DODGY_FPGA
-	syscon_dac = *ACQ196_SYSCON_DAC;
-
-	if ((syscon_dac & ACQ196_SYSCON_DAC_UPD) == 0){
-		err("ERROR: DAC update failed 0x%08x", syscon_dac);
-	}else{
-		*ACQ196_SYSCON_DAC = syscon_dac;
-		syscon_dac = *ACQ196_SYSCON_DAC;
-		if ((syscon_dac & ACQ196_SYSCON_DAC_UPD) != 0){
-			err("ERROR: DAC update bit failed to clear 0x%08x",
-			    syscon_dac);
-		}
-	}
-#endif
 }
 
 
@@ -311,10 +297,12 @@ static void write_all(void)
 
 static int access_open(struct inode *inode, struct file *filp)
 {
-	if (inode->i_ino == 0 || inode->i_ino > MAX_AO_CHAN){
+	int chan = INO2DC_CHAN(inode->i_ino);
+
+	if (!IN_RANGE(chan, 1, AO_channels)){
 		return -ENODEV;
 	}
-	filp->private_data = (void*)inode->i_ino;
+	filp->private_data = (void*)chan;
 	return 0;
 }
 
@@ -650,9 +638,9 @@ static void releaseDmad(struct SawgBuffer *sb)
 static void prepareFawgDma(struct SawgBuffer *sb)
 {
 	void *bp, *cursor, *limit;
-	int dma_len = SAWG_DMA_LEN;
 	int ic;
 	int dmad_count;
+	int dma_len = fawg_dma_len;
 	
 	dbg(1, "01");
 	
@@ -664,11 +652,10 @@ static void prepareFawgDma(struct SawgBuffer *sb)
 		DG->dev, sb->pa, 
 		SAWG_BUFFER_CURRENT_LEN(sb), DMA_FROM_DEVICE);	
 
-	dmad_count = (SAWG_BUFFER_CURRENT_LEN(sb) + SAWG_DMA_LEN - 1)/
-			SAWG_DMA_LEN;
+	dmad_count = (SAWG_BUFFER_CURRENT_LEN(sb) + dma_len - 1)/dma_len;
 			
 	sb->dmad = kmalloc(
-		dmad_count*sizeof(struct iop321_dma_desc*), GFP_KERNEL);	
+		dmad_count*sizeof(struct iop321_dma_desc*), GFP_KERNEL);
 	
 	if (!sb->dmad){
 		err("FAILED to allocate DMAD array");
@@ -725,7 +712,7 @@ static void sawg_arm(void)
 	u32 pair;
 
 
-	for (ichannel = 0; ichannel < MAX_AO_CHAN; ++ichannel){
+	for (ichannel = 0; ichannel < AO_channels; ++ichannel){
 		struct FunctionBuf* fb = &AOG->fb[ichannel];
 
 		/**
@@ -748,10 +735,9 @@ static void sawg_arm(void)
 	}
 
 	for (isample = 0; 
-		channel_busy_mask && isample < SAWG_MAX_SAMPLES; 
-		++isample){
+	     channel_busy_mask && isample < fawg_max_samples; ++isample){
 
-		for (ichannel = 0; ichannel < MAX_AO_CHAN; ichannel += 2){
+		for (ichannel = 0; ichannel < AO_channels; ichannel += 2){
 			pair = *cursors[ichannel] | *cursors[ichannel+1] << 16;
 
 			if (AOG->fb[ichannel].p_end > cursors[ichannel] + 1){
@@ -909,6 +895,9 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 		}
 		if ((commit_word&COMMIT_FAWG) != 0){
 			*ACQ196_SYSCON_DAC &= ~ACQ196_SYSCON_LOWLAT;
+			if (AO_channels == 2){
+				*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_2CHAN;
+			}
 			sawg_arm();
 		}
 		if ((commit_word&COMMIT_DC) != 0){
@@ -953,7 +942,7 @@ static ssize_t commit_read(struct file *filp, char *buf,
 
 static int access_wave_open(struct inode *inode, struct file *filp)
 {
-	SET_FB(filp, &AOG->fb[inode->i_ino - MAX_AO_CHAN - 1]);
+	SET_FB(filp, &AOG->fb[INO2F_CHAN(inode->i_ino) - 1]);
 
 	if ((filp->f_mode & FMODE_WRITE) != 0){
 		/* truncate on write */
@@ -1074,18 +1063,14 @@ static int AOfs_fill_super (struct super_block *sb, void *data, int silent)
 
 	memcpy(&my_files[0], &front, TD_SZ);
 	
-	for (ichan = 1; ichan <= MAX_AO_CHAN; ++ichan){
+	for (ichan = 1; ichan <= AO_channels; ++ichan){
 		sprintf(names[ichan], "%02d", ichan);
 		my_files[ichan].name = names[ichan];
 		my_files[ichan].ops  = &access_ops;
 		my_files[ichan].mode = S_IWUSR|S_IRUGO;
 	}
-	for (ifchan = 0; ifchan <= IREF; ++ifchan, ++ichan){
-		if (ifchan == IREF){
-			sprintf(fnames[ifchan], "f.ref");
-		}else{
-			sprintf(fnames[ifchan], "f.%02d", ifchan+1);
-		}
+	for (ifchan = 0; ifchan <= AO_channels; ++ifchan, ++ichan){
+		sprintf(fnames[ifchan], "f.%02d", ifchan+1);
 		my_files[ichan].name = fnames[ifchan];
 		my_files[ichan].ops = &access_wave_ops;
 		my_files[ichan].mode = S_IWUSR|S_IRUGO;
@@ -1094,6 +1079,18 @@ static int AOfs_fill_super (struct super_block *sb, void *data, int silent)
 			AOG->fb[ifchan].p_start = (u16*)
 			__get_free_pages(GFP_KERNEL, CHANNEL_PAGE_ORDER());
 	}
+	ifchan = IREF;
+	{
+		sprintf(fnames[ifchan], "f.ref");
+		my_files[ichan].name = fnames[ifchan];
+		my_files[ichan].ops = &access_wave_ops;
+		my_files[ichan].mode = S_IWUSR|S_IRUGO;
+
+		AOG->fb[ifchan].p_end = 
+			AOG->fb[ifchan].p_start = (u16*)
+			__get_free_pages(GFP_KERNEL, CHANNEL_PAGE_ORDER());
+	}
+	++ichan;
 	memcpy(&my_files[ichan++], &xx, TD_SZ);
 	memcpy(&my_files[ichan++], &commit, TD_SZ);
 	memcpy(&my_files[ichan++], &backstop, TD_SZ);
@@ -1123,21 +1120,21 @@ static struct file_system_type AO_fs_type = {
 
 #define GET_PAGES(block)						  \
        do {								  \
-       ((block) = (u32*)__get_free_pages(GFP_KERNEL, SAWG_PAGE_ORDER())); \
-       info("GET_PAGES %d returned %p", SAWG_PAGE_ORDER(), block);	  \
+       ((block) = (u32*)__get_free_pages(GFP_KERNEL, FAWG_PAGE_ORDER())); \
+       info("GET_PAGES %d returned %p", FAWG_PAGE_ORDER(), block);	  \
        }while(0)
 
 #define FREE_PAGES(block) \
-        free_pages((unsigned long)(block), SAWG_PAGE_ORDER())
+        free_pages((unsigned long)(block), FAWG_PAGE_ORDER())
 
 static void create_sb(struct SawgBuffer *sb)
 {
 	GET_PAGES(sb->block);		
 	sb->pa = dma_map_single(
-			DG->dev, sb->block, SAWG_BLOCK_SZ, PCI_DMA_TODEVICE);
+			DG->dev, sb->block, FAWG_BLOCK_SZ, PCI_DMA_TODEVICE);
 			
 	dbg(1, "sb->block %p pa 0x%08x len %d", 
-		sb->block, sb->pa, SAWG_BLOCK_SZ);		
+		sb->block, sb->pa, FAWG_BLOCK_SZ);		
 }
 
 static void delete_sb(struct SawgBuffer *sb)
