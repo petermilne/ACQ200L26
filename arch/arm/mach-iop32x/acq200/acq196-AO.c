@@ -1069,7 +1069,7 @@ static int AOfs_fill_super (struct super_block *sb, void *data, int silent)
 		my_files[ichan].ops  = &access_ops;
 		my_files[ichan].mode = S_IWUSR|S_IRUGO;
 	}
-	for (ifchan = 0; ifchan <= AO_channels; ++ifchan, ++ichan){
+	for (ifchan = 0; ifchan < AO_channels; ++ifchan, ++ichan){
 		sprintf(fnames[ifchan], "f.%02d", ifchan+1);
 		my_files[ichan].name = fnames[ifchan];
 		my_files[ichan].ops = &access_wave_ops;
