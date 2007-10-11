@@ -62,7 +62,7 @@
 #define LFS_MAGIC 0xa196a016
 
 #define TD_SZ  (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+2*(numchan)+2+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((2+2*(numchan)+2+1)*TD_SZ)
 
 
 #define DEF_HZ 10000
@@ -176,13 +176,16 @@ module_param(fawg_dma_len, int, 0644);
 int AO_channels = 16;
 module_param(AO_channels, int, 0444);
 
+int use_ref = 0;
+module_param(use_ref, int, 0444);
 
 #define FAWG_CHANNEL_SZ (fawg_max_samples*sizeof(u16))
 #define FAWG_BLOCK_SZ (FAWG_CHANNEL_SZ * AO_channels)
 
 
-#define INO2DC_CHAN(ino) (ino)
-#define INO2F_CHAN(ino) ((ino) - AO_channels)
+/* linux 2.6.21 ... ino starts at 2 */
+#define INO2DC_CHAN(ino) ((ino)-1)
+#define INO2F_CHAN(ino) (INO2DC_CHAN(ino) - AO_channels)
 
 static inline int FAWG_PAGE_ORDER(void)
 {
@@ -605,7 +608,7 @@ static void primeFawgDma(struct SawgBuffer *sb)
 	unsigned status;
 	
 	/* we DONT want to chain this (would have to break chain on recycle) */
-	while(getAOheadroom(0) > SAWG_DMA_SAMPLES && ic < sb->dmad_count){ 		
+	while(getAOheadroom(0) > SAWG_DMA_SAMPLES && ic < sb->dmad_count){
 		DMA_ARM_DIRECT(dmac1, sb->dmad[ic]);
 		DMA_FIRE(dmac1);		
 		j1 = jiffies;
@@ -689,8 +692,9 @@ static void prepareFawgDma(struct SawgBuffer *sb)
 		
 		sb->dmad[ic] = dmad;
 		
-		dbg(min(3, 2+(ic&0x3f)), "%3d PDA:0x%08x LAD:0x%08x BC:%d",
-			ic, dmad->PDA, dmad->LAD, dmad->BC);  			
+		dbg(min(3, 2+(ic&0x3f)), 
+			"%3d PDA:0x%08x LAD:0x%08x BC:%d",
+			ic, dmad->PDA, dmad->LAD, dmad->BC);
 	}
 	
 	sb->dmad_count = ic;
@@ -1056,46 +1060,51 @@ static int AOfs_fill_super (struct super_block *sb, void *data, int silent)
 	static char names[MAX_AO_CHAN+1][4];
 	static char fnames[MAX_AO_FCHAN+1][8];
 
-	int ichan;
-	int ifchan; 
+	int channel;
+	int myfino = 0;
+#define ICHAN(channel) ((channel)-1)  /* convert to array index */
 
 	my_files = kmalloc(MY_FILES_SZ(NCHAN), GFP_KERNEL);
 
-	memcpy(&my_files[0], &front, TD_SZ);
+
+	memcpy(&my_files[myfino++], &front, TD_SZ);
+	/* linux 2.6.21 ... ino starts at 2 */
+	memcpy(&my_files[myfino++], &front, TD_SZ); 
 	
-	for (ichan = 1; ichan <= AO_channels; ++ichan){
-		sprintf(names[ichan], "%02d", ichan);
-		my_files[ichan].name = names[ichan];
-		my_files[ichan].ops  = &access_ops;
-		my_files[ichan].mode = S_IWUSR|S_IRUGO;
+	for (channel = 1; channel <= AO_channels; ++channel, ++myfino){
+		sprintf(names[channel], "%02d", channel);
+		my_files[myfino].name = names[channel];
+		my_files[myfino].ops  = &access_ops;
+		my_files[myfino].mode = S_IWUSR|S_IRUGO;
 	}
-	for (ifchan = 0; ifchan < AO_channels; ++ifchan, ++ichan){
-		sprintf(fnames[ifchan], "f.%02d", ifchan+1);
-		my_files[ichan].name = fnames[ifchan];
-		my_files[ichan].ops = &access_wave_ops;
-		my_files[ichan].mode = S_IWUSR|S_IRUGO;
+	for (channel = 1; channel <= AO_channels; ++channel, ++myfino){
+		sprintf(fnames[channel], "f.%02d", channel);
+		my_files[myfino].name = fnames[channel];
+		my_files[myfino].ops = &access_wave_ops;
+		my_files[myfino].mode = S_IWUSR|S_IRUGO;
 
-		AOG->fb[ifchan].p_end = 
-			AOG->fb[ifchan].p_start = (u16*)
+		AOG->fb[ICHAN(channel)].p_end = 
+			AOG->fb[ICHAN(channel)].p_start = (u16*)
 			__get_free_pages(GFP_KERNEL, CHANNEL_PAGE_ORDER());
 	}
-	ifchan = IREF;
-	{
-		sprintf(fnames[ifchan], "f.ref");
-		my_files[ichan].name = fnames[ifchan];
-		my_files[ichan].ops = &access_wave_ops;
-		my_files[ichan].mode = S_IWUSR|S_IRUGO;
+	if (use_ref){
+		static char refname[8];
 
-		AOG->fb[ifchan].p_end = 
-			AOG->fb[ifchan].p_start = (u16*)
+		sprintf(refname, "f.ref");
+		my_files[myfino].name = refname;
+		my_files[myfino].ops = &access_wave_ops;
+		my_files[myfino].mode = S_IWUSR|S_IRUGO;
+
+		AOG->fb[IREF].p_end = AOG->fb[IREF].p_start = (u16*)
 			__get_free_pages(GFP_KERNEL, CHANNEL_PAGE_ORDER());
+		myfino++;
 	}
-	++ichan;
-	memcpy(&my_files[ichan++], &xx, TD_SZ);
-	memcpy(&my_files[ichan++], &commit, TD_SZ);
-	memcpy(&my_files[ichan++], &backstop, TD_SZ);
+	memcpy(&my_files[myfino++], &xx, TD_SZ);
+	memcpy(&my_files[myfino++], &commit, TD_SZ);
+	memcpy(&my_files[myfino++], &backstop, TD_SZ);
 	
 	return simple_fill_super(sb, LFS_MAGIC, my_files);
+#undef ICHAN
 }
 
 
