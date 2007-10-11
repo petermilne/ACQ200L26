@@ -285,6 +285,9 @@ int acq132_is_standalone(void)
 	return is_system_slot;
 }
 
+/* R3 boards - enable PCI A,B,C,D + ROUTE XINT3 */
+static unsigned acq100_cpld_pci_mask = 0x1f;	
+
 static void __init set_system_slot(char **p)
 {
 	is_system_slot = memparse(*p, p);
@@ -293,6 +296,15 @@ static void __init set_system_slot(char **p)
 	}
 	if (**p == ','){
 		G_iop321_pci_debug = memparse((*p) + 1, p);
+	}
+	if (**p == ','){
+		acq100_cpld_pci_mask = memparse((*p) + 1, p);
+	}
+
+	if (irq_ext_pci == 29){
+		printk("PCI: ext int %d set cpld %x\n",
+		       irq_ext_pci, acq100_cpld_pci_mask);
+		*(volatile u8*)ACQ200_CPLD = acq100_cpld_pci_mask;
 	}
 }
 __early_param("sysslot=", set_system_slot);
