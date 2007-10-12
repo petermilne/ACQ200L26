@@ -300,12 +300,6 @@ static void __init set_system_slot(char **p)
 	if (**p == ','){
 		acq100_cpld_pci_mask = memparse((*p) + 1, p);
 	}
-
-	if (irq_ext_pci == 29){
-		printk("PCI: ext int %d set cpld %x\n",
-		       irq_ext_pci, acq100_cpld_pci_mask);
-		*(volatile u8*)ACQ200_CPLD = acq100_cpld_pci_mask;
-	}
 }
 __early_param("sysslot=", set_system_slot);
 
@@ -328,6 +322,12 @@ static int __init acq100_pci_init(void)
 		}
 	}else if (machine_is_acq100()){
 		if (acq100_is_system_slot_enabled()){
+			if (irq_ext_pci == IRQ_EXT_PCI_NEW){
+				printk("PCI: ext int %d set cpld %x\n",
+				       irq_ext_pci, acq100_cpld_pci_mask);
+				*(volatile u8*)ACQ200_CPLD = 
+						acq100_cpld_pci_mask;
+			}
 			mmr_setup();
 			printk("PCI:acq100 system slot device debug %d\n",
 				G_iop321_pci_debug);
