@@ -92,7 +92,7 @@ static int acq200_nbits;
 #define FPGA_DEVFN (FPGA_DEV*8)
 
 
-void arch_reset(char mode)
+void acq200_arch_reset(char mode)
 {
 	*(volatile unsigned char*)(ACQ200_CPLD+0x18) = 0; 
 	*(volatile unsigned char*)(ACQ200_CPLD+2) = 1;

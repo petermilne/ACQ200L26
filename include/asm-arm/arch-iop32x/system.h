@@ -15,9 +15,17 @@ static inline void arch_idle(void)
 	cpu_do_idle();
 }
 
+#ifdef CONFIG_ARCH_ACQ200
+extern void acq200_arch_reset(char mode);
+#endif
+
 static inline void arch_reset(char mode)
 {
 	local_irq_disable();
+
+#ifdef CONFIG_ARCH_ACQ200
+	acq200_arch_reset(mode);
+#endif
 
 	if (machine_is_n2100()) {
 		gpio_line_set(N2100_HARDWARE_RESET, GPIO_LOW);
@@ -25,6 +33,7 @@ static inline void arch_reset(char mode)
 		while (1)
 			;
 	}
+
 
 	*IOP3XX_PCSR = 0x30;
 
