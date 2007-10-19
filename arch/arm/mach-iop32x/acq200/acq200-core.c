@@ -94,8 +94,19 @@ static int acq200_nbits;
 
 void acq200_arch_reset(char mode)
 {
+
+	printk("acq200_arch_reset\n");
+#if 0
+	printk("%s: %p = %d\n", FN, 
+	       (volatile unsigned char*)(ACQ200_CPLD+0x18),
+	       0);
 	*(volatile unsigned char*)(ACQ200_CPLD+0x18) = 0; 
+	printk("%s: %p = %d\n", FN, 
+	       (volatile unsigned char*)(ACQ200_CPLD+2),
+	       1);
+#endif
 	*(volatile unsigned char*)(ACQ200_CPLD+2) = 1;
+	printk("%s **** ERROR **** ALL DONE: now we should be dead\n");
 }
 
 
