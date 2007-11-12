@@ -1457,6 +1457,12 @@ static void dmc0_timeout(unsigned long arg)
 
 static int acq200_dmc0_task(void *arg)
 {
+/* this is going to be the top RT process */
+	struct sched_param param = { .sched_priority = 10 };
+
+	sched_setscheduler(current, SCHED_FIFO, &param);
+	current->flags |= PF_NOFREEZE;
+	
 	while(1){
 		int run_request;
 		int timeout = wait_event_interruptible_timeout(
