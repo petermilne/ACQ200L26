@@ -18,14 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-/*
- * From example at http://lwn.net/Articles/57373/
- * Copyright 2002, 2003 Jonathan Corbet <corbet-AT-lwn.net>
- * This file may be redistributed under the terms of the GNU GPL.
- */
-
-#define REVID "$Revision: 1.5 $ B102\n"
-
+#define VERID "$Revision: 1.5 $ build B1012 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -69,7 +62,17 @@ module_param(nskips, int, 0444);
 int stub = 0;
 module_param(stub, int, 0664);
 
-#define VERID "$Revision: 1.5 $ build B1001 "
+
+int iter = 0;
+module_param(iter, int, 0444);
+
+int tblock = -1;
+module_param(tblock, int, 0444);
+
+
+
+char* verid = VERID;
+module_param(verid, charp, 0444);
 
 #define TD_SZ (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+2+1)*TD_SZ)
@@ -116,6 +119,7 @@ static struct MeanDataStore {
 	int sample_size;
 	int nchannels;
 	int* the_sums;
+	int sumslen;
 	struct DataEntry* entries;
 } mds;
 
@@ -186,6 +190,7 @@ static void boxcar(
 	struct DataEntry* x;
 	int headroom = (dcb->last_finish - dcb->last_start)/mds.sample_size;
 	int chmax = mds.nchannels;
+	int timeout = 10000;	/* limits amount of work */
 
 	if (stub) chmax = 1;
 
@@ -193,7 +198,7 @@ static void boxcar(
 		dcb->last_start += (headroom - nmean)*mds.sample_size;
 	}
 	
-	while (dcb->last_start < dcb->last_finish){
+	while (dcb->last_start < dcb->last_finish && --timeout > 0){
 		void *new_data = (short *)PTR(dcb->last_start);
 
 		if (likely(mds.samples_in_list == nmean)){
@@ -232,12 +237,15 @@ static void boxcar(
 			dcb->last_start += mds.sample_size;
 		}
 	}
+
+	if (timeout <= 0){
+		err("TIMEOUT");
+	}
 }
 
 
 static int mean_work(void *clidata) 
 {
-	int iter = 0;
 	void (*my_boxcar_action)(int chmax, int *sums, void *old, void *new);
 	       
 	struct DataConsumerBuffer *dcb = acq200_createDCB();
@@ -253,24 +261,28 @@ static int mean_work(void *clidata)
 	default:
 		my_boxcar_action = _boxcar16;
 	}
-		
-	while(1){
+
+	iter = 0;		
+	allow_signal(SIGKILL);
+	
+	while(!kthread_should_stop()){
 		unsigned new_start;
 		int myskips = 0;
-		if (kthread_should_stop()){
-			break;
+
+		if (signal_pending(current)){
+			flush_signals(current);
 		}
-		wait_event_interruptible(
-				dcb->waitq, !u32rb_is_empty(&dcb->rb));
-		
+
+		wait_event_interruptible_timeout(
+			dcb->waitq, !u32rb_is_empty(&dcb->rb), HZ);
+
 		while (!u32rb_is_empty(&dcb->rb)){
 		      u32rb_get(&dcb->rb, &dcb->last_finish);
 		}
 
+		tblock = TBLOCK_NUM(dcb->last_finish);
 		new_start = TBLOCK_START(TBLOCK_NUM(dcb->last_finish));
 		      
-		       
-
 		if (iter == 0){
 			dcb->last_start = new_start;
 		}else if (TBLOCK_NUM(dcb->last_start) != 
@@ -287,7 +299,7 @@ static int mean_work(void *clidata)
 			boxcar(my_boxcar_action, dcb);
 		}
 
-		dbg(1,"hello from mean_work %d offset:%06x", 
+		dbg(2,"hello from mean_work %d offset:%06x", 
 		    iter, dcb->last_finish);
 
 		iter++;
@@ -305,14 +317,23 @@ static struct task_struct *the_worker;
 
 static void start_work(void) 
 {
-	on_arm();
-	the_worker = kthread_run(mean_work, NULL, "mean_work");
+	dbg(1, "01");
+
+	if (the_worker == 0){
+		on_arm();
+		the_worker = kthread_run(mean_work, NULL, "mean_work");
+	}else{
+		err("mean thread already running");
+	}
+
+	dbg(1, "99 the worker %p", the_worker);
 }
 static void stop_work(void)
 {
+	dbg(1, "01");
 	kthread_stop(the_worker);
-	/** WARNING: may not be enough to allow worker to stop */
-	schedule();              
+	the_worker = 0;
+	dbg(1, "99");            
 }
 
 static int getMean(int lchan) 
@@ -330,7 +351,7 @@ static int ch_open(struct inode *inode, struct file *filp)
 {
 	int ch = INO2CH(inode->i_ino);
 
-	dbg(1, "ch %d", ch);
+	dbg(3, "ch %d", ch);
 	filp->private_data = (void*)ch;
 	return 0;
 }
@@ -376,9 +397,14 @@ static int ch_release(struct inode *inode, struct file *filp)
 static ssize_t enable_read(
 	struct file *filp, char *buf, size_t count, loff_t *offset)
 {
-	char *value = enable? "1": "0";
-	COPY_TO_USER(buf, value, 1);
-	return 1;
+	if (*offset != 0){
+		return 0;
+	}else{
+		char *value = enable? "1": "0";
+		COPY_TO_USER(buf, value, 1);
+		*offset	+= 1;
+		return 1;
+	}
 }
 
 static ssize_t enable_write(
@@ -463,19 +489,16 @@ static int meanfs_get_super(
 
 static void on_arm(void)
 {
-	int ch;
-
-
+	dbg(1, "on_arm 01");
 	while(!list_empty(&mds.busy_list)){
 		list_move(&mds.busy_list, &mds.free_list);
 	}
 	mds.samples_in_list = 0;
 	mds.sample_size = sample_size();
-	mds.nchannels = get_nchan();
+	mds.nchannels = CAPDEF_get_nchan();
+	memset(mds.the_sums, 0, mds.sumslen);
 
-	for (ch = 0; ch < mds.nchannels; ++ch){
-		mds.the_sums[ch] = 0;
-	}
+	dbg(1, "on_arm 99");
 }
 
 static void init_buffers(void)
@@ -485,7 +508,8 @@ static void init_buffers(void)
 
 	my_files = kmalloc(MY_FILES_SZ(nchan), GFP_KERNEL);
 	my_names = kmalloc((2+nchan)*sizeof(struct CHNAME), GFP_KERNEL);
-	mds.the_sums = kmalloc((nchan)*sizeof(int), GFP_KERNEL);
+	mds.sumslen = (nchan)*sizeof(int);
+	mds.the_sums = kmalloc(mds.sumslen, GFP_KERNEL);
 	mds.entries = 
 		kmalloc(max(nmean,64)*sizeof(struct DataEntry), GFP_KERNEL);
 
@@ -521,6 +545,7 @@ static int __init acq200_mean_init( void )
 	     acq200_mean_driver_version, acq200_mean_copyright);
 
 	init_buffers();	
+	enable = 1;
 	start_work();
 	return register_filesystem(&meanfs_type);
 }
