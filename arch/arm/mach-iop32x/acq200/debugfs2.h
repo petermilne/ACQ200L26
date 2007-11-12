@@ -28,6 +28,7 @@ struct DebugFs2NodeInfo {
 	u32 mask;
 	u32 mode;
 };
+#define DBGFS2_NI_SZ	sizeof(struct DebugFs2NodeInfo)
 
 #define DFS2_WRITEONLY 0x1
 #define DFS2_CACHE     0x2
@@ -62,7 +63,8 @@ mode:: rwc
 struct dentry* debugfs2_create_file_def(
 	struct dentry *parent,
 	struct DebugFs2NodeInfo *nodeInfo,
-	const char *def);
+	const char *def,
+	int nline);
 /* create node from definition string. nodeInfo should be init with base ptr */
 /* def string:
 name offset mask mode. if mask does not begin 0x, it's a bit position 

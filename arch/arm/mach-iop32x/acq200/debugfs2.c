@@ -76,6 +76,10 @@ static u32 to_mask(u32 mask, u32 value)
 {
 	int shl;
 
+	if (mask == 0){
+		return 0;
+	}
+
 	for (shl = 0; ((1<<shl)&mask) == 0; ++shl){
 		;
 	}
@@ -85,6 +89,10 @@ static u32 to_mask(u32 mask, u32 value)
 static u32 from_mask(u32 mask, u32 value)
 {
 	int shr;
+
+	if (mask == 0){
+		return 0;
+	}
 
 	for (shr = 0; ((1<<shr)&mask) == 0; ++shr){
 		;
@@ -167,7 +175,8 @@ const struct file_operations debugfs2_fops = {
 struct dentry* debugfs2_create_file_def(
 	struct dentry* parent,
 	struct DebugFs2NodeInfo *nodeInfo,
-	const char *def)
+	const char *def,
+	int nline)
 {
 	char name[21];
 	char s_mask[21];
@@ -189,17 +198,17 @@ struct dentry* debugfs2_create_file_def(
 		nodeInfo->pread += offset;
 		nodeInfo->pcache += offset;
 
-		dbg(1, "accept line \"%s\"", def);
+		dbg(1, "accept line %d \"%s\"", nline, def);
 		
 		return debugfs_create_file(
 			name, 
-			((strstr(mode, "r") == 0? S_IRUGO: 0) |
-			 (strstr(mode, "w") == 0? S_IWUGO: 0)   ),
+			((strstr(mode, "r") == 0? 0: S_IRUGO) |
+			 (strstr(mode, "w") == 0? 0: S_IWUGO)   ),
 			parent,
 			nodeInfo,
 			&debugfs2_fops);
 	}else{
-		info("reject line %s at field %d", def, fields);
+		info("reject line %d \"%s\" at field %d", nline, def, fields);
 		return 0;
 	}
 }
@@ -221,6 +230,7 @@ ssize_t debugfs2_write_line(struct file *file,
 	for (cp = myline; cp - myline < count; ++cp){
 		if (*cp == '\n'){
 			*cp++ = '\0';
+			*ppos += 1;
 			break;
 		}
 	}
