@@ -18,7 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define VERID "$Revision: 1.5 $ build B1012 "
+#define VERID "$Revision: 1.5 $ build B1014 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -69,10 +69,12 @@ module_param(iter, int, 0444);
 int tblock = -1;
 module_param(tblock, int, 0444);
 
-
+int nice_mean = 10;
+module_param(nice_mean, int, 0644);
 
 char* verid = VERID;
 module_param(verid, charp, 0444);
+
 
 #define TD_SZ (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+2+1)*TD_SZ)
@@ -262,6 +264,8 @@ static int mean_work(void *clidata)
 		my_boxcar_action = _boxcar16;
 	}
 
+	set_user_nice(current, nice_mean);
+
 	iter = 0;		
 	allow_signal(SIGKILL);
 	
@@ -277,7 +281,7 @@ static int mean_work(void *clidata)
 			dcb->waitq, !u32rb_is_empty(&dcb->rb), HZ);
 
 		while (!u32rb_is_empty(&dcb->rb)){
-		      u32rb_get(&dcb->rb, &dcb->last_finish);
+		      u32rb_get(&dcb->rb, &dcb->last_finish);		      
 		}
 
 		tblock = TBLOCK_NUM(dcb->last_finish);
