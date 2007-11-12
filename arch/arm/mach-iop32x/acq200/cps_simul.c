@@ -48,7 +48,13 @@
 
 #define CPS_MEMORY_SIZE	0x1000
 
+/*
+ * we allow one level of subdirectory. OK, a stack would work, but
+ * we don't need this ...
+ */
+
 static struct dentry *top;
+static struct dentry *cwd;
 static struct dentry *create_hook;
 
 static u32* cps_memory;
@@ -65,21 +71,34 @@ static ssize_t cps_simul_write(struct file *file,
 
 	myline[79] = '\0';
 
-	if (rc > 0 && myline[0] != '#' && strlen(myline) > 10){
-		struct dentry* newfile;
-		struct DebugFs2NodeInfo* nodeInfo = 
-			kmalloc(sizeof(struct DebugFs2NodeInfo), GFP_KERNEL);
-		memcpy(nodeInfo, &cps_simul_base_info, 
-		       sizeof(struct DebugFs2NodeInfo));
+	if (rc > 0 && myline[0] != '#' && strlen(myline) > 5){
+		if (strncmp(myline, "cd", 2) == 0){
+			char subdir[21];
 
-		newfile = debugfs2_create_file_def(top, nodeInfo, myline);
+			if (sscanf(myline, "cd %s", subdir) == 1){
+				if (strncmp(subdir, "..", 2) == 0){
+					cwd = top;
+				}else{
+					cwd = debugfs_create_dir(subdir, top);
+					if (cwd == 0){
+						err("failed to create subdir");
+					}
+				}
+			}else{
+				err("invalid cd command \"%s\"", myline);
+			}
+		}else{
+			struct dentry* newfile;
+			struct DebugFs2NodeInfo* nodeInfo = 
+				kmalloc(DBGFS2_NI_SZ, GFP_KERNEL);
+			memcpy(nodeInfo, &cps_simul_base_info, DBGFS2_NI_SZ);
 
+			newfile = debugfs2_create_file_def(
+				cwd, nodeInfo, myline, (int)*ppos);
+		}
 		/* @@todo: newfile -> list */			
 	}
 	
-	if (rc > 0){
-		ppos += rc;
-	}
 	return rc;
 }
 
@@ -163,7 +182,7 @@ static int __init cps_simul_init(void)
 	cps_simul_base_info.pread  = cps_memory;
 	cps_simul_base_info.pcache = cps_memory;
 
-	top = debugfs_create_dir("CPS", NULL);
+	cwd = top = debugfs_create_dir("CPS", NULL);
 	create_hook = debugfs_create_file(".create", S_IWUGO,
 					  top, 0, &cps_simul_fops);
 	return 0;
