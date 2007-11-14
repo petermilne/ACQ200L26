@@ -932,27 +932,27 @@ static ssize_t store_mode(
 	const char * buf, size_t count)
 {
 	unsigned mode;
-	int pre = 10240, post = 10240;
+	unsigned pre, post;
+	int nconverted = sscanf(buf, "%u %u %u", &mode, &pre, &post);
 
-	int nconverted = sscanf(buf, "%d %d %d", &mode, &pre, &post);
-	if (mode <= M_LAST){
+	if (nconverted == 3 &&  mode <= M_LAST){
+
+		unsigned prelen = samplesToBytes(pre);
+		unsigned postlen = samplesToBytes(post);
+
+		postlen = min(postlen, len_buf(DG));
+		prelen = min(prelen, (len_buf(DG) - postlen));
+
 		CAPDEF->mode = mode;
-		switch(mode){
-		case M_SOFT_CONTINUOUS:
-		case M_TRIGGERED_CONTINUOUS:
-			if (nconverted == 3){
-				CAPDEF->demand_prelen = samplesToBytes(pre);
-				CAPDEF->demand_postlen = samplesToBytes(post);
-			}
-			break;
-		default:
-			; /* WORKTODO PGM */
-		}
+		CAPDEF->demand_prelen = prelen;
+		CAPDEF->demand_postlen = postlen;
+
+		/** only used for TRANSIENT see init_phases() */
+		LEN = postlen;
 	}
 	return strlen(buf);
 }
-static DEVICE_ATTR(mode, S_IRUGO|S_IWUGO,
-		   show_mode, store_mode);
+static DEVICE_ATTR(mode, S_IRUGO|S_IWUGO, show_mode, store_mode);
 
 
 
