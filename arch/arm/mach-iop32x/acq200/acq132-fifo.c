@@ -38,7 +38,7 @@
 #include "acq200-fifo-local.h"
 
 #include "acq200-fifo.h"
-#include "acq196.h"
+#include "acq132.h"
 
 
 #include "acq196-AO.h"
@@ -336,6 +336,95 @@ static struct DevGlobs acq196_dg = {
 
 #define MYDG &acq196_dg
 
+/* Slave FPGA Load:
+The complete programming sequence is 
+
+#1. set the Programming Mode to 1 wait for INIT to return high 
+#2 . then set UPDATE and  
+#2b start loading the data 16 bits at a time, and 
+	checking the BUSY bit before sending the next data 
+	checking that INIT does not go low during load. 
+#3 After load is complete check that DONE has gone high
+#4 clear Programming Mode.
+
+*/
+
+#define TIMEOUT_RET(sta)						\
+	for (timeout = 1000; sta; --timeout){				\
+		if (timeout == 0){					\
+			dbg(1, "TIMEOUT %s %d\n", #sta, __LINE__ );	\
+			return -ETIMEDOUT;				\
+		}else{							\
+			schedule();					\
+		}							\
+}
+
+
+static int acq132_sfpga_load_open (struct inode *inode, struct file *file)
+{
+	int timeout;
+
+	/* #1 */
+	sfpga_conf_clr_all();
+	sfpga_conf_set_prog();
+	
+	TIMEOUT_RET(!sfpga_conf_get_init());
+	/* #2 */
+	sfpga_conf_set_update();
+	return 0;
+}
+
+
+static ssize_t acq132_sfpga_load_write ( 
+	struct file *file, const char *buf, size_t len, loff_t *offset
+	)
+{
+	int timeout;
+	u16 data;
+	int isend = 0;
+	unsigned long startoff = *offset;
+/* #2b */       
+	for (isend = 0; isend < len; isend += sizeof(short)){
+		TIMEOUT_RET(sfpga_conf_get_busy());
+
+		if (!sfpga_conf_get_init()){
+			err("INIT down before send %lu", startoff + isend);
+			return -EFAULT;
+		}
+		if (copy_from_user(&data, buf+isend, sizeof(short))){
+			return -EFAULT;
+		}
+		
+		sfpga_conf_send_data(data);
+
+		if (!sfpga_conf_get_init()){
+			err("INIT down after send %lu", startoff + isend);
+			return -EFAULT;
+		}
+	}
+
+	*offset += isend;
+	return isend;
+}
+
+static int acq132_sfpga_load_release (struct inode *inode, struct file *file)
+{
+	int timeout;
+	TIMEOUT_RET(sfpga_conf_get_busy());
+
+	/* #3, #4 */
+	if (!sfpga_conf_done()){
+		return -EFAULT;
+	}
+	sfpga_conf_clr_prog();
+	return 0;
+}
+
+static struct file_operations acq132_sfpga_load_ops = {
+	.open = acq132_sfpga_load_open,
+	.release = acq132_sfpga_load_release,
+	.write = acq132_sfpga_load_write
+};
 #include "acq200-fifo.c"
 
 

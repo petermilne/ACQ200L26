@@ -3218,7 +3218,6 @@ static int acq200_fpga_open (struct inode *inode, struct file *file)
 		.poll = acq200_fpga_fifo_live_poll
 	};
 
-
         int iminor = MINOR(file->f_dentry->d_inode->i_rdev);
 	int rc = 0;
 
@@ -3250,6 +3249,11 @@ static int acq200_fpga_open (struct inode *inode, struct file *file)
 		case FIFO_RW_LIVE_OFFSETS:
 			file->f_op = &fifo_live_offsets_ops;
 			break;
+#ifdef ACQ132
+		case ACQ132_SFPGA_LOAD:
+			file->f_op = &acq132_sfpga_load_ops;
+			break;
+#endif
 		default:
 			return 0;
 		}
