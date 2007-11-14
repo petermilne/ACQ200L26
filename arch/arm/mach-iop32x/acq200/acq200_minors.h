@@ -74,6 +74,8 @@
 #define FIFO_RW_LIVE_DATA 20
 #define FIFO_RW_LIVE_OFFSETS 21
 
+#define ACQ132_SFPGA_LOAD	22	/* device loads SFPGA */
+
 /*
  * access to stored data:
  * +1  : ch1 etc

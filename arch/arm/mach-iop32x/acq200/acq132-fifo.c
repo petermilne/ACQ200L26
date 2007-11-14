@@ -17,9 +17,8 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#warning WORKTODO ACQ132
 #define DTACQ_MACH 2
-#define ACQ196
+#define ACQ132
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID \
@@ -291,7 +290,7 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 
 static struct DevGlobs acq196_dg = {
-	.btype = BTYPE_ACQ216,
+	.btype = BTYPE_AI,
 	.hitide = 7,
 	.max_alloc = 10240,
 	.busywait = 0,

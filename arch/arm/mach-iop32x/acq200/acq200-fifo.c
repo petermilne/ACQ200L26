@@ -1171,7 +1171,7 @@ void acq200_eoc_bh1( unsigned long arg )
 
 DECLARE_TASKLET(acq200_eoc_tasklet1, acq200_eoc_bh1, 0);
 
-#if defined(ACQ196)
+#if defined(ACQ196) || defined(ACQ132)
 void acq200_service_clock_counters(unsigned long unused) 
 {
 /** we read Lreg FIRST to ensure it's earlier than Ireg ... */

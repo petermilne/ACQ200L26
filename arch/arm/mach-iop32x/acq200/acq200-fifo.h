@@ -370,8 +370,12 @@ struct TBLOCK {
 
 #define NHISTO 16
 
-#define BTYPE_ACQ216 0
-#define BTYPE_WAV232 1
+#define BTYPE_AI 0
+#define BTYPE_AO 1
+
+#define BTYPE_ACQ216 BTYPE_AI
+#define BTYPE_WAV232 BTYPE_AO
+
 
 #define TB_IN_PHASE(tb) (atomic_read(&tb->in_phase))
 
@@ -729,7 +733,7 @@ struct CAPDEF {
 	struct Signal* ob_clk_src;
 	int pipeline_offset[4];       /* offset from trigger pos, samples */
 #endif
-#if defined(ACQ196) || defined(ACQ216)
+#if defined(ACQ196) || defined(ACQ216) || defined(ACQ132)
 	struct Signal* counter_src;
 	int counter_update;
 #endif

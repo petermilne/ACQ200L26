@@ -72,6 +72,12 @@
 
 #define GET_NEXT_EMPTY  wav232_getNextEmpty
 
+#elif defined ACQ132
+
+#define DMA_BLOCK_LEN 1024
+#define ISR_ADDS_ENDSTOP 1
+#define FPGA_IS_PCI_DEVICE 0
+
 #else
 
 #error Please ensure ACQxxx is defined
