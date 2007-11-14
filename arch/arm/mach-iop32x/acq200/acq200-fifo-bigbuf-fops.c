@@ -129,7 +129,7 @@ static unsigned update_inode_stats(struct inode *inode)
 		break;
 	default:
 		if ((ident&BIGBUF_CHANNEL_DATA_DEVICE) != 0){
-			ssize = CAPDEF->_word_size;
+			ssize = CSIZE;
 		}else{
 			ssize = 0;
 		}
@@ -429,7 +429,7 @@ static ssize_t acq200_fifo_bigbuf_read (
  * check for tblock rounddown trap - if trapped, force move into next tblock
  */
 	if (bbrp.status != BBRP_COMPLETE && bbrp.my_samples_reqlen == 0 ){
-		*offset += sizeof(short);
+		*offset += CSIZE;
 	        initBBRP(file, len, offset, &bbrp);
 	}
 	

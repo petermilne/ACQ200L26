@@ -868,11 +868,6 @@ extern struct DevGlobs *DG;
 extern struct DMC_WORK_ORDER *DMC_WO;
 extern struct CAPDEF *CAPDEF;
 
-/*
- * WORDSZ - sample size - almost always 16 bit except when dsp involved
- */
-
-#define WORDSZ     (sizeof(short))
 //#define NCHAN      (CAPDEF->nchan) 
 #define LEN        (CAPDEF->demand_len) 
 
@@ -1119,9 +1114,15 @@ void acq200_initBBRP_using_phase(
 /*
  * size of single channel sample, row sample
  */
-#define CSIZE sizeof(short)
+#define CSIZE (CAPDEF->_word_size)
 #define RSIZE sample_size()
+
+#if 1
+/** @todo ultimately, we want to replace SSZ with CSIZE */
+#define SSZ	CSIZE
+#else
 #define SSZ (sizeof(short))
+#endif
 
 /**
  * per path data structure definition

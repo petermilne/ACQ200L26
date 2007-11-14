@@ -50,9 +50,14 @@ int tblock_raw_extractor(
 	short* ubuf, int maxbuf, 
 	int channel, int offset, int stride)
 {
-	short* bblock_base = (short*)(
-		va_buf(DG) + this->offset + channel*sizeof(short));
+	const int ucopy = CSIZE;
+	void* bblock_base = (short*)(
+		va_buf(DG) + this->offset + channel*ucopy);
 	int cplen;
+
+	int sstride = stride*ucopy;
+	void *pdst = ubuf;
+	void *psrc = bblock_base + offset*ucopy;
 
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 
@@ -60,8 +65,10 @@ int tblock_raw_extractor(
 	offset *= NCHAN;
 
 	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
-		COPY_TO_USER(ubuf+cplen, bblock_base + offset, sizeof(short));
+		COPY_TO_USER(pdst, psrc, ucopy);
 		offset += stride;
+		pdst += ucopy;
+		psrc += sstride;
 	}
 
 	DBG(1, "returns cplen %d", cplen);
