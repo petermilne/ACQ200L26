@@ -98,8 +98,10 @@ static ssize_t store_dio(
 			DIO_SET_OUTPUT1(ibit);
 			break;
 		case DIO_MASK_INPUT:
-		default:
 			DIO_SET_INPUT(ibit);
+			break;
+		default:
+			; /* do nothing 'x' by convention */
 		}
 	}
 	set_outputs();
