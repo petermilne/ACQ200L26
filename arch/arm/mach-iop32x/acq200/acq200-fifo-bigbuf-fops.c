@@ -129,7 +129,7 @@ static unsigned update_inode_stats(struct inode *inode)
 		break;
 	default:
 		if ((ident&BIGBUF_CHANNEL_DATA_DEVICE) != 0){
-			ssize = CAPDEF->_word_size;
+			ssize = CSIZE;
 		}else{
 			ssize = 0;
 		}

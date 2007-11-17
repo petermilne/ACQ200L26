@@ -1123,9 +1123,9 @@ void acq200_initBBRP_using_phase(
 /*
  * size of single channel sample, row sample
  */
-#define CSIZE sizeof(short)
+#define CSIZE (CAPDEF->_word_size)
 #define RSIZE sample_size()
-#define SSZ (sizeof(short))
+#define SSZ CSIZE
 
 /**
  * per path data structure definition
