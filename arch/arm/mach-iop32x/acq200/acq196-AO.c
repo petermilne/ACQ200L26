@@ -182,6 +182,8 @@ module_param(use_ref, int, 0444);
 #define FAWG_CHANNEL_SZ (fawg_max_samples*sizeof(u16))
 #define FAWG_BLOCK_SZ (FAWG_CHANNEL_SZ * AO_channels)
 
+int AO_shot = 0;
+module_param(AO_shot, int, 0644);
 
 /* linux 2.6.21 ... ino starts at 2 */
 #define INO2DC_CHAN(ino) ((ino)-1)
@@ -433,7 +435,7 @@ static void clearStats(void)
 	struct Sawg* sawg = &AOG->sawg;
 	unsigned long flags;
 	spin_lock_irqsave(&sawg->lock, flags);
-	memset(&AOG->sawg.stats, 0, sizeof(struct Stats));
+	memset(&AOG->sawg.stats, 0, sizeof(struct Stats)); 
 	memset(DG->stats.ACQ196_AO_HISTO,0,sizeof(DG->stats.ACQ196_AO_HISTO));
 	spin_unlock_irqrestore(&sawg->lock, flags);
 }
@@ -537,6 +539,7 @@ done_writing:
 		++sawg->stats.updates;
 		update_gtsr(sawg, *IOP321_GTSR, gtsr1);
 	}else{
+		acq196_fifcon_clr_all(ACQ196_FIFCON_DAC_ENABLE);
 		iop321_hookAuxTimer(&sawg->atc, 0);
 		sawg->timer_running = 0;		
 	}	
@@ -766,6 +769,7 @@ static void sawg_arm(void)
 
 	dbg(2, "block: %p cursor:%p max:%p", sb->block, sb->cursor, sb->last);
 
+	AO_shot++;	
 	prepareFawgDma(sb);
 	sawg_timer_arm(sb);
 }
@@ -777,8 +781,6 @@ static void stop_sawg(void)
 
 	spin_lock_irqsave(&sawg->lock, flags);
 	sawg->please_stop = 1;
-	sawg->timer_running = 0;
-	iop321_hookAuxTimer(&sawg->atc, 0);
 	spin_unlock_irqrestore(&sawg->lock, flags);
 }
 static void hawg_arm(void)
