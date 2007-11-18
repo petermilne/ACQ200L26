@@ -495,7 +495,8 @@ static void on_arm(void)
 {
 	dbg(1, "on_arm 01");
 	while(!list_empty(&mds.busy_list)){
-		list_move(&mds.busy_list, &mds.free_list);
+		dbg(2, "move to free list");
+		list_move(mds.busy_list.prev, &mds.free_list);
 	}
 	mds.samples_in_list = 0;
 	mds.sample_size = sample_size();
