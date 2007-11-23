@@ -487,6 +487,25 @@ static void enable_acq196_start(void)
 
 	if (DMC_WO->trigger_detect()){
 		onEnable();
+	}	DBGSF("FINAL:next enable FIFCON");
+	enable_fifo(CAPDEF->channel_mask);
+
+	preEnable();
+
+	DBGSF("now trigger");
+	dbg(3, "use hard trigger if enabled %s", 
+	      CAPDEF->trig->is_active? "HARD": "soft");
+
+	onEnable();
+
+	if (CAPDEF->trig->is_active){
+		rc = enable_hard_trigger();
+	}else{
+		rc = enable_soft_trigger();
+	}
+
+	if (DMC_WO->trigger_detect()){
+		onTrigger();
 	}
 }
 

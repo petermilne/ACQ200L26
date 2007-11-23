@@ -542,6 +542,8 @@ done_writing:
 		acq196_fifcon_clr_all(ACQ196_FIFCON_DAC_ENABLE);
 		iop321_hookAuxTimer(&sawg->atc, 0);
 		sawg->timer_running = 0;		
+		AOG->commit_word = 0;
+		dbg(1, "closedown");
 	}	
 }
 static void sawg_action(unsigned long clidata)
@@ -871,6 +873,9 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 		}else{
 			return -EFAULT;	
 		}
+
+		dbg(1, "commit prev 0x%04x now 0x%04x", 
+			    AOG->commit_word, commit_word);
 
 		if ((commit_word&COMMIT_XAWG) == 0){
 			acq196_syscon_dac_clr(ACQ196_SYSCON_ACQEN);

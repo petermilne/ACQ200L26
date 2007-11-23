@@ -206,6 +206,9 @@ static void wake_dmc0(void)
 
 #include "acq200-pulse.c"
 
+static void onTrigger(void);
+
+
 static void acq200_global_mask_op(u32 mask, int maskon)
 {
 	int irq;
@@ -1380,7 +1383,7 @@ void acq200_dmc0(struct DMC_WORK_ORDER *wo)
 		finish_with_engines(-__LINE__);
 	}else{
 		if (DMC_WO->triggered == 0 && DMC_WO->trigger_detect()){
-			onEnable();
+			onTrigger();
 		}
 
 		dbg( 4, "active %s empties %s", 
@@ -1736,12 +1739,12 @@ static void onTrigger(void)
 	unsigned long flags;
 	int my_turn = 0;
 
-	spin_lock_irqsave(&DMC_WO->onEnable.lock, flags);
-	if (DMC_WO->onEnable.done == 0){
+	spin_lock_irqsave(&DMC_WO->onTrigger.lock, flags);
+	if (DMC_WO->onTrigger.done == 0){
 		DMC_WO->triggered = 1;
-		my_turn = DMC_WO->onEnable.done = 1;
+		my_turn = DMC_WO->onTrigger.done = 1;
 	}
-	spin_unlock_irqrestore(&DMC_WO->onEnable.lock, flags);
+	spin_unlock_irqrestore(&DMC_WO->onTrigger.lock, flags);
 
 	if (my_turn){
 		iop321_start_ppmu();
@@ -1999,7 +2002,7 @@ static void clear_buffers(void)
 
 	release_phases();
 	DMC_CLEAN(DMC_WO);
-	spin_lock_init(&DMC_WO->onEnable.lock);
+	spin_lock_init(&DMC_WO->onTrigger.lock);
 	DMC_WO->trigger_detect = null_trigger_detect;
 	DMC_WO->state = ST_STOP;
 	DMC_WO->getNextEmpty = getNextEmpty;

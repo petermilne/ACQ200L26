@@ -286,7 +286,7 @@ struct DMC_WORK_ORDER {
 	struct {
 		spinlock_t lock;
 		int done;
-	} onEnable;
+	} onTrigger;
 	char* error;
 
 	int pit_stop;     /* stop after this number of pits */
