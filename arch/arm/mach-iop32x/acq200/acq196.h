@@ -349,12 +349,14 @@ static inline void disable_fifo(void)
 	dbg(DISABLE_ACQ_DEBUG, "");
 	acq196_fifcon_clr_all(ACQ196_FIFCON_ENABLE_ALL);	
 }
+
 static inline void reset_fifo(void)
 {
 	acq196_fifcon_set_all(ACQ196_FIFCON_RESET_ALL);
 	*ACQ196_FIFSTAT = ACQ196_FIFSTAT_ALL_FLAGS;
 	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL);
 }
+
 static inline void enable_fifo(unsigned mask)
 {
 	unsigned enable = ACQ196_FIFCON_ENABLE_HOT;
