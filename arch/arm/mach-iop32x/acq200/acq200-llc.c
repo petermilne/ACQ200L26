@@ -172,7 +172,7 @@ static const struct BLUT {
 
 #define DEFAULT_BL 0x8000
 
-#define PCI2BUS(pa) (pci2bus(pa) & ~(BLOCK_LEN-1))
+#define PCI2BUS(pa) (acq216_pci2bus(pa) & ~(BLOCK_LEN-1))
 
 enum TRIGGER_STATES {
 	TS_IDLE, TS_REQUESTED, TS_TRIGGERED, TS_RESCINDED 

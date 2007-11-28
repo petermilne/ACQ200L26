@@ -128,13 +128,7 @@ int acq200_dumpregs_diag(char* buf, int len);
 
 
 #ifdef ACQ216
-
-static inline u32 pci2bus(u32 pci_addr) {
-/* convert backplane pci addr to local PCI addr */
-	pci_addr &= ((0x01000000-1));
-	return pci_addr | ACQ200_PCIMEM;
-}
-
+u32 acq216_pci2bus(u32 pci_addr);
 #endif
 
 

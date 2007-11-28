@@ -2892,7 +2892,7 @@ static int acq200_proc_stat_pits(
 	char *buf, char **start, off_t offset, int len,
                 int* eof, void* data )
 {
-#define PRINTF(fmt, args...) sprintf(buf+len, fmt, ## args)
+#define PRINTF(fmt, args...) sprintf(buf+mylen, fmt, ## args)
 #define WPRINTF( field, fmt ) \
         mylen += PRINTF( "%30s: "fmt"\n", #field, DMC_WO->field )
 
@@ -2913,6 +2913,37 @@ static int acq200_proc_stat_pits(
 #undef WPRINTF
 #undef PRINTF
 }
+
+
+static int acq200_proc_stat_bda(
+	char *buf, char **start, off_t offset, int len,
+                int* eof, void* data )
+{
+#define PRINTF(fmt, args...) sprintf(buf+mylen, fmt, ## args)
+	int mylen = 0;
+	struct BDA* bda = &DG->stats.bda_times;
+
+	int btime = ABS(bda->before - DG->stats.start_jiffies);
+	int dtime = ABS(bda->during - DG->stats.start_jiffies);
+	int atime = ABS(bda->after  - DG->stats.start_jiffies);
+	int state = DMC_WO->bda_blocks.state;	/* instantaneous state */
+
+	mylen += PRINTF( "B:%10d D:%10d A:%10d blocks\n",
+			DMC_WO->bda_blocks.before,
+			DMC_WO->bda_blocks.during,
+			 DMC_WO->bda_blocks.after);
+	mylen += PRINTF( "B:%10d D:%10d A:%10d jiffies state:%s\n",
+		bda->before, bda->during, bda->after,
+		state == BDA_IDLE? "BDA_IDLE":
+		state == BDA_BEFORE? "BDA_BEFORE":
+		state == BDA_DURING? "BDA_DURING":
+		state == BDA_AFTER? "BDA_AFTER": "BDA_DONE");
+	mylen += PRINTF( "B:%10d D:%10d A:%10d ms\n",
+			 btime, dtime, atime);				       
+	return mylen;
+#undef PRINTF
+}
+
 
 static int acq200_proc_stat_events(
 	char *buf, char **start, off_t offset, int len,
@@ -3546,6 +3577,7 @@ void create_proc_entries(void)
 	CPRE("stat_ev_count", acq200_proc_stat_event_counts);
 	CPRE("stat_timing",acq200_proc_stat_timing);
 	CPRE("stat_the_pits", acq200_proc_stat_pits);
+	CPRE("stat_bda", acq200_proc_stat_bda);
 	CPRE("coldpoint_histo",acq200_proc_coldpoint_histo);
 #ifdef ACQ216
 	CPRE("coldpoint_histo_detail",acq200_proc_coldpoint_histo_detail);
@@ -3586,6 +3618,7 @@ void delete_proc_entries(void)
 	RMP("stat_ev_count");
 	RMP("stat_timing");
 	RMP("stat_the_pits");
+	RMP("stat_bda");
 	RMP("coldpoint_histo");
 	RMP("coldpoint_histo_detail");
 	RMP("tbblock_cursor");

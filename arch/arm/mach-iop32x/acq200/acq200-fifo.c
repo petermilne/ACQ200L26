@@ -119,7 +119,8 @@ module_param(fastforward, int, 0664);
 int disable_acq_debug = 0;         /* set 1 */
 module_param(disable_acq_debug, int, 0664);
 
-
+int bda_debug = 2;
+module_param(bda_debug, int, 0644);
 
 #ifdef ACQ216
 /** repeated transient mode. */
@@ -783,8 +784,8 @@ static void dmc_handle_prep(
 #endif
 
 #ifndef WAV232	
-#define BDA_NZO 0x10000         /* never supply zero offset */
-#define BDA_FIN 0x20000         /* offset flags completion  */
+#define BDA_NZO 0x1BDA0         /* never supply zero offset */
+#define BDA_FIN 0x2BDA0         /* offset flags completion  */
 static struct TblockListElement* bbb;  /* bit bucket block */
 #endif
 
@@ -880,7 +881,7 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 
 			if (bda_fin){
 				wo->finished_code = 1;
-				dbg( 1,"all done - shut down and wake caller");
+				dbg( 1,"BDA_FIN - shut down and wake caller");
 				finish_with_engines(__LINE__);
 				break;
 			}else if (wo->now != 0 && !phase_end(wo->now)){
@@ -964,8 +965,6 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 
 unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
 {
-	dbg(2, "01 %p", wo);
-
 	if (!bbb){
 		struct BIGBUF *bb = &DG->bigbuf;
 		unsigned long flags;
@@ -976,17 +975,40 @@ unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
 		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 	}
 	
-	if (IPC->empties.nput < wo->bda_blocks.before){
-		dbg(2, "96 before return 0x%08x", bbb->tblock->offset+BDA_NZO);
-		return bbb->tblock->offset + BDA_NZO;
-	}else if (IPC->empties.nput < wo->bda_blocks.during){
-		dbg(2, "97 during");
-		return default_getNextEmpty(wo);
-	}else if (IPC->empties.nput < wo->bda_blocks.after){
-		dbg(2, "98 after return 0x%08x", bbb->tblock->offset+BDA_NZO); 
-		return bbb->tblock->offset + BDA_NZO;
-	}else{
-		dbg(2, "99 finished");
+	switch(wo->bda_blocks.state){
+	case BDA_IDLE:
+		wo->bda_blocks.state = BDA_BEFORE;
+		/* fall thru */
+	case BDA_BEFORE:
+		if (IPC->empties.nput < wo->bda_blocks.before){
+			dbg(bda_debug, "96 BEFORE return 0x%08x", 
+					bbb->tblock->offset+BDA_NZO);
+			return bbb->tblock->offset + BDA_NZO;
+		}
+		DG->stats.bda_times.before = jiffies;	
+		wo->bda_blocks.state = BDA_DURING;	
+		/* fall thru */
+	case BDA_DURING:
+		if (IPC->empties.nput < wo->bda_blocks.during){
+			dbg(bda_debug, "97 DURING");
+			return default_getNextEmpty(wo);
+		}
+		DG->stats.bda_times.during = jiffies;
+		wo->bda_blocks.state = BDA_AFTER;
+		/* fall thru */
+	case BDA_AFTER:
+		if (IPC->empties.nput < wo->bda_blocks.after){
+			dbg(bda_debug, "98 AFTER return 0x%08x", 
+				bbb->tblock->offset+BDA_NZO); 
+			return bbb->tblock->offset + BDA_NZO;
+		}
+		DG->stats.bda_times.after = jiffies;
+		wo->bda_blocks.state = BDA_DONE;
+		dbg(bda_debug, "99 finished");
+		return bbb->tblock->offset + BDA_FIN;
+	default:	
+	case BDA_DONE:
+		/* same as above but with no message */
 		return bbb->tblock->offset + BDA_FIN;
 	}
 }
@@ -1985,6 +2007,7 @@ static void init_bda(void)
 	DMC_WO->bda_blocks.before = DG->bda_samples.before/spb;
 	DMC_WO->bda_blocks.during = DG->bda_samples.during/spb;
 	DMC_WO->bda_blocks.after  = DG->bda_samples.after/spb;
+	DMC_WO->bda_blocks.state = BDA_IDLE;
 }
 
 static int null_trigger_detect(void) {
@@ -2006,6 +2029,7 @@ static void clear_buffers(void)
 	DMC_WO->trigger_detect = null_trigger_detect;
 	DMC_WO->state = ST_STOP;
 	DMC_WO->getNextEmpty = getNextEmpty;
+
 	init_bda();
 
 	initPhaseDiagBuf();

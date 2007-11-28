@@ -267,7 +267,8 @@ static inline unsigned tble_phase_end_sample(struct TblockListElement* tble)
 struct BDA {
 	unsigned before;
 	unsigned during;
-	unsigned after;
+	unsigned after;		
+	enum { BDA_IDLE, BDA_BEFORE, BDA_DURING, BDA_AFTER, BDA_DONE } state;
 };
 
 
@@ -503,6 +504,7 @@ struct DevGlobs {
 		struct timespec finish_time;
 
 		unsigned long sendfile_bytes;
+		struct BDA bda_times;		
 	} stats;
 	int shot;
 	

@@ -89,6 +89,21 @@ static int enable_hard_trigger(void);
 static int has_triggered = 0;
 static int transient_dma_block_count;   
 
+#include "acq200-bridge.h"
+
+u32 acq216_pci2bus(u32 pci_addr) {
+/* convert backplane pci addr to local PCI addr */
+	struct B_WINDOW downstream = {
+		.w_len = 0x100000
+	};
+	acq200_bridge_get_windows(0, &downstream);
+	
+	
+	pci_addr &= (downstream.w_len - 1);
+	return pci_addr | ACQ200_PCIMEM;
+}
+
+EXPORT_SYMBOL_GPL(acq216_pci2bus);
 
 static int acq216_trigger_detect(void)
 {
@@ -867,7 +882,7 @@ static inline void mk_capcom_to_local(
 	switch(cd_short_tlatch){
 	case 3:
 		/** read the host by way of a test */
-		dmad->PDA = pci2bus(DMC_WO->control_target.pa_data);
+		dmad->PDA = acq216_pci2bus(DMC_WO->control_target.pa_data);
 		pbc->id[ichain] = '3';
 		break;
 	case 2:
@@ -907,7 +922,7 @@ static inline void mk_local_to_host(
 	mk_link(pbc, ichain, dmad);
 	pbc->local_to_host = ichain;
 	
-	dmad->PDA = pci2bus(getDataPA() + iblock*DMA_BLOCK_LEN);
+	dmad->PDA = acq216_pci2bus(getDataPA() + iblock*DMA_BLOCK_LEN);
 	dmad->PUAD = 0;
 	dmad->LAD = 0x11adf00d;
 	dmad->BC  = DMA_BLOCK_LEN;
@@ -940,7 +955,7 @@ static inline void mk_capcom_to_host(
 	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 	mk_link(pbc, ichain, dmad);
 	
-	dmad->PDA = pci2bus(getStatusPA());
+	dmad->PDA = acq216_pci2bus(getStatusPA());
 	dmad->PUAD = 0;
 	dmad->LAD = S_pbstore.capcom_scratchpad.pa;
 	dmad->BC = CAPCOM_LENGTH+8;
