@@ -80,7 +80,7 @@ static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
 static int enable_soft_trigger(void);
-static int enable_hard_trigger(void);
+static int wait_hard_trigger(void);
 /* return 1 on success, -1 on error */
 
 #define DBGSF(s) \
@@ -346,13 +346,32 @@ static struct DevGlobs acq196_dg = {
 
 static void enable_acq196_start(void)
 {
+/** previously in enable_regular_operation()
+	disable_acq();
+	acq200_reset_fifo();
+*/
 	int rc;
 
 	dbg(3, "OK: let's trigger FIFCON: 0x%08x SYSCON: 0x%08x", 
 	    *FIFSTAT, *SYSCON);
 
 	DBGSF("TEMPORARY: blip enable");
-	disable_acq();
+	disable_acq();				/** was disabled already? */
+
+
+	DBGSF("set events");
+	if (CAPDEF->trig->is_active){
+		signalCommit(CAPDEF->trig);
+	}
+	DMC_WO->trigger_detect = acq196_trigger_detect;
+
+	signalCommit(CAPDEF->ev[0]);
+	signalCommit(CAPDEF->ev[1]);
+
+	DBGSF("FINAL:next enable FIFCON");
+	enable_fifo(CAPDEF->channel_mask);
+
+	preEnable();
 
 #if 0
 /* enabling LOWLAT zaps the interrupt altogether */
@@ -361,7 +380,7 @@ static void enable_acq196_start(void)
 #endif
 #endif
 	if (acq196_trigger_detect()){
-		err("WOAAH - triggered already, an not yet enabled not good\n"
+		err("WOAAH - triggered already, and not yet enabled not good\n"
 		      "FIFCON: 0x%08x\n"
 		      "FIFSTAT:0x%08x\n"
 		      "SYSCON: 0x%08x",
@@ -371,7 +390,7 @@ static void enable_acq196_start(void)
 	DBGSF("set ACQEN");
 	enable_acq();
 
-	if (acq196_trigger_detect()){
+	if (DMC_WO->trigger_detect()){
 		err("WOAAH - triggered already, not good\n"
 		      "FIFCON: 0x%08x\n"
 		      "FIFSTAT:0x%08x\n"
@@ -380,25 +399,14 @@ static void enable_acq196_start(void)
 		finish_with_engines(-__LINE__);
 	}
 
-	DMC_WO->trigger_detect = acq196_trigger_detect;
-
-	DBGSF("set events");
-	signalCommit(CAPDEF->ev[0]);
-	signalCommit(CAPDEF->ev[1]);
-
-	DBGSF("FINAL:next enable FIFCON");
-	enable_fifo(CAPDEF->channel_mask);
-
-	preEnable();
+	onEnable();
 
 	DBGSF("now trigger");
 	dbg(3, "use hard trigger if enabled %s", 
 	      CAPDEF->trig->is_active? "HARD": "soft");
 
-	onEnable();
-
 	if (CAPDEF->trig->is_active){
-		rc = enable_hard_trigger();
+		rc = wait_hard_trigger();
 	}else{
 		rc = enable_soft_trigger();
 	}
@@ -455,13 +463,11 @@ static int enable_soft_trigger(void)
 	return -1;
 }
 
-static int enable_hard_trigger(void)
+static int wait_hard_trigger(void)
 {
 	int nloop = 0;
 
 	DBGSF("ACQEN...");
-
-	signalCommit(CAPDEF->trig);
 
 	while(!acq196_trigger_detect()){
 		if (DG->finished_with_engines){
