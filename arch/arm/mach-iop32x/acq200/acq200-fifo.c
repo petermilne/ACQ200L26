@@ -474,20 +474,6 @@ static inline void sccInit(
 	scc->scc_leap_clock_period = leap_clock_period;
 }
 
-#ifndef WAV232
-static inline unsigned phase_increment(unsigned offset)
-{
-#if 0
-	offset += DMA_BLOCK_LEN;
-
-	assert(offset < len_buf(DG));  /** TBLOCKing makes this so */
-
-	return offset;
-#endif
-	return 0;
-}
-#endif
-
 
 static int woOnRefill(
 	struct DMC_WORK_ORDER *wo, u32* fifstat, unsigned* offset )
@@ -506,15 +492,12 @@ static int woOnRefill(
 	}
 	if (phase->actual_len == 0){
 		phase->start_off = *offset;
+		dbg(1, "%d set phase->start_off phase:%s start_off %d",
+		    __LINE__, phase->name, phase->start_off);
 	}
 	if (phase->actual_len < phase->demand_len+DMA_BLOCK_LEN){
 		phase->actual_len += DMA_BLOCK_LEN;
 	}else{
-		/** @@todo - this is pretty bogus once we are segmented
-                 *  luckily, trailing edge isn't used ...
-                 */
-		phase->start_off = phase_increment(phase->start_off);
-
 		/** event enabled after first lap */
 		if (phase->lap_count == 0){
 			phase->lap_count = 1;
@@ -961,6 +944,22 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 }
 
 
+#ifdef PEEK_IS_REQUIRED
+unsigned peekFirstEmpty(void)
+/* return offset for first tblock in capture. DO NO de-queue it! */
+{
+	struct list_head* free_blocks = &DG->bigbuf.free_tblocks;
+
+	if (unlikely(list_empty(free_blocks))){
+		err("NO FREE BLOCKS!");
+		return 0;
+	}else{
+		struct TblockListElement* tble = 
+			TBLE_LIST_ENTRY(free_blocks->next);
+		return tble->tblock->offset;
+	}
+}
+#endif
 
 
 unsigned bda_getNextEmpty(struct DMC_WORK_ORDER* wo)
@@ -1625,6 +1624,12 @@ static void init_phases(void)
 		init_phase(&phases[1], CAPDEF->demand_postlen, 1);
 		init_phase(&null_phase, 0, 1);
 
+#ifdef PEEK_IS_REQUIRED
+#ifndef WAV232
+		phases[0].start_off = peekFirstEmpty();
+		dbg(1, "phase[0].start_off set %d", phases[0].start_off);
+#endif
+#endif
 		phases[0].ev = CAPDEF->ev[0];
 		deactivateSignal(phases[0].ev);   /** enabled at corner */
 		phases[0].onPIT = onPIT_clear;
@@ -2584,12 +2589,16 @@ static void shuffle_up(struct Phase* phase, int isearch)
 		 __LINE__, tle->tblock->iblock, phase->start_off, \
                  isearch, actual_len)
 
-	dbg(1, "start end_off %d to isearch %d, len %d",
+	dbg(1, "phase:%s start start_off %d end_off %d to isearch %d, len %d",
+	    phase->name,
+	    phase->start_off,
 	    phase->end_off, isearch, phase->actual_len);
 
 
 	list_for_each_entry(tle, &phase->tblocks, list){
-		if (IN_TBLOCK(tle->tblock, phase->start_off)){
+		if (IN_TBLOCK(tle->tblock, phase->start_off) &&
+			phase->lap_count == 0){
+
 			if (IN_TBLOCK(tle->tblock, isearch)){
 				actual_len = isearch - phase->start_off;
 				PLUG;
@@ -2654,8 +2663,12 @@ int search_for_epos_in_tblock(
 
 	for (dma_block = 0; dma_block != max_dma_blocks; ++dma_block){
 		if (findEvent(phase, &isearch, &ilast)){
-			dbg(1, "FOUND AT 0x%08x ilast 0x%08x ",isearch, ilast);
-			dbg(1, "FOUND AT %10d ilast %10d", isearch, ilast  );
+
+			dbg(1, "FOUND AT phase:%s 0x%08x ilast 0x%08x ",
+			    phase->name, isearch, ilast);
+			dbg(1, "FOUND AT phase:%s %10d ilast %10d", 
+			    phase->name, isearch, ilast  );
+
 			phase->start_off = ilast;
 			phase->flags |= PH_FIXED_AT_START;
 			if (PREV_PHASE(phase) != phase){

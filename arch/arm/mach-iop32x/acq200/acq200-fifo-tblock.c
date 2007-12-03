@@ -529,7 +529,6 @@ static void phase_rollup_start_fixed(struct Phase* phase)
 static void phase_rollup_end_fixed(struct Phase* phase)
 
 /** pre-trigger: start at trigger point and work back, discard unwanted blocks
- *  discard unwanted blocks
  */
 
 {
