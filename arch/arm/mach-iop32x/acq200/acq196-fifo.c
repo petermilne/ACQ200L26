@@ -48,7 +48,11 @@
 
 
 int int_clk_calcmode;
-module_param(int_clk_calcmode, int, 0664);
+module_param(int_clk_calcmode, int, 0644);
+
+/** may need a longer reset if heavy DSP involved */
+int fifo_reset_nsec = 1000;
+module_param(fifo_reset_nsec, int, 0600);
 
 #define AICHAN_DEFAULT 96
 
@@ -145,6 +149,7 @@ void acq200_reset_fifo(void)
 {
 	acq196_fifcon_init_all(0);
 	acq196_fifcon_set_all(ACQ196_FIFCON_RESET_ALL);
+	nsleep(fifo_reset_nsec);
 	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL);
 	*FIFSTAT = *FIFSTAT;
 }
