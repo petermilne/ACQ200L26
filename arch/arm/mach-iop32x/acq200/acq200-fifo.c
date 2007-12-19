@@ -102,22 +102,22 @@ extern void acq200_set_user_led(int led4, int on);
 int acq200_timeout = 10000;
 
 int acq200_fifo_debug = 0;
-module_param(acq200_fifo_debug, int, 0664);
+module_param(acq200_fifo_debug, int, 0644);
 
 
 int acq200_dmad_debug = 0;
-module_param(acq200_dmad_debug, int, 0664);
+module_param(acq200_dmad_debug, int, 0644);
 
 #define ACQ200_DMAD_DEBUG (acq200_dmad_debug==0? 16: 0)
 
 int acq200_clk_hz = 1000000;
-module_param(acq200_clk_hz, int, 0664);
+module_param(acq200_clk_hz, int, 0644);
 
 int fastforward = 0;
-module_param(fastforward, int, 0664);
+module_param(fastforward, int, 0644);
 
 int disable_acq_debug = 0;         /* set 1 */
-module_param(disable_acq_debug, int, 0664);
+module_param(disable_acq_debug, int, 0644);
 
 int bda_debug = 2;
 module_param(bda_debug, int, 0644);
@@ -125,31 +125,34 @@ module_param(bda_debug, int, 0644);
 #ifdef ACQ216
 /** repeated transient mode. */
 int live_one_frame_per_dcb;
-module_param(live_one_frame_per_dcb, int, 0664);
+module_param(live_one_frame_per_dcb, int, 0644);
 #endif
 
 int transient_dma_blocklimit;
-module_param(transient_dma_blocklimit, int, 0664);
+module_param(transient_dma_blocklimit, int, 0644);
 
 int uses_ST_CAPDONE = 1;
-module_param(uses_ST_CAPDONE, int, 0664);
+module_param(uses_ST_CAPDONE, int, 0644);
 
 #ifndef AICHAN_DEFAULT
 #define AICHAN_DEFAULT 0
 #endif
 int acq200_aichan = AICHAN_DEFAULT;
-module_param(acq200_aichan, int, 0664);
+module_param(acq200_aichan, int, 0644);
 
 int acq200_data_word_size = 0;
-module_param(acq200_data_word_size, int, 0664);
+module_param(acq200_data_word_size, int, 0644);
 
 int blt_dma_using_interrupt = 0;
-module_param(blt_dma_using_interrupt, int, 0664);
+module_param(blt_dma_using_interrupt, int, 0644);
 
 
 /** pgm 20050513 - desperate diags */
 int init_dmac_count = 0;
-module_param(init_dmac_count, int, 0664);
+module_param(init_dmac_count, int, 0644);
+
+int es_debug = 0;
+module_param(es_debug, int, 0600);
 
 #define DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 #define DMA_ERROR IOP321_CSR_ERR
@@ -2348,6 +2351,12 @@ int acq200_check_entire_es(unsigned *es)
 	(!EVENT_MAGIC_EXEMPT(ip) && !IS_EVENT_MAGIC(es[ip]))
 
 	for (ipair = 0; ipair != npairs; ++ipair){
+		if (es_debug){
+			info("%2d 0x%08x %s %s",
+			     ipair, es[ipair], 
+			     IS_EVENT_MAGIC(es[ipair])? "MAGIC": "nmagc",
+			     EVENT_MAGIC_FAIL(ipair)? "FAIL": "OK");
+		}
 		if (VALID && EVENT_MAGIC_FAIL(ipair)){
 			err("BAD MAGIC [%2d] %08x", ipair, es[ipair]);
 			invalid = ipair+1;
@@ -2359,8 +2368,34 @@ int acq200_check_entire_es(unsigned *es)
 			err("BAD MAGIC [%2d] %08x", ipair-1, es[ipair-1]);
 		}
 		err("BAD ES start %p", es);
+	}else{
+		if (es_debug){
+			for (ipair = npairs; ipair != npairs*2; ++ipair){
+			     info("%2d 0x%08x %s %s",
+				     ipair, es[ipair], 
+			       	     IS_EVENT_MAGIC(es[ipair])? 
+							"MAGIC": "nmagc",
+					IS_EVENT_MAGIC(es[ipair])?	
+							 "ERR": "OK");
+			}
+		}       
 	}
 
+	if (es_debug > 1){
+		short *data = (short *)es;
+		int nshorts = npairs *2;
+		int ic;
+
+		info("inserting marker pattern");
+
+		for (ic = 0; ic < nshorts; ++ic){
+			data[ic] = ic | 0x200;
+		}
+		data += nshorts;
+		for (ic = 0; ic < nshorts; ++ic){
+			data[ic] = ic | 0x300;
+		}			
+	}
 	dbg(1 && VALID, "ES %08x %08x %08x %s",
 	     es[0], 
 	     npairs > 16? es[16]: 0, 
@@ -2513,16 +2548,13 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 				err("FAILED to find beginning of event");
 			}
 			++isL;            /* select first match */
-			
+
 			if (!(matches > 1)){
 				if (!IS_EVENT_MAGIC(searchp[isL+1])){
 					err("false pos");
 					break;
 				}
 			}
-			
-			valid = CHECK_ENTIRE_ES(&searchp[isL]);
-
 			{
 				unsigned ileft = max(isL-ES_LONGS, 0U);
 				int ndiag = 3*ES_LONGS*sizeof(long);
@@ -2530,6 +2562,8 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 			
 				memcpy(ES_DIAG_BUFFER, searchp+ileft, ndiag);
 			}
+			valid = CHECK_ENTIRE_ES(&searchp[isL]);
+
 			initPhaseDiagBufFound(valid, matches,
 				searchp[isL-1], 
 				searchp[isL],
