@@ -917,9 +917,14 @@ static ssize_t show_mode(
 		return sprintf(buf, "%d %s %d %d\n",
 			       CAPDEF->mode, MLUT[CAPDEF->mode],
 			       CAPDEF->demand_prelen, CAPDEF->demand_postlen);
+	case M_SOFT_CONTINUOUS:
+		return sprintf(buf,"%d %s %d\n", 
+			       CAPDEF->mode, MLUT[CAPDEF->mode],
+				CAPDEF->demand_prelen);
 	default:
-		return sprintf(buf,"%d %s\n", 
-			       CAPDEF->mode, MLUT[CAPDEF->mode]);
+		return sprintf(buf,"%d %s %d\n", 
+			       CAPDEF->mode, MLUT[CAPDEF->mode],
+				CAPDEF->demand_postlen);
 	}
 
 }
@@ -939,9 +944,11 @@ static ssize_t store_mode(
 
 		unsigned prelen = samplesToBytes(pre);
 		unsigned postlen = samplesToBytes(post);
+		unsigned usable_len = len_buf(DG) - TBLOCK_LEN;
+		
 
-		postlen = min(postlen, len_buf(DG));
-		prelen = min(prelen, (len_buf(DG) - postlen));
+		postlen = min(postlen, usable_len);
+		prelen = min(prelen, (usable_len - postlen));
 
 		CAPDEF->mode = mode;
 		CAPDEF->demand_prelen = prelen;
