@@ -549,6 +549,34 @@ static DEVICE_ATTR(EOT_stats, S_IRUGO|S_IWUGO, show_EOT_stats, set_EOT_stats);
 #define UPSTATS(field, bf)  if (bf){ S_EOT_stats . field ++; }
 
 
+extern int iop32x_pci_bus_speed(void);
+
+static ssize_t show_pci_bus_speed(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+	return sprintf(buf, "%d\n", iop32x_pci_bus_speed()/1000000);
+}
+
+static DEVICE_ATTR(pci_bus_speed, S_IRUGO, show_pci_bus_speed, 0);
+
+extern int iop32x_pbi_bus_speed(void);
+
+static ssize_t show_pbi_bus_speed(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+	return sprintf(buf, "%d\n", iop32x_pbi_bus_speed());
+}
+
+static DEVICE_ATTR(pbi_bus_speed, S_IRUGO, show_pbi_bus_speed, 0);
+
+
+
 static void mk_sysfs(struct device *dev)
 {
 	dbg(1,  "calling device_create_file dev %p", dev );
@@ -566,6 +594,8 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_OIMR);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_counts);
 	DEVICE_CREATE_FILE(dev, &dev_attr_EOT_stats);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pci_bus_speed);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pbi_bus_speed);
 
 	DRIVER_CREATE_FILE(dev->driver, &driver_attr_version);
 }
