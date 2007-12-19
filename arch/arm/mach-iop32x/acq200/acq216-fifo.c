@@ -60,6 +60,9 @@ module_param(cd_short_tlatch, int, 0600);
 int abort_acq_on_dma_error;
 module_param(abort_acq_on_dma_error, int, 0600);
 
+int stub_event_adjust;
+module_param(stub_event_adjust, int, 0600);
+
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
@@ -79,7 +82,10 @@ static void acq216_event_adjust(
 
 #undef DTACQ_MACH_EVENT_ADJUST
 #define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last) \
-        acq216_event_adjust(phase, isearch, first, last)
+	if (!stub_event_adjust){ \
+	        acq216_event_adjust(phase, isearch, first, last); \
+	}
+
 
 static int enable_soft_trigger(void);
 static int enable_hard_trigger(void);
@@ -442,38 +448,6 @@ int acq216_setAntiPhase(int enable)
 	return 0;
 }
 
-static void es_size_adjust(
-	struct Phase *phase,
-	unsigned *first,	/* byte index, begin of ES */
-	unsigned *last		/* byte index, end of ES */
-	)
-/** if ES_LEN != sample_size, then we shuffle the data back to make it so
- *  to maintain channel alignment.
- */
-{
-	if (sample_size() >= ES_SIZE){
-		return;
-	}else{
-		char* base		= (char*)va_buf(DG); 
-		unsigned prev_last	= *last;
-		unsigned adjust		= ES_SIZE - sample_size();
-		unsigned new_last	= prev_last - adjust;
-		unsigned tboff		= TBLOCK_OFFSET(prev_last);
-		int nleft		= TBLOCK_LEN - tboff;
-
-		if (unlikely(tboff < adjust)){
-			err("unable to make full adjust");
-			new_last = prev_last - tboff;
-		}
-
-		dbg(1, "shift %d :: memmove(%p, %p, %d)", 
-			ES_SIZE-sample_size(),
-			base+new_last, base+prev_last, nleft);
-
-		memmove(base+new_last, base+prev_last, nleft);
-		*last = new_last;
-	}
-}
 
 static void acq216_event_adjust(
 	struct Phase *phase,
@@ -583,9 +557,8 @@ static void acq216_event_adjust(
 		*first = iinsert; 
 		*last =  iinsert + es_len;
 
-		dbg(1, "first %d last %d call es_size_adjust()", 
+		dbg(1, "first %d last %d", 
 			*first, *last);
-		es_size_adjust(phase, first, last);
 	}
 }
 
