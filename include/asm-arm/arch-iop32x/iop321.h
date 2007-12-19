@@ -214,6 +214,10 @@ extern unsigned int processor_id;
 #define IOP321_PMBR2      (volatile u32 *)IOP321_REG_ADDR(0x000006E4)
 
 #define IOP321_PBCR_EN    0x1
+#define IOP321_PBCR_BUS	   (0x3 << 1)
+#define IOP321_PBCR_BUS100 (0x1 <<1)
+#define IOP321_PBCR_BUS66  (0x2 <<1)
+#define IOP321_PBCR_BUS33  (0x3 <<1)
 
 #define IOP321_PBISR_BOOR_ERR 0x1
 
