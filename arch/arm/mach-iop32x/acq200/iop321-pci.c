@@ -368,6 +368,19 @@ int iop32x_pci_bus_speed(void)
 }
 
 
+int iop32x_pbi_bus_speed(void)
+{
+	switch(*IOP321_PBCR & IOP321_PBCR_BUS){
+	case IOP321_PBCR_BUS100:
+		return 100;
+	case IOP321_PBCR_BUS66:
+		return 66;
+	case IOP321_PBCR_BUS33:
+		return 33;	     
+	default:
+		return -1;
+	}
+}
 void iop32x_check_pci_bus_speed(void)
 {
 	u32 pcsr = *IOP3XX_PCSR;
@@ -406,4 +419,5 @@ void iop321_init(void)
 }
 
 EXPORT_SYMBOL_GPL(iop32x_pci_bus_speed);
+EXPORT_SYMBOL_GPL(iop32x_pbi_bus_speed);
 EXPORT_SYMBOL_GPL(iop32x_check_pci_bus_speed);
