@@ -31,6 +31,8 @@
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 
+
+
 #include "debugfs2.h"
 
 #ifndef EXPORT_SYMTAB
@@ -38,8 +40,28 @@
 #include <linux/module.h>
 #endif
 
-#include "acqX00-port.h"
-#include "acq200.h"
+
+#include "acq200-fifo-local.h"
+#include "acq200_minors.h"
+
+#include <linux/poll.h>
+
+#include "acq200-rb.h"
+
+#include <asm/arch/iop321-dma.h>
+
+#include "acq200-fifo.h"
+#include "acq200-fifo-tblock.h"
+#include "acq200-stream-api.h"
+
+#include <linux/dma-mapping.h>
+#include <linux/kdev_t.h>
+
+
+#include <linux/moduleparam.h>
+
+
+#include "acq200-fifo.h"
 #include "acq200_debug.h"
 
 #include <linux/mm.h>           /* everything */
@@ -50,7 +72,7 @@
 
 /*
  * we allow one level of subdirectory. OK, a stack would work, but
- * we don't need this ...
+ * we don't need this ..
  */
 
 static struct dentry *top;
@@ -59,6 +81,18 @@ static struct dentry *create_hook;
 
 static u32* cps_memory;
 static struct DebugFs2NodeInfo cps_simul_base_info;
+
+static void copy32(u32* to, u32* from, int ncopy)
+{
+	while(ncopy--){
+		*to++ = *from++;
+	}
+}
+static void commit_cache(void)
+{
+	copy32(DG->fpga.extra.va, 
+		cps_simul_base_info.pwrite, CPS_MEMORY_SIZE/4);
+}
 
 static ssize_t cps_simul_write(struct file *file, 
 				   const char __user *user_buf, 
@@ -102,6 +136,14 @@ static ssize_t cps_simul_write(struct file *file,
 	return rc;
 }
 
+
+static ssize_t cps_commit_write(struct file *file, 
+				   const char __user *user_buf, 
+					size_t count, loff_t *ppos)
+{
+	commit_cache();
+	return count;
+}
 void cps_simul_vma_open(struct vm_area_struct *vma)
 {
 
@@ -170,6 +212,11 @@ const struct file_operations cps_simul_fops = {
 	.mmap =		cps_simul_mmap
 };
 
+const struct file_operations cps_commit_fops = {
+	.write = cps_commit_write
+};
+
+
 
 static int __init cps_simul_init(void)
 {
@@ -185,8 +232,12 @@ static int __init cps_simul_init(void)
 	cwd = top = debugfs_create_dir("CPS", NULL);
 	create_hook = debugfs_create_file(".create", S_IWUGO,
 					  top, 0, &cps_simul_fops);
+	debugfs_create_file(".commit", S_IWUGO,
+			    top, 0, &cps_commit_fops);
+			
 	return 0;
 }
+
 
 static void __exit
 cps_simul_exit_module(void)
