@@ -15,6 +15,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
+#define REVID "cps_simul B1003"
 
 #include <linux/kernel.h>
 #include <linux/time.h>
@@ -82,14 +83,25 @@ static struct dentry *create_hook;
 static u32* cps_memory;
 static struct DebugFs2NodeInfo cps_simul_base_info;
 
+#define LO32(addr) (((unsigned)(addr) & 4) == 0)
+
 static void copy32(u32* to, u32* from, int ncopy)
 {
-	while(ncopy--){
-		*to++ = *from++;
+	for ( ; ncopy--; to++, from++){
+		if (LO32(to)){		
+			*to = *from;
+		}
+		/* else HI32 address is an alias */
 	}
 }
+
+
 static void commit_cache(void)
 {
+	dbg(1, "copy32( %p %p, %d )",
+		DG->fpga.extra.va,
+	    cps_simul_base_info.pwrite, CPS_MEMORY_SIZE/4);
+
 	copy32(DG->fpga.extra.va, 
 		cps_simul_base_info.pwrite, CPS_MEMORY_SIZE/4);
 }
@@ -220,9 +232,7 @@ const struct file_operations cps_commit_fops = {
 
 static int __init cps_simul_init(void)
 {
-
-
-	info("");	
+	info(REVID);	
 	cps_memory = (u32*)__get_free_page(GFP_KERNEL);
 	memset(cps_memory, 0, PAGE_SIZE);
 	cps_simul_base_info.pwrite = cps_memory;
