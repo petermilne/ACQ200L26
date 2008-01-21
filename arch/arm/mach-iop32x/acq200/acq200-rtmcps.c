@@ -19,7 +19,7 @@
 /* ------------------------------------------------------------------------- */
 
 /*
- * Module: provides hook to rtmcpscps.
+ * Module: provides hook to rtmcps.
  */
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
