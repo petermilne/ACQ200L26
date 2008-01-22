@@ -108,7 +108,7 @@ static ssize_t show_ctrl_raw(
 	char * buf)
 {
 	u16 uctrl = *CPS_CTRL;
-	return sprintf(buf, "0x%04x", uctrl);
+	return sprintf(buf, "0x%04x\n", uctrl);
 }
 
 static ssize_t store_ctrl_raw(
@@ -135,7 +135,7 @@ static ssize_t show_ctrl_bit(
 	int bit)
 {
 	u16 uctrl = *CPS_CTRL;
-	return sprintf(buf, "%d", (uctrl>>bit)&1);
+	return sprintf(buf, "%d\n", (uctrl>>bit)&1);
 }
 
 static ssize_t store_ctrl_bit(
