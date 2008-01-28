@@ -3848,14 +3848,21 @@ void acq200_setDO6_bit(int ibit, int value)
 	*ACQ200_DIOCON = control;
 }
 
-#define STATECODE(s) ((u32)s)
 
 static void alertStateListeners(enum STATE s) 
 {
 	struct StateListener* sl;
+	struct timeval ts;
+	u32 scode = (u32)jiffies;
+
+	do_gettimeofday(&ts);
+	scode = (ts.tv_sec % (3600 * 24)) * 100;
+	scode += ts.tv_usec/10000;
+	scode |= s << 28;
+
 	/* now alert any listeners */
 	list_for_each_entry(sl, &DMC_WO->stateListeners, list){
-		u32rb_put(&sl->rb, STATECODE(s));
+		u32rb_put(&sl->rb, scode);
 		wake_up_interruptible(&sl->waitq);
 	}
 }

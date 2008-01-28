@@ -210,11 +210,33 @@ static int state_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+static char *stateString(u32 state)
+{
+	switch(state){
+	case ST_STOP:
+		return "ST_STOP";
+	case ST_ARM:
+		return "ST_ARM"; 
+	case ST_RUN:
+		return "ST_RUN"; 
+	case ST_TRIGGER:
+		return "ST_TRIGGER";
+	case ST_POSTPROCESS:
+		return "ST_POSTPROCESS";
+	case ST_CAPDONE:
+		return "ST_CAPDONE";
+	default:
+		return "ST_UNKNOWN";
+	}
+}
 static int state_read(struct file *filp, char *buf,
 		size_t count, loff_t *offset)
 {
-	char sbuf[16];
+	char sbuf[32];
+	u32 scode;
 	u32 state;
+	u32 tcode;
+	u32 sec;
 	int len;
 
 	wait_event_interruptible(SL(filp)->waitq, 
@@ -223,8 +245,15 @@ static int state_read(struct file *filp, char *buf,
 	if (u32rb_is_empty(&SL(filp)->rb)){
 		return -EINTR;
 	}
-	u32rb_get(&SL(filp)->rb, &state);
-	len = snprintf(sbuf, sizeof(sbuf), "%d\n", state);
+	u32rb_get(&SL(filp)->rb, &scode);
+	
+	state = scode >> 28;
+	tcode = scode & ~0xf0000000;
+	sec = tcode / 100;
+	tcode = tcode - sec*100;
+	
+	len = snprintf(sbuf, sizeof(sbuf), "%05d.%02d %d %s\n", 
+		       sec, tcode, state, stateString(state));
 
 	if (count < len){
 		return -ENOMEM;
