@@ -844,16 +844,16 @@ static ssize_t acq200_store_state(
 	unsigned state;
 
 	if (sscanf(buf, "%d", &state)){
-		switch(DMC_WO->state){
+		switch(DMC_WO_getState()){
 		case ST_STOP:
 		case ST_CAPDONE:
 			if (state == ST_POSTPROCESS || state == ST_STOP){
-				DMC_WO->state = state;
+				DMC_WO_setState(state);
 			}
 			break;
 		case ST_POSTPROCESS:
 			if (state == ST_STOP){
-				DMC_WO->state = ST_STOP;
+				DMC_WO_setState(ST_STOP);
 			}
 			break;
 		default:
@@ -868,7 +868,7 @@ static ssize_t acq200_show_state(
 	struct device_attribute *attr,
 	char * buf)
 {
-        return sprintf(buf,"%d\n", DMC_WO->state);
+        return sprintf(buf,"%d\n", DMC_WO_getState());
 }
 
 static DEVICE_ATTR(state, S_IRUGO|S_IWUGO,
@@ -3389,7 +3389,7 @@ static int acq200_proc_phase_tblocks(
 
 static const char* getStatus(void)
 {
-	switch(DMC_WO->state){
+	switch(DMC_WO_getState()){
 	case ST_RUN:
 		return "RUN";
 	case ST_ARM:

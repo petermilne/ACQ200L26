@@ -166,7 +166,7 @@ static int hwpulse_work(void *clidata)
 		wait_event_interruptible_timeout(
 				waitq, please_stop, WORK_RATE);
 
-		if (!please_stop && DMC_WO->state == ST_RUN){
+		if (!please_stop && DMC_WO_getState() == ST_RUN){
 			if (pulse_running){
 				if (GPD.pulse_count == 0){
 					hwpulse_stop();

@@ -404,10 +404,10 @@ void finish_with_engines(int ifinish)
 		call_end_of_shot_hooks();
 		schedule_dmc0_timeout(0);
 		if (DG->shot == 0 || ifinish < 0){
-			DMC_WO->state = ST_STOP;
+			DMC_WO_setState(ST_STOP);
 		}else{
 /** ST_CAPDONE is an attempt to avoid end of shot status race. */
-			DMC_WO->state = uses_ST_CAPDONE? ST_CAPDONE: ST_STOP;
+			DMC_WO_setState(uses_ST_CAPDONE? ST_CAPDONE: ST_STOP);
 		}
 		iop321_stop_ppmu();
 
@@ -1718,7 +1718,7 @@ static void preEnable(void)
 
 	run_pre_arm_hook();
 
-	DMC_WO->state = ST_ARM;
+	DMC_WO_setState(ST_ARM);
 	*ACQ200_ICR = 0;
 
 	/* GO RTOS! */
@@ -1780,7 +1780,7 @@ static void onTrigger(void)
 		iop321_start_ppmu();
 		DG->stats.start_gtsr = *IOP321_GTSR;
 		DG->stats.start_jiffies = jiffies;
-		DMC_WO->state = ST_RUN;
+		DMC_WO_setState(ST_RUN);
 		DG->shot++;
 	}
 }
@@ -2035,7 +2035,7 @@ static void clear_buffers(void)
 	DMC_CLEAN(DMC_WO);
 	spin_lock_init(&DMC_WO->onTrigger.lock);
 	DMC_WO->trigger_detect = null_trigger_detect;
-	DMC_WO->state = ST_STOP;
+	DMC_WO_setState(ST_STOP);
 	DMC_WO->getNextEmpty = getNextEmpty;
 
 	init_bda();
@@ -3236,7 +3236,7 @@ static unsigned int acq200_fpga_fifo_live_poll(
 {
 	poll_wait(file, &DCB(file)->waitq, poll_table );
 
-	if (DMC_WO->state == ST_STOP || DMC_WO->state == ST_CAPDONE){
+	if (DMC_WO_getState() == ST_STOP || DMC_WO_getState() == ST_CAPDONE){
 		return POLLHUP;
 	}else if (!u32rb_is_empty(&DCB(file)->rb)){
 	        return POLLIN | POLLRDNORM;
@@ -3739,6 +3739,7 @@ static void init_dg(void)
 	IPC = kzalloc(sizeof(struct IPC), GFP_KERNEL);
 	DG = kzalloc(sizeof(struct DevGlobs), GFP_KERNEL);
 
+	INIT_LIST_HEAD(&DMC_WO->stateListeners);
 	INIT_LIST_HEAD(&DMC_WO->phases);
 	memcpy(DG, MYDG, sizeof(struct DevGlobs));
 	DG->ipc = IPC;
@@ -3845,6 +3846,24 @@ void acq200_setDO6_bit(int ibit, int value)
 	}
 
 	*ACQ200_DIOCON = control;
+}
+
+#define STATECODE(s) ((u32)s)
+
+static void alertStateListeners(enum STATE s) 
+{
+	struct StateListener* sl;
+	/* now alert any listeners */
+	list_for_each_entry(sl, &DMC_WO->stateListeners, list){
+		u32rb_put(&sl->rb, STATECODE(s));
+		wake_up_interruptible(&sl->waitq);
+	}
+}
+
+void DMC_WO_setState(enum STATE s) {
+
+	DMC_WO->_state = s;
+	alertStateListeners(s);
 }
 
 EXPORT_SYMBOL_GPL(acq200_check_entire_es);

@@ -198,7 +198,52 @@ static ssize_t tblock_data_read(struct file *filp, char *buf,
 	}
 }
 
+#define SL(filp) ((struct StateListener*)(filp)->private_data)
 
+static int state_open(struct inode *inode, struct file *filp)
+{
+	filp->private_data = kzalloc(sizeof(struct StateListener), GFP_KERNEL);
+	init_waitqueue_head(&SL(filp)->waitq);
+	INIT_LIST_HEAD(&SL(filp)->list);
+	u32rb_init(&SL(filp)->rb, 16);
+	list_add_tail(&SL(filp)->list, &DMC_WO->stateListeners);
+	return 0;
+}
+
+static int state_read(struct file *filp, char *buf,
+		size_t count, loff_t *offset)
+{
+	char sbuf[16];
+	u32 state;
+	int len;
+
+	wait_event_interruptible(SL(filp)->waitq, 
+				!u32rb_is_empty(&SL(filp)->rb));
+
+	if (u32rb_is_empty(&SL(filp)->rb)){
+		return -EINTR;
+	}
+	u32rb_get(&SL(filp)->rb, &state);
+	len = snprintf(sbuf, sizeof(sbuf), "%d\n", state);
+
+	if (count < len){
+		return -ENOMEM;
+	}else{
+		COPY_TO_USER(buf, sbuf, len);
+		if (offset){
+			*offset += len;
+		}
+		return len;
+	}
+	return 0;
+}
+static int state_release(struct inode *inode, struct file *filp)
+{
+	u32rb_destroy(&SL(filp)->rb);
+	list_del(&SL(filp)->list);
+	kfree(filp->private_data);
+	return 0;
+}
 static int tblock_data_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct TBLOCK* tblock = (struct TBLOCK*)filp->private_data;
@@ -255,7 +300,7 @@ static ssize_t tblock_data_sendfile(struct file *in_file, loff_t *ppos,
 #define TBFS_MAGIC 0xa2111111
 
 #define TD_SZ  (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+2+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((1+(numchan)+2+1+1)*TD_SZ)
 static struct tree_descr *my_files;
 
 typedef char Name[4];
@@ -272,12 +317,23 @@ static int acq200_tblockfs_fill_super (
 		.sendfile = tblock_data_sendfile
 	};
 
+	static struct file_operations state_ops = {
+		.open = state_open,
+		.read = state_read,
+		.release = state_release
+	};
 	static struct tree_descr front = {
 		NULL, NULL, 0
+	};
+	static struct tree_descr statemon = {
+		.name = "acqstate",
+		.ops = &state_ops,
+		.mode = S_IRUGO
 	};
 	static struct tree_descr backstop = {
 		"", NULL, 0
 	};
+	
 	int ino = 0;
 	int iblock;
 	int rc;
@@ -308,6 +364,7 @@ static int acq200_tblockfs_fill_super (
 		my_files[ino].mode = S_IRUGO;
 	}
 
+	memcpy(&my_files[ino++], &statemon, TD_SZ);
 	memcpy(&my_files[ino++], &backstop, TD_SZ);
 
 	rc = simple_fill_super(sb, TBFS_MAGIC, my_files);

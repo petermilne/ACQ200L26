@@ -144,6 +144,12 @@ struct DataConsumerBuffer {
 
 };
 
+struct StateListener {
+	wait_queue_head_t waitq;	/* StateListener blocks here */
+	struct u32_ringbuffer rb;	/* Q of state values */
+	struct list_head list;		/* List of StateListners */
+};
+
 #define ACQ200_FPGA_REG_BAR  0
 #define ACQ200_FPGA_FIFO_BAR 1
 
@@ -273,10 +279,11 @@ struct BDA {
 
 
 struct DMC_WORK_ORDER {
+/*** WARNING: cleanzone gets scrubbed every shot */
 	int direction;
 	void *buf;
 	dma_addr_t pa;
-	enum STATE state;
+	enum STATE _state;
 	int wo_len;     /* WORKTODO - what is the meaning of this? */
 	int finished_code;  /* 1: OK, negative => fail */
 	int next_empty;
@@ -315,6 +322,7 @@ struct DMC_WORK_ORDER {
 	unsigned epos;
 
 	unsigned clean_to_here;
+/*** end of cleanzone */
 	/** Before During After phase control */
 	unsigned (*getNextEmpty)(struct DMC_WORK_ORDER* _this);
 	void (*handleEmpties)(struct DMC_WORK_ORDER* _this);
@@ -329,7 +337,10 @@ struct DMC_WORK_ORDER {
 		unsigned subsample;
 		int iodd;           
 	} control_target;
+
+	struct list_head stateListeners;
 };
+
 
 #define CLEAN_LEN offsetof(struct DMC_WORK_ORDER, clean_to_here)
 #define DMC_CLEAN(wo) (memset(wo, 0, CLEAN_LEN))
@@ -873,6 +884,12 @@ extern void delete_proc_entries(void);
 extern struct DevGlobs *DG;
 extern struct DMC_WORK_ORDER *DMC_WO;
 extern struct CAPDEF *CAPDEF;
+
+void DMC_WO_setState(enum STATE s);
+
+static inline enum STATE DMC_WO_getState(void) {
+	return DMC_WO->_state;
+}
 
 /*
  * WORDSZ - sample size - almost always 16 bit except when dsp involved
