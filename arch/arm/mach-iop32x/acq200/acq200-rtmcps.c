@@ -60,7 +60,7 @@ module_param(rtmcps_debug, int, 0664);
 
 
 char acq100_rtmcps_driver_string[] = "D-TACQ RTMCPS driver";
-char acq100_rtmcps_driver_version[] = "$Revision:$ build B1001 " __DATE__;
+char acq100_rtmcps_driver_version[] = "$Revision:$ build B1002 " __DATE__;
 char acq100_rtmcps_copyright[] = "Copyright (c) 2007 D-TACQ Solutions Ltd";
 
 #define DIO_REG_TYPE (volatile u16*)
@@ -232,10 +232,29 @@ static void rtmcps_dev_release(struct device * dev)
 
 static struct device_driver rtmcps_driver;
 
+static void choose_mode(void)
+{
+	u32 ctrl = *CPS_CTRL;
+
+	dbg(1, "CPLD+3 = %02x", ctrl);
+	
+	if ((*(volatile u8*)(ACQ200_CPLD+3) & 0x01) == 1){
+		info("peripheral slot");
+		ctrl &= ~CPS_CTRL_SYSSLOT;
+	}else{
+		info("system slot");
+		ctrl |= CPS_CTRL_SYSSLOT;
+	}
+	*CPS_CTRL = ctrl;
+}
+
 static int rtmcps_probe(struct device *dev)
 {
-	info("");
+
+	info("%s %s", 
+		acq100_rtmcps_driver_string, acq100_rtmcps_driver_version);
 	mk_rtmcps_sysfs(dev);
+	choose_mode();
 	init_inputs();
 	return 0;
 }

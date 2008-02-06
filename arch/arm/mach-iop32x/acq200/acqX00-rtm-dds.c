@@ -630,6 +630,6 @@ EXPORT_SYMBOL_GPL(acq200_dds_set_qdac);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
-MODULE_DESCRIPTION("Driver for ACQ100 Low Latency Control");
+MODULE_DESCRIPTION("Driver for RTM-DDS");
 
 
