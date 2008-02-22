@@ -15,7 +15,12 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define REVID "cps_simul B1003"
+/*
+ * @file cps_simul.c - cps simulation -
+ * well, no longer a simulation defines a file system to mirror the cps regs
+ */
+
+#define REVID "cps_simul B1004"
 
 #include <linux/kernel.h>
 #include <linux/time.h>
@@ -82,6 +87,8 @@ static struct dentry *create_hook;
 
 static u32* cps_memory;
 static struct DebugFs2NodeInfo cps_simul_base_info;
+static struct DebugFs2NodeInfo acq200_regs_info;
+
 
 #define LO32(addr) (((unsigned)(addr) & 4) == 0)
 
@@ -106,6 +113,10 @@ static void commit_cache(void)
 		cps_simul_base_info.pwrite, CPS_MEMORY_SIZE/4);
 }
 
+#define CD "cd"
+#define REGS0 "offset from bar0"
+#define REGS2 "offset from bar2"
+
 static ssize_t cps_simul_write(struct file *file, 
 				   const char __user *user_buf, 
 					size_t count, loff_t *ppos)
@@ -114,30 +125,40 @@ static ssize_t cps_simul_write(struct file *file,
 	ssize_t rc = debugfs2_write_line(file, user_buf, 
 					 min(count, sizeof(myline)-1),
 					 ppos, myline);
+	static struct DebugFs2NodeInfo *defaultNodeInfo = &cps_simul_base_info;
 
 	myline[79] = '\0';
 
 	if (rc > 0 && myline[0] != '#' && strlen(myline) > 5){
-		if (strncmp(myline, "cd", 2) == 0){
+		if (strncmp(myline, CD, strlen(CD)) == 0){
 			char subdir[21];
 
 			if (sscanf(myline, "cd %s", subdir) == 1){
 				if (strncmp(subdir, "..", 2) == 0){
+					dbg(1, "cd top %p", cwd);
 					cwd = top;
 				}else{
 					cwd = debugfs_create_dir(subdir, top);
 					if (cwd == 0){
 						err("failed to create subdir");
+					}else{
+						dbg(1, "cd %s OK", subdir);
 					}
 				}
 			}else{
 				err("invalid cd command \"%s\"", myline);
 			}
+		}else if (strncmp(myline, REGS0, strlen(REGS0)) == 0){
+			defaultNodeInfo = &acq200_regs_info;
+			dbg(1, "accept %s", REGS0);
+		}else if (strncmp(myline, REGS2, strlen(REGS2)) == 0){
+			defaultNodeInfo = &cps_simul_base_info;
+			dbg(1, "accept %s", REGS2);
 		}else{
 			struct dentry* newfile;
 			struct DebugFs2NodeInfo* nodeInfo = 
 				kmalloc(DBGFS2_NI_SZ, GFP_KERNEL);
-			memcpy(nodeInfo, &cps_simul_base_info, DBGFS2_NI_SZ);
+			memcpy(nodeInfo, defaultNodeInfo, DBGFS2_NI_SZ);
 
 			newfile = debugfs2_create_file_def(
 				cwd, nodeInfo, myline, (int)*ppos);
@@ -239,6 +260,13 @@ static int __init cps_simul_init(void)
 	cps_simul_base_info.pread  = cps_memory;
 	cps_simul_base_info.pcache = cps_memory;
 
+
+        acq200_regs_info.pwrite = 
+	acq200_regs_info.pread  =
+		acq200_regs_info.pcache = DG->fpga.regs.va;
+
+	info("set acq200_regs_info.pread %p", acq200_regs_info.pread);
+
 	cwd = top = debugfs_create_dir("CPS", NULL);
 	create_hook = debugfs_create_file(".create", S_IWUGO,
 					  top, 0, &cps_simul_fops);
@@ -252,7 +280,7 @@ static int __init cps_simul_init(void)
 static void __exit
 cps_simul_exit_module(void)
 {
-	info("");	
+	info(REVID);	
 	debugfs_remove(create_hook);
 	/* big leak here ... need to rm all nodes, inc Info's */
 	debugfs_remove(top);
