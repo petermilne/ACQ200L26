@@ -240,10 +240,10 @@ static void choose_mode(void)
 	
 	if ((*(volatile u8*)(ACQ200_CPLD+3) & 0x01) == 1){
 		info("peripheral slot");
-		ctrl &= ~CPS_CTRL_SYSSLOT;
+		ctrl &= ~(1<<CPS_CTRL_SYSSLOT);
 	}else{
 		info("system slot");
-		ctrl |= CPS_CTRL_SYSSLOT;
+		ctrl |= (1<<CPS_CTRL_SYSSLOT);
 	}
 	*CPS_CTRL = ctrl;
 }
