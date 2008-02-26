@@ -102,63 +102,38 @@ int show_hook(struct ArgBlock *argBlock, char* buf, int maxbuf)
 	return len;
 }
 
-
-static int isspace(char c)
-{
-	return strchr( " \t", c) != 0;
-}
 #define MAXARGS 20
 
 int store_hook(struct ArgBlock *argBlock, const char* buf, int count)
 {
-	char *cursor;
 	char *base;
-	int in_ws= 1;
-	int iarg = 0;
+	int argc = 0;
 
 	if (argBlock->base == 0){
-		/** @@todo mem leak */
 		argBlock->base = kmalloc(PAGE_SIZE, GFP_KERNEL);
 
 		assert(argBlock->base);
 
 		argBlock->argv = (char **)argBlock->base;
-		argBlock->argv[0] = (char *)&argBlock->argv[MAXARGS];
 
 		dbg(1,"kmalloc:argBlock %p base %p", argBlock, argBlock->base);
 	}
-
-#define RUMP (PAGE_SIZE - (MAXARGS*sizeof(char **)))
+#define RUMP (PAGE_SIZE - (MAXARGS*sizeof(char **)) -1)
 
 	count = min((unsigned long)count, RUMP);
+	count = min((size_t)count, strlen(buf));
 
-	memcpy(argBlock->argv[0], buf, count);
+	memcpy(base = (char*)&argBlock->argv[MAXARGS], buf, count);
+	base[count] = '\0';
 
-/** @todo - ignores quotes, splits on spaces */
-	for (cursor = base = argBlock->argv[0]; 
-	     cursor - base < count; ++cursor){
-
-		if (in_ws){
-			if (!isspace(*cursor)){
-				argBlock->argv[iarg++] = cursor;
-				in_ws = 0;
-			}
-		}else{
-			if (isspace(*cursor)){
-				*cursor = '\0';
-				in_ws = 1;
-			}
-		}
-
-
-		if (iarg >= MAXARGS-1){
-			break;
-		}
+	for (argc = 0; argc < MAXARGS &&
+		     ((argBlock->argv[argc] = strsep(&base, " ")) != NULL); 
+		++argc){
+		;
 	}
-	argBlock->argv[iarg] = 0;
-	argBlock->argc = iarg;
+
+	argBlock->argc = argc;
 
 	dbg(1, "argBlock %p argc %d", argBlock, argBlock->argc);
-	*cursor = '\0';
-	return cursor - base;			
+	return count;			
 }
