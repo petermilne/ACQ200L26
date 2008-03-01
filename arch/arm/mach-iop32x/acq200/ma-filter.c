@@ -68,17 +68,64 @@ int macustom_debug;
 module_param(macustom_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.0 $ build B1004 "
+#define VERID "$Revision: 1.0 $ build B1014 "
 
 
 char macustom_driver_name[] = "acq196-ppcustom";
 char macustom_driver_string[] = "D-TACQ Low Latency Control Device";
 char macustom_driver_version[] = VERID __DATE__;
-char macustom_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
+char macustom_copyright[] = "Copyright (c) 2008 D-TACQ Solutions Ltd";
 
 int LOG2_NAVG = 2;		/* Div 4 by default */
 module_param(LOG2_NAVG, int, 0644);
 
+static void adjust_tblock_in_phase(struct Phase * phase, void *cursor)
+/* the data in this tblock just got shortened, so we have to find all
+ * the corresponding tble's and adjust them...
+ * Also, make a once-only adjustment to phase global actual_samples ..
+ * there is an implicit assumption that all the phase gets transformed,
+ * not just this tblock, but that is reasonable, we don't do partials.
+ */
+{
+	struct TblockListElement *tble;
+	int this_index = TBLOCK_INDEX(cursor - va_buf(DG));
+
+	if (phase == 0){
+		return;
+	}
+
+	list_for_each_entry(tble, &phase->tblocks, list){
+
+
+		if (TBLOCK_INDEX(tble->tblock->offset) == this_index){
+
+			dbg(1, "looking for %d got tblock:%d %s", 
+			    this_index,	tble->tblock->iblock, "Adjusting");
+
+			tble->phase_sample_start >>= LOG2_NAVG;
+			tble->tblock_sample_start >>= LOG2_NAVG;
+			tble->sample_count >>= LOG2_NAVG;
+
+			if (phase->transformer_private == 0){
+				phase->start_sample >>= LOG2_NAVG;
+				phase->actual_len >>= LOG2_NAVG;
+				phase->actual_samples >>= LOG2_NAVG;
+				
+/* hack */
+				phase->actual_len += sample_size();
+				phase->actual_samples += 1;
+	
+				phase->start_off = 
+					tble->tblock->offset + 
+					tble->tblock_sample_start;
+
+				phase->transformer_private = 1;
+			}
+
+			break;
+		}
+	}	
+}
 
 static void ma_transform(short *to, short *from, int nwords, int stride)
 /**< moving average filter on data .
@@ -91,7 +138,8 @@ static void ma_transform(short *to, short *from, int nwords, int stride)
         short *dstp = (short *)to;
         unsigned *srcp = (unsigned *)from;
 
-	int nchan = stride/sizeof(short);
+	int nchan = stride;
+	int npairs = stride/2;
         int nsamples = nwords/stride;
         int isample, ipair;
         unsigned p0, p1;
@@ -100,9 +148,11 @@ static void ma_transform(short *to, short *from, int nwords, int stride)
 	int *sums;
 	int ichan;
 
-	sums = kmalloc(nchan*sizeof(int), GFP_KERNEL);
+	dbg(1, "from: %p TBLOCK: %d nw:%d",
+	    from, TBLOCK_INDEX((void*)from - va_buf(DG)),
+	    nwords);
 
-	stride /= 2;  /* count pairs, not channels */
+	sums = kmalloc(nchan*sizeof(int), GFP_KERNEL);
 
 #define ISP0 (isample*stride+ipair)
 #define ISP1 (ISP0+stride)
@@ -119,7 +169,7 @@ static void ma_transform(short *to, short *from, int nwords, int stride)
 		memset(sums, 0, nchan*sizeof(int));
 
 		for (imean = 0; imean < navg; imean += 2, isample += 2){
-	                for (ipair = 0; ipair < stride; ++ipair){
+	                for (ipair = 0; ipair < npairs; ++ipair){
 		                p0 = srcp[ISP0];
 			        p1 = srcp[ISP1];
 
@@ -139,7 +189,10 @@ static void ma_transform(short *to, short *from, int nwords, int stride)
 #undef GET0
 #undef GET1
 #undef IDC0
-	/* now adjust maxsamples in TBLOCK */
+
+	adjust_tblock_in_phase(DMC_WO->pre, from);
+	adjust_tblock_in_phase(DMC_WO->post, from);
+
 
 	kfree(sums);
 }
@@ -169,6 +222,10 @@ static int mk_ppcustom_sysfs(struct device *dev)
 }
 
 
+static void rm_ppcustom_sysfs(struct device *dev) 
+{
+	device_remove_file(dev, &dev_attr_version);
+}
 
 static struct device_driver macustom_driver;
 
@@ -199,6 +256,7 @@ static int macustom_probe(struct device *dev)
 
 static int macustom_remove(struct device *dev)
 {
+	rm_ppcustom_sysfs(dev);
 	acq200_unregisterTransformer(&transformer);
 	return 0;
 }

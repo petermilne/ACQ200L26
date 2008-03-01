@@ -309,7 +309,8 @@ void acq200_initBBRP_using_phase(
 
 #define LOCDEB(lv) dbg(3,"%20s %d", #lv, lv)
 #define LOCDEP(lv) dbg(3,"%20s %p", #lv, lv)
-
+	
+	LOCDEB(bbrp->status);
 	LOCDEB(COULD_SHOW_EVENT);
 	LOCDEB(DG->show_event);
 	LOCDEB(channel);
@@ -429,7 +430,9 @@ static ssize_t acq200_fifo_bigbuf_read (
  * check for tblock rounddown trap - if trapped, force move into next tblock
  */
 	if (bbrp.status != BBRP_COMPLETE && bbrp.my_samples_reqlen == 0 ){
+		dbg(1, "block rounddown trap");
 		*offset += CSIZE;
+		memset(&bbrp, 0, sizeof(bbrp));
 	        initBBRP(file, len, offset, &bbrp);
 	}
 	
@@ -1266,7 +1269,7 @@ static ssize_t status_tb_read (
 static ssize_t status_tb_write(
 	struct file *file, const char *buf, size_t len, loff_t *offset)
 {
-	struct TblockConsumer *tbc = DCI_TBC(file);
+//	struct TblockConsumer *tbc = DCI_TBC(file);
 	struct TblockListElement *tle = DCI(file)->tle_current;
 	
 	/** @todo should check iblock on input; */

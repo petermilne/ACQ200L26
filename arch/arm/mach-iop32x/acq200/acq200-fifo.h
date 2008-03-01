@@ -229,6 +229,7 @@ struct Phase {
 	unsigned long long ref_start_scc;  /* prep start ref mapping a */
 	unsigned ref_offset;               /* prep start ref mapping b */
 	struct timeval prep_start_time;    /* wall clock prep start    */
+	unsigned transformer_private;
 };
 #define PHASE_SZ sizeof(struct Phase)
 
@@ -402,6 +403,7 @@ struct Transformer {
 	char name[16];
 	unsigned t_flags;
 	void (*transform)(short *to, short *from, int nwords, int stride);
+	/* stride in words */
 };
 
 
