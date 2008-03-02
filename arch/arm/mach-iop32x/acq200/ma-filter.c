@@ -79,6 +79,42 @@ char macustom_copyright[] = "Copyright (c) 2008 D-TACQ Solutions Ltd";
 int LOG2_NAVG = 2;		/* Div 4 by default */
 module_param(LOG2_NAVG, int, 0644);
 
+
+static void adjust_this_tblock(
+	struct Phase * phase, struct TblockListElement *tble)
+{
+	tble->phase_sample_start >>= LOG2_NAVG;
+	tble->tblock_sample_start >>= LOG2_NAVG;
+	tble->sample_count >>= LOG2_NAVG;
+
+
+	if (phase->transformer_private == 0){
+		phase->start_sample >>= LOG2_NAVG;
+		phase->actual_len >>= LOG2_NAVG;
+		phase->actual_samples >>= LOG2_NAVG;
+				
+		phase->start_off = 
+			tble->tblock->offset + 
+			tble->tblock_sample_start;
+
+		phase->transformer_private = 1;
+	}
+
+	if (tble->phase_sample_start+tble->sample_count ==
+	    phase->actual_samples - 1){
+		struct Phase *next_phase;
+
+		dbg(1, "correct rounding error");
+		phase->actual_samples -= 1;
+		phase->actual_len -= sample_size();
+
+		next_phase = list_entry(phase->list.next, struct Phase, list);
+
+		if (next_phase != 0){
+			next_phase -> start_sample -= 1;
+		}
+	}
+}
 static void adjust_tblock_in_phase(struct Phase * phase, void *cursor)
 /* the data in this tblock just got shortened, so we have to find all
  * the corresponding tble's and adjust them...
@@ -95,33 +131,10 @@ static void adjust_tblock_in_phase(struct Phase * phase, void *cursor)
 	}
 
 	list_for_each_entry(tble, &phase->tblocks, list){
-
-
 		if (TBLOCK_INDEX(tble->tblock->offset) == this_index){
-
 			dbg(1, "looking for %d got tblock:%d %s", 
 			    this_index,	tble->tblock->iblock, "Adjusting");
-
-			tble->phase_sample_start >>= LOG2_NAVG;
-			tble->tblock_sample_start >>= LOG2_NAVG;
-			tble->sample_count >>= LOG2_NAVG;
-
-			if (phase->transformer_private == 0){
-				phase->start_sample >>= LOG2_NAVG;
-				phase->actual_len >>= LOG2_NAVG;
-				phase->actual_samples >>= LOG2_NAVG;
-				
-/* hack */
-				phase->actual_len += sample_size();
-				phase->actual_samples += 1;
-	
-				phase->start_off = 
-					tble->tblock->offset + 
-					tble->tblock_sample_start;
-
-				phase->transformer_private = 1;
-			}
-
+			adjust_this_tblock(phase, tble);
 			break;
 		}
 	}	
