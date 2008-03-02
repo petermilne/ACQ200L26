@@ -133,6 +133,53 @@ static ssize_t show_dio(
 
 static DEVICE_ATTR(dio32, S_IRUGO|S_IWUGO, show_dio, store_dio);
 
+#define MAXDIOBIT 32
+
+static ssize_t store_dio_bit(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int ibit;
+	char value;
+
+	if (sscanf(buf, "%d %c", &ibit, &value) == 2 ||
+            sscanf(buf, "%d=%c", &ibit, &value) == 2    ){
+		if (ibit >= 0 && ibit < MAXDIOBIT){
+			switch(value){
+			case DIO_MASK_OUTPUT1:
+				DIO_SET_OUTPUT1(ibit);
+				break;
+			case DIO_MASK_OUTPUT0:
+				DIO_SET_OUTPUT0(ibit);
+				break;
+			case DIO_MASK_OUTPUT_PP:
+				DIO_SET_OUTPUT0(ibit);
+				set_outputs();
+				DIO_SET_OUTPUT1(ibit);
+				set_outputs();
+				DIO_SET_OUTPUT0(ibit);
+				break;
+			case DIO_MASK_OUTPUT_NP:
+				DIO_SET_OUTPUT1(ibit);
+				set_outputs();
+				DIO_SET_OUTPUT0(ibit);
+				set_outputs();
+				DIO_SET_OUTPUT1(ibit);
+				break;
+			case DIO_MASK_INPUT:
+			default:
+				DIO_SET_INPUT(ibit);
+			}
+			set_outputs();
+		}
+	}
+
+        return strlen(buf);
+}
+
+static DEVICE_ATTR(dio32_bit, S_IRUGO|S_IWUGO, 0, store_dio_bit);
+
 
 static ssize_t show_dio_raw(
 	struct device * dev, 
@@ -229,6 +276,7 @@ static DEVICE_ATTR(dio32_hex, S_IRUGO|S_IWUGO, show_dio_hex, store_dio_hex);
 static void mk_rtm_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_bit);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_raw);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_dio_sync);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_hex);
