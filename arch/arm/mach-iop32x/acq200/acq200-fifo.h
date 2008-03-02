@@ -617,6 +617,11 @@ struct DevGlobs {
 		spinlock_t lock;
 		struct list_head clients;
 	} tbc;
+
+	struct RefillClient {
+		spinlock_t lock;
+		void (* client)(struct iop321_dma_desc *pbuf);
+	} refillClient;
 };
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)

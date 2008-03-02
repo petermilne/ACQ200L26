@@ -798,6 +798,14 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		/** @todo - try to trap a null pointer exception */
 		assert(pbuf);
 
+#ifdef ACQ196C
+		spin_lock(&DG->refillClient.lock);
+		if (DG->refillClient.client != 0){
+			DG->refillClient.client(pbuf);	
+		}
+		spin_unlock(&DG->refillClient.lock);
+#endif
+
 		if (pbuf->clidat){
 			
 			/** return pbc to endstops, passing fifo_to_local
