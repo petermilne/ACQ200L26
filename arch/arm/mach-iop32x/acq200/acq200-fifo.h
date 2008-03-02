@@ -620,7 +620,7 @@ struct DevGlobs {
 
 	struct RefillClient {
 		spinlock_t lock;
-		void (* client)(struct iop321_dma_desc *pbuf);
+		void (* client)(void *data);
 	} refillClient;
 };
 
@@ -792,6 +792,7 @@ static inline void* va_tblock_tmp(struct DevGlobs* dg )
 	return (void*)dg->bigbuf.tblocks.tmp.start;
 }
 
+#define BB_PTR(offset)  (va_buf(DG) + offset)
 
 #define RBLEN          0x4000
 #define RBMASK         (RBLEN-1)

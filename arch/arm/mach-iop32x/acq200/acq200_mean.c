@@ -18,7 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define VERID "$Revision: 1.5 $ build B1014 "
+#define VERID "$Revision: 1.5 $ build B1020 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -47,27 +47,25 @@
 #include "acq200-fifo-local.h"     /* DG */
 
 
+/* example: 20kHz capture, 10Hz output, nmean=16 (2 bit SNR improvement)
+ *
+ * nmean = 16
+ * cskip = 20000 / 10 / 16 = 125
+ */
+
 int acq200_mean_debug;
 module_param(acq200_mean_debug, int, 0664);
 
-int nmean = 64;
-module_param(nmean, int, 0664);
+int log2_mean = 4;
+module_param(log2_mean, int, 0664);
 
-int cskip = 0;
-module_param(cskip, int, 0444);
+#define nmean (1<<log2_mean)
 
-int nskips = 0;
-module_param(nskips, int, 0444);
-
-int stub = 0;
-module_param(stub, int, 0664);
-
+int skip = 125;
+module_param(skip, int, 0664);
 
 int iter = 0;
 module_param(iter, int, 0444);
-
-int tblock = -1;
-module_param(tblock, int, 0444);
 
 int nice_mean = 10;
 module_param(nice_mean, int, 0644);
@@ -103,252 +101,92 @@ static struct CHNAME* my_names;
 static int enable;
 
 
-/** experiment: use kthread to collect data */
-
-#include <linux/kthread.h>
-
-
-struct DataEntry {
-	struct list_head list;
-	void* data;
-};
 
 static struct MeanDataStore {
-	struct list_head busy_list;
-	struct list_head free_list;
-	struct list_head x_list;
 	int samples_in_list;
 	int sample_size;
 	int nchannels;
 	int* the_sums;
-	int sumslen;
-	struct DataEntry* entries;
-} mds;
+	spinlock_t lock;
+} app_state;
 
 
-#define PTR(offset)  (va_buf(DG) + offset)
+#define SUMSLEN (app_state.nchannels * sizeof(int))
 
+static struct MEAN_WORK_STATE {
+	int iskip;
+	int imean;
+	int *the_sums;
+} work_state;
 
-static void _boxcar16(int chmax, int *sums, void *old, void *new)
+static void sum_up(void *data)
 {
-	int ch;
+	int ic;
+	short *channels = (short*)data;
 
-	for (ch = chmax; ch--; ){
-		int delta = ((short*)new)[ch];
-		if (old){
-			delta -= ((short*)old)[ch];
-		}
-		sums[ch] += delta;
-	}
-}
+	dma_map_single(DG->dev, data, app_state.sample_size, DMA_FROM_DEVICE);
 
-static void _boxcar32(int chmax, int *sums, void *old, void *new)
-{
-	int ch;
-
-	for (ch = chmax; ch--; ){
-		int delta = ((int*)new)[ch];
-		if (old){
-			delta -= ((int*)old)[ch];
-		}
-		sums[ch] += delta;
-	}
-}
-static void _boxcar24(int chmax, int *sums, void *old, void *new)
-{
-	int ch;
-	union{
-		int ival;
-		unsigned char bval[4];
-        } xnew, xold;
-
-	xold.ival = 0;
-#define GETS24(x, buf, off) do {				\
-		x.bval[0] = ((unsigned char*)buf)[off+0];	\
-		x.bval[1] = ((unsigned char*)buf)[off+1];	\
-		x.bval[2] = ((unsigned char*)buf)[off+2];	\
-		x.bval[3] = (x.bval[2]&0x80)? 0xff: 0;		\
-	} while(0)
-
-	for (ch = chmax; ch--; ){
-		int offset = 3 * ch;
-		
-		GETS24(xnew, new, offset);
-		
-		if (old){
-			GETS24(xold, old, offset);
-		}
-		sums[ch] += xnew.ival - xold.ival;
+	for (ic = 0; ic != app_state.nchannels; ++ic){
+		work_state.the_sums[ic] += channels[ic];
 	}
 }
 
 
-static void boxcar(
-	void (*_boxcar)(int chmax, int *sums, void *old, void *new),
-	struct DataConsumerBuffer* dcb
-) 
-/** boxcar average over nmeans points (lazy average on read). */
+static void mean_work(void *data) 
 {
-	struct DataEntry* x;
-	int headroom = (dcb->last_finish - dcb->last_start)/mds.sample_size;
-	int chmax = mds.nchannels;
-	int timeout = 10000;	/* limits amount of work */
+	if (++work_state.iskip >= skip){
+		sum_up(data);
+		if (++work_state.imean >= nmean){
 
-	if (stub) chmax = 1;
+			dbg(1, "summing up iter:%d ch01:0x%04x sum:0x%08x",
+				iter, *(short*)data,
+				work_state.the_sums[0]);
 
-	if (headroom > nmean){
-		dcb->last_start += (headroom - nmean)*mds.sample_size;
-	}
-	
-	while (dcb->last_start < dcb->last_finish && --timeout > 0){
-		void *new_data = (short *)PTR(dcb->last_start);
-
-		if (likely(mds.samples_in_list == nmean)){
-			/** boxcar rolling along */
-			list_move(mds.busy_list.prev, &mds.x_list);
-			x = list_entry(mds.x_list.next, 
-				       struct DataEntry, list);
-			_boxcar(chmax, mds.the_sums, x->data, new_data);
-
-			x->data = new_data;
-			list_move(mds.x_list.next, &mds.busy_list);
-			dcb->last_start += mds.sample_size;
-		}else if (mds.samples_in_list > nmean){
-			/** someone changed nmean on us! */
-			while(mds.samples_in_list > nmean){
-				list_move(mds.busy_list.prev, &mds.free_list);
-				--mds.samples_in_list;
-			}
-			continue;
-		}else if (list_empty(&mds.free_list)){
-			/** out of samples - fake a result */
-			mds.samples_in_list = nmean;
-			err("free_list empty");
-			continue;
-		}else{
-			/** fill the boxcar */
-			list_move(mds.free_list.next, &mds.x_list);
-			x = list_entry(mds.x_list.next, 
-				       struct DataEntry, list);
-		        x->data = new_data;
-
-			_boxcar(chmax, mds.the_sums, 0, new_data);
-
-			list_move(mds.x_list.next, &mds.busy_list);
-			mds.samples_in_list++;
-			dcb->last_start += mds.sample_size;
+			spin_lock(&app_state.lock);
+			memcpy(app_state.the_sums, work_state.the_sums,SUMSLEN);
+			spin_unlock(&app_state.lock);
+			memset(work_state.the_sums, 0, SUMSLEN);
+			work_state.imean = 0;
+			iter++;
 		}
+		work_state.iskip = 0;
 	}
-
-	if (timeout <= 0){
-		err("TIMEOUT");
-	}
-}
-
-
-static int mean_work(void *clidata) 
-{
-	void (*my_boxcar_action)(int chmax, int *sums, void *old, void *new);
-	       
-	struct DataConsumerBuffer *dcb = acq200_createDCB();
-
-	acq200_addDataConsumer(dcb);
-	
-	switch(capdef_get_word_size()){
-	case 4:
-		my_boxcar_action = _boxcar32; break;
-	case 3:
-		my_boxcar_action = _boxcar24; break;
-	case 2:
-	default:
-		my_boxcar_action = _boxcar16;
-	}
-
-	set_user_nice(current, nice_mean);
-
-	iter = 0;		
-	allow_signal(SIGKILL);
-	
-	while(!kthread_should_stop()){
-		unsigned new_start;
-		int myskips = 0;
-
-		if (signal_pending(current)){
-			flush_signals(current);
-		}
-
-		wait_event_interruptible_timeout(
-			dcb->waitq, !u32rb_is_empty(&dcb->rb), HZ);
-
-		while (!u32rb_is_empty(&dcb->rb)){
-		      u32rb_get(&dcb->rb, &dcb->last_finish);		      
-		}
-
-		tblock = TBLOCK_NUM(dcb->last_finish);
-		new_start = TBLOCK_START(TBLOCK_NUM(dcb->last_finish));
-		      
-		if (iter == 0){
-			dcb->last_start = new_start;
-		}else if (TBLOCK_NUM(dcb->last_start) != 
-			  TBLOCK_NUM(new_start)){
-			dcb->last_start = new_start;
-			myskips++;
-		}
-		dma_sync_single(DG->dev,
-				dcb->handle + dcb->last_start, 
-				dcb->last_finish - dcb->last_start, 
-				DMA_FROM_DEVICE);       
-
-		if (stub < 2){
-			boxcar(my_boxcar_action, dcb);
-		}
-
-		dbg(2,"hello from mean_work %d offset:%06x", 
-		    iter, dcb->last_finish);
-
-		iter++;
-		cskip = myskips;
-		nskips += myskips;
-	}
-
-	acq200_removeDataConsumer(dcb);
-	acq200_deleteDCB(dcb);
-	
-	return 0;
 }
 
 static struct task_struct *the_worker;
 
+void acq200_setRefillClient(void (*client)(void *pbuf))
+{
+	spin_lock(&DG->refillClient.lock);
+	DG->refillClient.client = mean_work;
+	spin_unlock(&DG->refillClient.lock);
+}
+
 static void start_work(void) 
 {
 	dbg(1, "01");
-
-	if (the_worker == 0){
-		on_arm();
-		the_worker = kthread_run(mean_work, NULL, "mean_work");
-	}else{
-		err("mean thread already running");
-	}
+	work_state.iskip = work_state.imean = 0;
+	acq200_setRefillClient(mean_work);
+	on_arm();
 
 	dbg(1, "99 the worker %p", the_worker);
 }
 static void stop_work(void)
 {
 	dbg(1, "01");
-	kthread_stop(the_worker);
-	the_worker = 0;
+	acq200_setRefillClient(0);
 	dbg(1, "99");            
 }
 
 static int getMean(int lchan) 
 {
 	int pchan = acq200_lookup_pchan(lchan);
+	int mean;
 
-	if (mds.samples_in_list){
-		return mds.the_sums[pchan]/mds.samples_in_list;
-	}else{
-		return 0;
-	}
+	spin_lock(&app_state.lock);
+	mean = app_state.the_sums[pchan] >> log2_mean;
+	spin_unlock(&app_state.lock);
+	return mean;
 }
 
 static int ch_open(struct inode *inode, struct file *filp) 
@@ -380,14 +218,15 @@ static ssize_t xx_read(
 	int nread = 0;
 	int ichan;
 
-	if (count > mds.sample_size*sizeof(int)){
-		count = mds.sample_size*sizeof(int);
+	if (count > app_state.sample_size*sizeof(int)){
+		count = app_state.sample_size*sizeof(int);
 	}
 
 	for (ichan = 1; nread < count; nread += sizeof(int), ++ichan){
 		int my_mean = getMean(ichan);
 		COPY_TO_USER(buf+nread, &my_mean, sizeof(int));
 	}
+	*offset += count;
 
 	return count;
 }
@@ -494,14 +333,9 @@ static int meanfs_get_super(
 static void on_arm(void)
 {
 	dbg(1, "on_arm 01");
-	while(!list_empty(&mds.busy_list)){
-		dbg(2, "move to free list");
-		list_move(mds.busy_list.prev, &mds.free_list);
-	}
-	mds.samples_in_list = 0;
-	mds.sample_size = sample_size();
-	mds.nchannels = CAPDEF_get_nchan();
-	memset(mds.the_sums, 0, mds.sumslen);
+	app_state.sample_size = sample_size();
+	app_state.nchannels = CAPDEF_get_nchan();
+	memset(app_state.the_sums, 0, SUMSLEN);
 
 	dbg(1, "on_arm 99");
 }
@@ -509,29 +343,20 @@ static void on_arm(void)
 static void init_buffers(void)
 {
 	int nchan = CAPDEF_get_nchan();
-	int entry;
 
 	my_files = kmalloc(MY_FILES_SZ(nchan), GFP_KERNEL);
 	my_names = kmalloc((2+nchan)*sizeof(struct CHNAME), GFP_KERNEL);
-	mds.sumslen = (nchan)*sizeof(int);
-	mds.the_sums = kmalloc(mds.sumslen, GFP_KERNEL);
-	mds.entries = 
-		kmalloc(max(nmean,64)*sizeof(struct DataEntry), GFP_KERNEL);
-
-	INIT_LIST_HEAD(&mds.busy_list);
-	INIT_LIST_HEAD(&mds.free_list);
-	INIT_LIST_HEAD(&mds.x_list);
-
-	for (entry = max(nmean,64); entry--; ){
-		list_add(&(mds.entries[entry].list), &mds.free_list);
-	}
+	app_state.nchannels = CAPDEF_get_nchan();
+	app_state.the_sums = kmalloc(SUMSLEN, GFP_KERNEL);
+	work_state.the_sums = kmalloc(SUMSLEN, GFP_KERNEL);
 }
+
 static void release_buffers(void)
 {
 	if (my_files) kfree(my_files);
 	if (my_names) kfree(my_names);
-	if (mds.the_sums) kfree(mds.the_sums);
-	if (mds.entries) kfree(mds.entries);
+	if (app_state.the_sums) kfree(app_state.the_sums);
+	if (work_state.the_sums) kfree(work_state.the_sums);
 }
 
 static struct file_system_type meanfs_type = {

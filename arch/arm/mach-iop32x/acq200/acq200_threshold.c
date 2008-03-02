@@ -108,7 +108,7 @@ static int th_state;
 typedef int (*threshold_calculator)(void* data);
 
 
-#define PTR(offset)  (va_buf(DG) + offset)
+
 
 
 
@@ -213,7 +213,7 @@ static int do_threshold(
 	int sample_sz)
 {
 	while(dcb->last_start < dcb->last_finish){
-		void *new_data = (void*)PTR(dcb->last_start);
+		void *new_data = (void*)BB_PTR(dcb->last_start);
 
 		if (calculator(new_data)){
 			dcb->last_start = dcb->last_finish;
