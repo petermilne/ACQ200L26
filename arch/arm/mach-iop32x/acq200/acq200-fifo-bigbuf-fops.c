@@ -189,7 +189,8 @@ static struct TblockListElement* getTble(
 	unsigned offset_in_phase = offsetw - phase->start_sample;
 
 
-	dbg(1, "phase %p offsetw %d offset_in_phase %d", 
+	dbg(1, "phase \"%s\" %p offsetw %d offset_in_phase %d", 
+	    phase->name,
 	    phase, offsetw, offset_in_phase);
 
 	list_for_each_entry(tble, &phase->tblocks, list){
@@ -244,13 +245,31 @@ struct Phase *getPhaseFromOffset(
 
 	list_for_each_entry(phase, &DMC_WO->phases, list){
 		if (phase_len(phase)){
+
+			dbg(1, "testing phase \"%s\" offsam %d "
+				    "start: %d end %d $s",
+				    phase->name,
+				    offsam,
+				    phase->start_sample,
+				    phase_end_sample(phase),
+				    (offsam >= phase->start_sample &&
+				     offsam <  phase_end_sample(phase) )? 
+								"GO": "no");
+
 			if (offsam >= phase->start_sample &&
 			    offsam <  phase_end_sample(phase) ){
 				if (tble){
 					*tble = getTble(phase, offsam);
 				}
 				return phase;
-			}
+			}else{
+				dbg(1, "skipping phase \"%s\" offsam %d "
+				    "start: %d end %d",
+				    phase->name,
+				    offsam,
+				    phase->start_sample,
+				    phase_end_sample(phase));			
+			}			
 		}else{
 			if (first && !phase->list.next){
 				dbg(1,"deprecated single phase ops");
