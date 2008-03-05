@@ -385,13 +385,17 @@ static ssize_t acq132_sfpga_load_write (
 	unsigned long startoff = *offset;
 /* #2b */       
 	for (isend = 0; isend < len; isend += sizeof(short)){
+		if (copy_from_user(&data, buf+isend, sizeof(short))){
+			return -EFAULT;
+		}
+
+		dbg(1, "offset %ld isend %d cursor %ld data 0x%04x",
+		    startoff, isend, startoff+isend, data);
+
 		TIMEOUT_RET(sfpga_conf_get_busy());
 
 		if (!sfpga_conf_init_is_hi()){
 			err("INIT down before send %lu", startoff + isend);
-			return -EFAULT;
-		}
-		if (copy_from_user(&data, buf+isend, sizeof(short))){
 			return -EFAULT;
 		}
 		
@@ -414,9 +418,11 @@ static int acq132_sfpga_load_release (struct inode *inode, struct file *file)
 
 	/* #3, #4 */
 	if (!sfpga_conf_done()){
+		err("Quitting bad done status");
 		return -EFAULT;
 	}
 	sfpga_conf_clr_prog();
+	info("ADC_FPGA load complete");
 	return 0;
 }
 

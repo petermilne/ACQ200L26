@@ -35,27 +35,27 @@
 
 
 static inline void sfpga_conf_clr_all(void) {
-	dbg(1, "01");
+	dbg(2, "01");
 	*ACQ132_SFPGA_CONF = 0;
 }
 static inline void sfpga_conf_set_prog(void) {
-	dbg(1, "01");
+	dbg(2, "01");
 	*ACQ132_SFPGA_CONF |= (1 << ACQ132_SFPGA_CONF_PROG);
 }	
 
 static inline void sfpga_conf_clr_prog(void) {
-	dbg(1, "01");
+	dbg(2, "01");
 	*ACQ132_SFPGA_CONF &= ~(1 << ACQ132_SFPGA_CONF_PROG);
 }
 
 static inline void sfpga_conf_set_update(void) {
-	dbg(1, "01");
+	dbg(2, "01");
 	*ACQ132_SFPGA_CONF |= (1 << ACQ132_SFPGA_CONF_UPDATE);
 }
 
 static inline int sfpga_conf_get_busy(void) {
 	int rc = (*ACQ132_SFPGA_CONF & (1<<ACQ132_SFPGA_CONF_BUSY)) != 0;
-	dbg(1, "busy %d", rc);
+	dbg(2, "busy %d", rc);
 	return rc;
 }
 
@@ -63,7 +63,7 @@ static inline int _sfpga_conf_get_init(void) {
 	u32 conf = *ACQ132_SFPGA_CONF; 
 	int lr = (conf >> ACQ132_SFPGA_CONF_INIT_LR) & 0x3;
 
-	dbg(1, "LR return %d", lr );
+	dbg(2, "LR return %d", lr );
 
 	return lr;
 }
@@ -85,7 +85,7 @@ static inline void sfpga_conf_send_data(u16 data)
 
 	*ACQ132_SFPGA_CONF = conf;		
 
-	dbg(1, "conf set 0x%08x", conf);
+	dbg(2, "conf set 0x%08x", conf);
 }
 
 static inline int sfpga_conf_done(void) {
@@ -93,7 +93,7 @@ static inline int sfpga_conf_done(void) {
 	int done = ((conf>>ACQ132_SFPGA_CONF_DONE_8) & ACQ132_SFPGA_CONF_8MASK)
 		== ACQ132_SFPGA_CONF_8MASK;
 	
-	dbg(1, "conf 0x%08x done %d", conf, done);
+	dbg(2, "conf 0x%08x done %d", conf, done);
 	return done;
 }
 #endif	/*  __ACQ132_H__ */
