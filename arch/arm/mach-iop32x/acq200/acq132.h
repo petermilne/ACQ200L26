@@ -80,7 +80,7 @@ static inline void sfpga_conf_send_data(u16 data)
 {
 	u32 conf = *ACQ132_SFPGA_CONF;
 	conf &= ~ACQ132_SFPGA_CONF_DATA;
-	conf |= data;
+	conf |= (1 << ACQ132_SFPGA_CONF_UPDATE) | data;
 
 
 	*ACQ132_SFPGA_CONF = conf;		

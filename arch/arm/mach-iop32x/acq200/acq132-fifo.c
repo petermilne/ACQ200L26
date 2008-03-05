@@ -341,7 +341,7 @@ The complete programming sequence is
 
 #1. set the Programming Mode to 1 wait for INIT to return high 
 #2 . then set UPDATE and  
-#2b start loading the data 16 bits at a time, and 
+#2 start loading the data 16 bits at a time, and 
 	checking the BUSY bit before sending the next data 
 	checking that INIT does not go low during load. 
 #3 After load is complete check that DONE has gone high
@@ -369,8 +369,6 @@ static int acq132_sfpga_load_open (struct inode *inode, struct file *file)
 	sfpga_conf_set_prog();
 	
 	TIMEOUT_RET(!sfpga_conf_init_is_hi());
-	/* #2 */
-	sfpga_conf_set_update();
 	return 0;
 }
 
@@ -383,7 +381,7 @@ static ssize_t acq132_sfpga_load_write (
 	u16 data;
 	int isend = 0;
 	unsigned long startoff = *offset;
-/* #2b */       
+/* #2 */       
 	for (isend = 0; isend < len; isend += sizeof(short)){
 		if (copy_from_user(&data, buf+isend, sizeof(short))){
 			return -EFAULT;
