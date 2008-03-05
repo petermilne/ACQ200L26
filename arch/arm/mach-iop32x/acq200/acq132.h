@@ -59,13 +59,21 @@ static inline int sfpga_conf_get_busy(void) {
 	return rc;
 }
 
-static inline int sfpga_conf_get_init(void) {
-	int lr = *ACQ132_SFPGA_CONF & ACQ132_SFPGA_CONF_INIT_LR;
-	int rc = lr == ACQ132_SFPGA_CONF_INIT_LR;
+static inline int _sfpga_conf_get_init(void) {
+	u32 conf = *ACQ132_SFPGA_CONF; 
+	int lr = (conf >> ACQ132_SFPGA_CONF_INIT_LR) & 0x3;
 
-	dbg(1, "LR %d return %d", lr, rc);
+	dbg(1, "LR return %d", lr );
 
 	return lr;
+}
+
+static inline int sfpga_conf_init_is_low(void) {
+	return _sfpga_conf_get_init() == 0;	
+}
+
+static inline int sfpga_conf_init_is_hi(void) {
+	return _sfpga_conf_get_init() == 0x3;
 }
 
 static inline void sfpga_conf_send_data(u16 data)

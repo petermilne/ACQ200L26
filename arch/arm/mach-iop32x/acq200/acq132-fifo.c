@@ -368,7 +368,7 @@ static int acq132_sfpga_load_open (struct inode *inode, struct file *file)
 	sfpga_conf_clr_all();
 	sfpga_conf_set_prog();
 	
-	TIMEOUT_RET(!sfpga_conf_get_init());
+	TIMEOUT_RET(!sfpga_conf_init_is_hi());
 	/* #2 */
 	sfpga_conf_set_update();
 	return 0;
@@ -387,7 +387,7 @@ static ssize_t acq132_sfpga_load_write (
 	for (isend = 0; isend < len; isend += sizeof(short)){
 		TIMEOUT_RET(sfpga_conf_get_busy());
 
-		if (!sfpga_conf_get_init()){
+		if (!sfpga_conf_init_is_hi()){
 			err("INIT down before send %lu", startoff + isend);
 			return -EFAULT;
 		}
@@ -397,7 +397,7 @@ static ssize_t acq132_sfpga_load_write (
 		
 		sfpga_conf_send_data(data);
 
-		if (!sfpga_conf_get_init()){
+		if (!sfpga_conf_init_is_hi()){
 			err("INIT down after send %lu", startoff + isend);
 			return -EFAULT;
 		}
@@ -910,12 +910,14 @@ static struct device_driver acq196_fpga_driver;
 
 extern int init_arbiter(void);
 
-static int acq196_fpga_probe(struct device *dev)
+static int acq132_fpga_probe(struct device *dev)
 {
 	init_pbi(dev);
 	init_arbiter();
 
-	if (*ACQ196_BDR == ACQ196_BDR_DEFAULT){
+	/* two reads allows for wedged PBI bus on jtag load */
+	if (*ACQ196_BDR == ACQ196_BDR_DEFAULT || 
+	    *ACQ196_BDR == ACQ196_BDR_DEFAULT    ){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");
@@ -945,7 +947,7 @@ static void acq196_fpga_dev_release(struct device * dev)
 
 static struct device_driver acq196_fpga_driver = {
 	.name     = "acq196fpga",
-	.probe    = acq196_fpga_probe,
+	.probe    = acq132_fpga_probe,
 	.remove   = acq196_fpga_remove,
 	.bus	  = &platform_bus_type,	
 };
