@@ -831,13 +831,15 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
 
-#ifdef ACQ196C
-		spin_lock(&DG->refillClient.lock);
-		if (DG->refillClient.client != 0){
-			DG->refillClient.client(BB_PTR(offset));	
+		if (++wo->dmc_dma_buf_modulus == BLOCK_MOD){
+			wo->dmc_dma_buf_modulus = 0;
+
+			spin_lock(&DG->refillClient.lock);
+			if (DG->refillClient.client != 0){
+				DG->refillClient.client(BB_PTR(offset));	
+			}
+			spin_unlock(&DG->refillClient.lock);
 		}
-		spin_unlock(&DG->refillClient.lock);
-#endif
 #ifndef WAV232
 		increment_scc(&wo->scc);
 

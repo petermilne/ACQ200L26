@@ -278,6 +278,11 @@ struct BDA {
 	enum { BDA_IDLE, BDA_BEFORE, BDA_DURING, BDA_AFTER, BDA_DONE } state;
 };
 
+/* 3x1k. Bigger #'s will work anyway.
+ * DMA blocks always channel align:
+ * LCM ( 192, 64, 32, 16, 1024k block)
+ */
+#define BLOCK_MOD 3	
 
 struct DMC_WORK_ORDER {
 /*** WARNING: cleanzone gets scrubbed every shot */
@@ -321,6 +326,7 @@ struct DMC_WORK_ORDER {
 	unsigned clock_count_immediate;
 	unsigned clock_count_latched;
 	unsigned epos;
+	int dmc_dma_buf_modulus;
 
 	unsigned clean_to_here;
 /*** end of cleanzone */
