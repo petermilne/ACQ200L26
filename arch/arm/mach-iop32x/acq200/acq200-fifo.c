@@ -831,15 +831,17 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
 
-		if (++wo->dmc_dma_buf_modulus == BLOCK_MOD){
-			wo->dmc_dma_buf_modulus = 0;
-
+		if (wo->dmc_dma_buf_modulus == 0){
 			spin_lock(&DG->refillClient.lock);
 			if (DG->refillClient.client != 0){
 				DG->refillClient.client(BB_PTR(offset));	
 			}
 			spin_unlock(&DG->refillClient.lock);
 		}
+		if (++wo->dmc_dma_buf_modulus == BLOCK_MOD){
+			wo->dmc_dma_buf_modulus = 0;
+		}
+
 #ifndef WAV232
 		increment_scc(&wo->scc);
 
