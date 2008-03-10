@@ -999,6 +999,8 @@ static inline int DIO_IS_INPUTH(unsigned cc, int ib)
 /** @@todo this is a hack to circumvent duff dio readback */
 static u32 control_mirror;
 
+static char last_store[32];
+
 static ssize_t store_dio_bit(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -1034,8 +1036,13 @@ static ssize_t store_dio_bit(
 				break;
 			case DIO_MASK_INPUT:
 			default:
+				/* set as input. record standard value */
 				control = DIO_SET_INPUT(control, ibit);
+				sprintf(last_store, "%d -", ibit);
+				goto write_reg;
 			}
+			strncpy(last_store, buf, sizeof(last_store)-1);
+		write_reg:
 			*ACQ200_DIOCON = control;
 			control_mirror = control;
 		}
@@ -1044,7 +1051,16 @@ static ssize_t store_dio_bit(
         return strlen(buf);
 }
 
-static DEVICE_ATTR(dio_bit, S_IRUGO|S_IWUGO, 0, store_dio_bit);
+static ssize_t show_dio_bit(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	strcpy(buf, last_store);
+	return strlen(last_store);
+}
+
+static DEVICE_ATTR(dio_bit, S_IRUGO|S_IWUGO, show_dio_bit, store_dio_bit);
 
 
 static ssize_t store_dio(
