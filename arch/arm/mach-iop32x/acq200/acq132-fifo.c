@@ -914,11 +914,108 @@ static struct device_driver acq196_fpga_driver;
 
 extern int init_arbiter(void);
 
+
+#define BLOCKSAM 1024
+
+static void acq132_block_transform(
+	short *to, short *from, int nwords, int channel_sam)
+/* read a block of data from to and farm 8 channels to from */
+{
+	int samples = nwords/4;
+	union {
+		unsigned long long ull;
+		short ch[4];
+	} buf;
+	unsigned long long *full = (unsigned long long *)from;
+	int sam;
+	int chx;
+
+	for (sam = 0; sam < samples; ++sam){
+		buf.ull = *full++;
+
+		for (chx = 0; chx < 4; ++chx){
+			to[chx*channel_sam + sam] = buf.ch[chx];
+		}			
+	}
+	
+}
+static void acq132_transform(short *to, short *from, int nwords, int stride)
+/*
+ * acq132 data is presented as 4-sample vectors, each 1K samples
+ *
+ * for row in { A B C D }
+ *	for block_samples
+ *		read quad:1XL,1XR,2XL,2XR 
+ *		farm
+ *		read quat:1YL,IYR,2YL,2YR
+ * handle data in 2x2 squares
+ * in:                out:
+ *      s10s00             s00s01
+ *      s11s01             s10s11
+ *
+ */
+{
+#define BLOCK_OFF(b) ((b)*8*nsamples)	 // increment to by blockchannels
+#define ROW_OFF      (8*BLOCKSAM)	 // words in row-block
+	int nsamples = nwords/stride;	
+	int rows = stride/8;
+	int block_div = 8/rows/BLOCKSAM;
+	int blocks = nwords/block_div;
+	int nw = nwords;
+	int block;
+/* actually, A is divvied into two half blocks, AL, AR: */
+
+	if (blocks * block_div != nwords){
+		+++blocks;
+	}
+	for (block = 0; block < blocks; ++block, nw -= block_div){
+		int words_in_block = min(nw/rows, BLOCKSAM*8);
+		int words_in_half_block = words_in_block/2;
+		int r;
+
+		for (r = 0; r < rows; ++r){
+			acq132_block_transform(
+				to + BLOCK_OFF(block), 
+				from, 
+				words_in_half_block, 
+				nsamples
+			);
+			from += words_in_half_block;
+			acq132_block_transform(
+				to + BLOCK_OFF(block) + 4*nsamples,
+				from,
+				words_in_half_block,
+				nsamples
+				);
+			from += words_in_half_block;
+
+		}
+	}
+}
+
+
+
+static 	struct Transformer transformer = {
+	.name = "acq132",
+	.transform = acq132_transform
+};
+
+static void register_custom_transformer(void)
+{
+	int it;
+	it = acq200_registerTransformer(&transformer);
+	if (it >= 0){
+		acq200_setTransformer(it);
+	}else{
+		err("transformer %s NOT registered", transformer.name);
+	}
+}
 static int acq132_fpga_probe(struct device *dev)
 {
 	init_pbi(dev);
 	init_arbiter();
 
+	register_custom_transformer();
 	/* two reads allows for wedged PBI bus on jtag load */
 	if (*ACQ196_BDR == ACQ196_BDR_DEFAULT || 
 	    *ACQ196_BDR == ACQ196_BDR_DEFAULT    ){
