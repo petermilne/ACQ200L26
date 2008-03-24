@@ -81,11 +81,13 @@ module_param(LOG2_NAVG, int, 0644);
 
 
 static void adjust_this_tblock(
-	struct Phase * phase, struct TblockListElement *tble)
+	struct Phase * phase, struct TblockListElement *tble, int phase_only)
 {
-	tble->phase_sample_start >>= LOG2_NAVG;
-	tble->tblock_sample_start >>= LOG2_NAVG;
-	tble->sample_count >>= LOG2_NAVG;
+	if (!phase_only){
+		tble->phase_sample_start >>= LOG2_NAVG;
+		tble->tblock_sample_start >>= LOG2_NAVG;
+		tble->sample_count >>= LOG2_NAVG;
+	}
 
 
 	if (phase->transformer_private == 0){
@@ -115,7 +117,11 @@ static void adjust_this_tblock(
 		}
 	}
 }
-static void adjust_tblock_in_phase(struct Phase * phase, void *cursor)
+
+#define ADJUSTED 1
+
+static int adjust_tblock_in_phase(
+	struct Phase * phase, void *cursor, int phase_only)
 /* the data in this tblock just got shortened, so we have to find all
  * the corresponding tble's and adjust them...
  * Also, make a once-only adjustment to phase global actual_samples ..
@@ -127,17 +133,19 @@ static void adjust_tblock_in_phase(struct Phase * phase, void *cursor)
 	int this_index = TBLOCK_INDEX(cursor - va_buf(DG));
 
 	if (phase == 0){
-		return;
+		return 0;
 	}
 
 	list_for_each_entry(tble, &phase->tblocks, list){
 		if (TBLOCK_INDEX(tble->tblock->offset) == this_index){
 			dbg(1, "looking for %d got tblock:%d %s", 
 			    this_index,	tble->tblock->iblock, "Adjusting");
-			adjust_this_tblock(phase, tble);
-			break;
+			adjust_this_tblock(phase, tble, phase_only);
+			return ADJUSTED;
 		}
 	}	
+
+	return 0;
 }
 
 static void ma_transform(short *to, short *from, int nwords, int stride)
@@ -160,6 +168,7 @@ static void ma_transform(short *to, short *from, int nwords, int stride)
 	int navg = 1<<LOG2_NAVG;
 	int *sums;
 	int ichan;
+	int phase_only = 0;
 
 	dbg(1, "from: %p TBLOCK: %d nw:%d",
 	    from, TBLOCK_INDEX((void*)from - va_buf(DG)),
@@ -203,9 +212,9 @@ static void ma_transform(short *to, short *from, int nwords, int stride)
 #undef GET1
 #undef IDC0
 
-	adjust_tblock_in_phase(DMC_WO->pre, from);
-	adjust_tblock_in_phase(DMC_WO->post, from);
-
+	
+	phase_only = adjust_tblock_in_phase(DMC_WO->pre, from, 0) == ADJUSTED;
+	adjust_tblock_in_phase(DMC_WO->post, from, phase_only);
 
 	kfree(sums);
 }
