@@ -247,7 +247,7 @@ struct Phase *getPhaseFromOffset(
 		if (phase_len(phase)){
 
 			dbg(1, "testing phase \"%s\" offsam %d "
-				    "start: %d end %d $s",
+				    "start: %d end %d %s",
 				    phase->name,
 				    offsam,
 				    phase->start_sample,

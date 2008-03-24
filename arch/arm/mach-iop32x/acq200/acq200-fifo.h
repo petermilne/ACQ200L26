@@ -1260,4 +1260,7 @@ extern int store_hook(
 
 extern struct proc_dir_entry* proc_acq200;
 
+extern TBLE* acq200_reserveFreeTblock(void);
+extern void acq200_replaceFreeTblock(TBLE* tble);
+
 #endif /* ACQ200_FIFO_H__ */

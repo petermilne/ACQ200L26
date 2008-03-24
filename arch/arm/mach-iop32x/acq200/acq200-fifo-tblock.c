@@ -616,4 +616,30 @@ void acq200_phase_rollup_excess(struct Phase* phase)
 	DBG(1, "99:start 0x%08x len %d",  phase->start_off, phase->actual_len);
 }
 
+TBLE* acq200_reserveFreeTblock(void)
+{
+	struct BIGBUF *bb = &DG->bigbuf;
+	unsigned long flags;
+	TBLE* tble;
+
+	spin_lock_irqsave(&bb->tb_list_lock, flags);
+	tble = TBLE_LIST_ENTRY(bb->free_tblocks.next);
+	list_del(&tble->list);
+	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+	return tble;
+}
+
+void acq200_replaceFreeTblock(TBLE* tble)
+{
+	struct BIGBUF *bb = &DG->bigbuf;
+	unsigned long flags;
+
+	spin_lock_irqsave(&bb->tb_list_lock, flags);
+	list_add_tail(&tble->list, &bb->free_tblocks);
+	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+}
+
+
 EXPORT_SYMBOL_GPL(acq200_phase_release_tblocks);
+EXPORT_SYMBOL_GPL(acq200_reserveFreeTblock);
+EXPORT_SYMBOL_GPL(acq200_replaceFreeTblock);
