@@ -367,7 +367,7 @@ static int acq132_sfpga_load_open (struct inode *inode, struct file *file)
 	/* #1 */
 	sfpga_conf_clr_all();
 	sfpga_conf_set_prog();
-	
+	schedule();
 	TIMEOUT_RET(!sfpga_conf_init_is_hi());
 	return 0;
 }
@@ -915,13 +915,28 @@ static struct device_driver acq196_fpga_driver;
 extern int init_arbiter(void);
 
 
-#define BLOCKSAM 1024
 
-static void acq132_block_transform(
-	short *to, short *from, int nwords, int channel_sam)
+
+
+/*
+ * acq132 data is presented as 8-sample rows, in ROW_SAM blocks
+ *
+ * for block in BLOCKS
+ *	for row in { A B C D }
+ *		for ROW_SAM
+ *			acq132_transform_row(to+ROW_OFF(row), from)
+ *			update from
+ *		update to
+ *
+ */
+#define ROW_SAM 128
+#define ROW_CHAN 8
+#define ROW_BLOCK_OFF   (ROW_SAM*BLOCKSAM)	 // words in row-block
+
+static void acq132_transform_row(
+	short *to, short *from, int nsamples, int channel_sam)
 /* read a block of data from to and farm 8 channels to from */
 {
-	int samples = nwords/4;
 	union {
 		unsigned long long ull;
 		short ch[4];
@@ -930,66 +945,43 @@ static void acq132_block_transform(
 	int sam;
 	int chx;
 
-	for (sam = 0; sam < samples; ++sam){
+	for (sam = 0; sam < nsamples; ++sam){
 		buf.ull = *full++;
 
-		for (chx = 0; chx < 4; ++chx){
+		for (chx = 0; chx < ROW_CHAN; ++chx){
 			to[chx*channel_sam + sam] = buf.ch[chx];
 		}			
 	}
 	
 }
 static void acq132_transform(short *to, short *from, int nwords, int stride)
-/*
- * acq132 data is presented as 4-sample vectors, each 1K samples
- *
- * for row in { A B C D }
- *	for block_samples
- *		read quad:1XL,1XR,2XL,2XR 
- *		farm
- *		read quat:1YL,IYR,2YL,2YR
- * handle data in 2x2 squares
- * in:                out:
- *      s10s00             s00s01
- *      s11s01             s10s11
- *
- */
 {
-#define BLOCK_OFF(b) ((b)*8*nsamples)	 // increment to by blockchannels
-#define ROW_OFF      (8*BLOCKSAM)	 // words in row-block
 	int nsamples = nwords/stride;	
-	int rows = stride/8;
-	int block_div = 8/rows/BLOCKSAM;
-	int blocks = nwords/block_div;
+	int rows = stride/ROW_CHAN;
+	int block_words = rows * ROW_CHAN * ROW_SAM;
+	int blocks = nwords/block_words;
 	int nw = nwords;
 	int block;
-/* actually, A is divvied into two half blocks, AL, AR: */
+#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 
-	if (blocks * block_div != nwords){
-		+++blocks;
+	if (blocks * block_words != nwords){
+		++blocks;
 	}
-	for (block = 0; block < blocks; ++block, nw -= block_div){
-		int words_in_block = min(nw/rows, BLOCKSAM*8);
-		int words_in_half_block = words_in_block/2;
-		int r;
+	for (block = 0; block < blocks; ++block, nw -= block_words){
+		int bwords = min(nw/rows, block_words);
+		int bsamples = bwords/ROW_CHAN;
+		int row;
 
-		for (r = 0; r < rows; ++r){
-			acq132_block_transform(
-				to + BLOCK_OFF(block), 
+		for (row = 0; row < rows; ++row){
+			acq132_transform_row(
+				to + ROW_OFF(row), 
 				from, 
-				words_in_half_block, 
+				bsamples,
 				nsamples
 			);
-			from += words_in_half_block;
-			acq132_block_transform(
-				to + BLOCK_OFF(block) + 4*nsamples,
-				from,
-				words_in_half_block,
-				nsamples
-				);
-			from += words_in_half_block;
-
+			from += bwords;
 		}
+		to += bsamples;
 	}
 }
 
