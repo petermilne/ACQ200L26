@@ -106,7 +106,7 @@ void acq200_arch_reset(char mode)
 	       1);
 #endif
 	*(volatile unsigned char*)(ACQ200_CPLD+2) = 1;
-	printk("%s **** ERROR **** ALL DONE: now we should be dead\n");
+	printk("**** ERROR **** ALL DONE: now we should be dead\n");
 }
 
 
@@ -886,9 +886,10 @@ static int __init acq200_core_init(void)
 
 /*
  * pick up ethernet mac addresses from command line
+ * D-TACQ's OUI is 0x002154
  */
 
-#define D_TACQ_MAC_BLOCK  { '\x0', 'd', 't', 'a', '\x0', '\x0' }
+#define D_TACQ_MAC_BLOCK  { '\x0', '\x21', '\x54', '\x0', '\x0', '\x0' }
 
 #define MIN(a,b)  ((a)<(b)?(a):(b))
 
