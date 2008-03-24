@@ -18,7 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define VERID "$Revision: 1.5 $ build B1020 "
+#define VERID "$Revision: 1.5 $ build B1021 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -26,6 +26,7 @@
  * This file may be redistributed under the terms of the GNU GPL.
 */
 
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/moduleparam.h>
@@ -73,6 +74,9 @@ module_param(nice_mean, int, 0644);
 char* verid = VERID;
 module_param(verid, charp, 0444);
 
+
+int update_interval_ms;
+module_param(update_interval_ms, int, 0444);
 
 #define TD_SZ (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+2+1)*TD_SZ)
@@ -131,6 +135,38 @@ static void sum_up(void *data)
 	}
 }
 
+#define LHIST 3
+#define NHIST (1<<LHIST)
+#define HINC(ix)	(((ix)+1)&(NHIST-1))
+
+static void calculate_interval(void)
+/* store delta jiffies in history, do boxcar avg */
+{
+	static unsigned long history[NHIST];
+	static unsigned long previous;
+	static unsigned long boxcar;
+	static int ix;
+
+	unsigned long dj;
+
+	if (previous == 0){
+		previous = jiffies;
+		return;
+	}
+	/* jiffies is negative for the first 5 mins ... */
+	if (likely(time_after(jiffies, previous))){
+		dj = jiffies - previous;
+	}else{
+		dj = previous - jiffies;
+	}
+
+	boxcar = boxcar - history[ix] + dj;
+	history[ix] = dj;
+	update_interval_ms = ((boxcar*1000) >> LHIST) / HZ;	
+
+	previous = jiffies;
+	ix = HINC(ix);
+}
 
 static void mean_work(void *data) 
 {
@@ -148,6 +184,7 @@ static void mean_work(void *data)
 			memset(work_state.the_sums, 0, SUMSLEN);
 			work_state.imean = 0;
 			iter++;
+			calculate_interval();
 		}
 		work_state.iskip = 0;
 	}
