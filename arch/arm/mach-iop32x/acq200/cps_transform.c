@@ -65,7 +65,7 @@ int cps_transform_debug;
 module_param(cps_transform_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.0 $ build B1000 "
+#define VERID "$Revision: 1.0 $ build B1001 "
 
 
 char cps_transform_driver_name[] = "cps_transform";
@@ -191,6 +191,7 @@ static void cps_transform(short *to, short *from, int nwords, int stride)
 	int max_stride = sigstride * nsigtblocks;
 	int delta_sam = 0;
 	int po = 0;
+	int tosample = 0;
 
 	for (isample = 0; isample != nsamples; ++isample){
 		int fromrow = isample * stride;
@@ -200,9 +201,10 @@ static void cps_transform(short *to, short *from, int nwords, int stride)
 			++delta_sam;
 		}else{
 			for (ichannel = 0; ichannel != stride; ++ichannel){
-				to[ichannel*nsamples + isample] =
+				to[ichannel*nsamples + tosample] =
 					from[fromrow + ichannel];
 			}
+			tosample++;
 		}
 	}
 
@@ -278,7 +280,8 @@ static void reserve_tblocks(void)
 
 
 	for (it = 0; it < nsigtblocks; ++it){
-		captives[it] = acq200_reserveFreeTblock();		
+		captives[it] = acq200_reserveFreeTblock();
+		atomic_inc(&captives[it]->tblock->in_phase);				
 	}	
 }
 
@@ -287,6 +290,7 @@ static void replace_tblocks(void)
 	int it;
 
 	for (it = 0; it < nsigtblocks; ++it){
+		atomic_dec(&captives[it]->tblock->in_phase);
 		acq200_replaceFreeTblock(captives[it]);
 	}
 	kfree(captives);
