@@ -78,7 +78,8 @@ EXPORT_SYMBOL_GPL(acq200_debug);
 
 
 
-#define FPGA_CSR_PROGRAM 0x80
+#define FPGA_CSR_PROGRAM 0x80	/* "PROGRAM" => clear FPGA memory	*/
+#define FPGA_CSR_CS	 0x40	/* ChipSelect needed for S3A		*/
 
 #define FPGA_CSR_INIT    0x04
 #define FPGA_CSR_BUSY    0x02
@@ -190,12 +191,23 @@ static int acq200_fpga_load_open (struct inode *inode, struct file *file)
 			return -ETIMEDOUT;
 		}
 	}
-
+	*fpga_csr = FPGA_CSR_PROGRAM|FPGA_CSR_CS;
 	return 0;
 }
 
 #define CHECK_INIT_HIGH_ONRELEASE
 
+#define NCLOCKS 12
+
+static void add_config_clocks(void)
+{
+	volatile u8* fpga_data= (volatile u8*)(ACQ200_CPLD+0x19);
+	int nclocks = NCLOCKS;
+
+	while(nclocks--){
+		*fpga_data = 0x00;
+	}
+}
 static int acq200_fpga_load_release (struct inode *inode, struct file *file)
 /*
  * Test that the load has completed OK, then hotplug into pci subsys
@@ -205,6 +217,10 @@ static int acq200_fpga_load_release (struct inode *inode, struct file *file)
 	u8 status;
 	int timeout = 0x10000;
 	int rc = 0;
+
+	*fpga_csr = FPGA_CSR_PROGRAM;		/* clears FPGA_CSR_CS */       
+	add_config_clocks();	
+
 
 #ifdef CHECK_INIT_HIGH_ONRELEASE
 	dbg(1, "CHECK_INIT_HIGH_ONRELEASE");
