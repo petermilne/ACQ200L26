@@ -29,6 +29,7 @@
 	"$Id: acq216-fifo.c,v 1.26 2006/07/28 14:46:14 pgm Exp $\n"
 
 #define ACQ_INTEN 1
+#define PCI_FPGA 1
 
 #define FPGA_INT IRQ_ACQ200_FP
 #define FPGA_INT_MASK (1<<FPGA_INT)

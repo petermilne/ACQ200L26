@@ -6,6 +6,7 @@
 #include "acq200-fifo-top.h"
 
 #define ACQ_INTEN 1
+#define PCI_FPGA  1
 
 #define FPGA_INT IRQ_ACQ200_FP
 #define FPGA_INT_MASK (1<<FPGA_INT)

@@ -1817,7 +1817,7 @@ static int fiq_init_action(void)
 	regs.ARM_ip = (long)DG,
 	regs.ARM_r8 = DG->head->pa;
 
-#ifndef ACQ196
+#ifdef PCI_FPGA
 	regs.ARM_r9 = (DG->fpga.regs.pa&~0xf0000000)|ACQ200_PCI_VSTAT;
 #else
 	regs.ARM_r9 = (long)DG->fpga.regs.va;
