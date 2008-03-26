@@ -782,8 +782,14 @@ static void poll_dma_done(void);
 
 #define IS_MFA(p) (((unsigned)p & 0xff000000) == 0)
 
+
 static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 {
+/* run client in arrears to ensure it doesn't get values in flight -
+ * a possibility at slow sample rates
+ */
+	static void* clv;		/* client last value */
+
 	struct iop321_dma_desc *pbuf;
 	int nrefills = 0;
 	u32 offset;
@@ -832,11 +838,14 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		offset = pbuf->LAD - wo->pa;
 
 		if (wo->dmc_dma_buf_modulus == 0){
-			spin_lock(&DG->refillClient.lock);
-			if (DG->refillClient.client != 0){
-				DG->refillClient.client(BB_PTR(offset));	
+			if (clv != 0){
+				spin_lock(&DG->refillClient.lock);
+				if (DG->refillClient.client != 0){
+					DG->refillClient.client(clv);
+				}
+				spin_unlock(&DG->refillClient.lock);
 			}
-			spin_unlock(&DG->refillClient.lock);
+			clv = BB_PTR(offset);
 		}
 		if (++wo->dmc_dma_buf_modulus == BLOCK_MOD){
 			wo->dmc_dma_buf_modulus = 0;
