@@ -19,8 +19,8 @@
 /* ------------------------------------------------------------------------- */
 
 /*
- * Module: provides hook to dio32.
- * Future: RTM DDS uses 
+ * Module: provides hook to RTMDDS
+ * RTMDDS uses an AD9854 DDS chip
  */
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -62,7 +62,7 @@ module_param(rtm_debug, int, 0664);
 
 char acq100_rtm_driver_name[] = "acqX00-rtm-dds";
 char acq100_rtm_driver_string[] = "D-TACQ RTM driver";
-char acq100_rtm_driver_version[] = "$Revision: 1.8 $ build B1001 " __DATE__;
+char acq100_rtm_driver_version[] = "$Revision: 1.8 $ build B1002 " __DATE__;
 char acq100_rtm_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 
 
@@ -76,6 +76,7 @@ char acq100_rtm_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 /* DI0 == 1 but DO0 == 0 ? this is logic? 
  * How many electronic engineers does it take to screw in a light bulb?
  */
+
 #define DDS_SRC_REFCLK 0
 #define DDS_SRC_DI0    1
 #define DDS_SRC_DI1    2
@@ -83,6 +84,10 @@ char acq100_rtm_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 #define DDS_SRC_DI3    4
 #define DDS_SRC_DI4    5
 #define DDS_SRC_DI5    6
+#define DDS_SRC_ECM    7	/* External Clock Multiplier (where fitted) */
+
+#define DDS_SRC_MIN	0
+#define DDS_SRC_MAX	7
 
 #define DDS_DST_DO0 0
 #define DDS_DST_DO1 1
@@ -363,11 +368,18 @@ static ssize_t store_dds_clksrc(
 	int isel;
 
 	if (sscanf(buf, "%d", &isel) && 
-	    IN_RANGE(isel, DDS_SRC_REFCLK, DDS_SRC_DI5)){
-		if (isel == DDS_SRC_REFCLK){
+	    IN_RANGE(isel, DDS_SRC_MIN, DDS_SRC_MAX)){
+		switch(isel){
+		case DDS_SRC_REFCLK:
 			dds_refclk_mult = 4;
-			set_csr1();
+			break;
+		case DDS_SRC_ECM:
+			dds_refclk_mult = 20;
+			break;
+		default:
+			break;
 		}
+		set_csr1();
 		set_dds_in(isel);
 	}
             
