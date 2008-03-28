@@ -3424,12 +3424,13 @@ static void init_endstops( int count )
 
 		dmad->NDA = 0;
 		dmad->PUAD = 0;
-#ifdef ACQ196 /* mem to mem on PBI: source is PDA, dest is LAD */
-		dmad->PDA = lbuf->pa;
-		dmad->LAD =  DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
-#else		
+#ifdef PCI_FPGA
 		dmad->PDA = DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
 		dmad->LAD = lbuf->pa;
+#else
+	/* mem to mem on PBI: source is PDA, dest is LAD */
+		dmad->PDA = lbuf->pa;
+		dmad->LAD =  DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
 #endif
 		dmad->BC = 4;
 
