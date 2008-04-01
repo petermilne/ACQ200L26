@@ -299,15 +299,7 @@ static ssize_t show_channel_mapping(
 	char * buf)
 {
 	int len = 0;
-	if ((CAPDEF->channel_mask&1)){
-		len += build_channel_mapping( 0, buf+len);
-	}
-	if ((CAPDEF->channel_mask&2)){
-		len += build_channel_mapping(32, buf+len);
-	}
-	if ((CAPDEF->channel_mask&4)){
-		len += build_channel_mapping(64, buf+len);
-	}
+	len += build_channel_mapping( 0, buf+len);
 	return len;
 }
 static DEVICE_ATTR(channel_mapping, S_IRUGO, show_channel_mapping, 0);
@@ -331,15 +323,7 @@ static ssize_t show_channel_mapping_bin(
 	char * buf)
 {
 	int len = 0;
-	if ((CAPDEF->channel_mask&1)){
-		len += build_channel_mapping_bin( 0, buf+len);
-	}
-	if ((CAPDEF->channel_mask&2)){
-		len += build_channel_mapping_bin(32, buf+len);
-	}
-	if ((CAPDEF->channel_mask&4)){
-		len += build_channel_mapping_bin(64, buf+len);
-	}
+	len += build_channel_mapping_bin( 0, buf+len);
 	return len;
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
@@ -373,19 +357,34 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 #endif
 }
 
+#define MASK_D	0x000f000f
+#define MASK_C  0x00f000f0
+#define MASK_B  0x0f000f00
+#define MASK_A  0xf000f000
+
+int count_bits(unsigned mask) {
+	int ibit;
+	int count = 0;
+
+	for (ibit = 0; ibit < 32; ++ibit){
+		if (mask & (1<<ibit)){
+			++count;
+		}
+	}
+	return count;
+}
+
 void acq200_setChannelMask(unsigned mask)
 {
 	int nblocks;
 
-	mask = mask&0x7;      /* actually a bank mask */
-	CAPDEF->channel_mask = mask;
+	if (mask&MASK_D) mask |= MASK_D;
+	if (mask&MASK_C) mask |= MASK_C;
+	if (mask&MASK_B) mask |= MASK_B;
+	if (mask&MASK_A) mask |= MASK_A;
 
-	for (nblocks = 0; mask; mask >>= 1){
-		if (mask&1){
-			++nblocks;
-		}
-	}
-	CAPDEF_set_nchan(nblocks * 32);
+	CAPDEF->channel_mask = mask;
+	CAPDEF_set_nchan(count_bits(mask));
 }
 
 

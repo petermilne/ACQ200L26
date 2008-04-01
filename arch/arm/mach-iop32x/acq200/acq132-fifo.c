@@ -22,7 +22,7 @@
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID \
-"$Id: acq196-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $\n"
+"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1007\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -49,6 +49,9 @@
 
 int int_clk_calcmode;
 module_param(int_clk_calcmode, int, 0664);
+
+int stub_transform;
+module_param(stub_transform, int, 0664);
 
 #define AICHAN_DEFAULT 96
 
@@ -848,7 +851,7 @@ static struct CAPDEF* acq196_createCapdef(void)
 {
 	static struct CAPDEF _capdef = {
 		.demand_len = 0x100000,
-		.channel_mask = 0x00007,         /* 3 blocks of 32 */
+		.channel_mask = 0xffff,       
 		.mode = M_SOFT_TRANSIENT,
 		.pit_stop = 1
 	};
@@ -856,7 +859,7 @@ static struct CAPDEF* acq196_createCapdef(void)
 
 	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
 
-	capdef_set_nchan(capdef, 96);
+	capdef_set_nchan(capdef, 32);
 	capdef_set_word_size(capdef, 2);
 
 	capdef->ev[0] = 
@@ -929,30 +932,80 @@ extern int init_arbiter(void);
  *		update to
  *
  */
-#define ROW_SAM 128
-#define ROW_CHAN 8
+#define ROW_SAM		128
+#define ROW_CHAN	8
+#define ROW_WORDS	(ROW_SAM*ROW_CHAN)
 #define ROW_BLOCK_OFF   (ROW_SAM*BLOCKSAM)	 // words in row-block
 
-static void acq132_transform_row(
+//#define DEBUGGING
+//#define UNROLL
+
+#ifdef DEBUGGING
+short* to1;
+short* to2;
+short* from1;
+short* from2;
+#endif
+
+void acq132_transform_row(
 	short *to, short *from, int nsamples, int channel_sam)
 /* read a block of data from to and farm 8 channels to from */
 {
 	union {
-		unsigned long long ull;
-		short ch[4];
+		unsigned long long ull[2];
+		short ch[8];
 	} buf;
 	unsigned long long *full = (unsigned long long *)from;
 	int sam;
 	int chx;
 
-	for (sam = 0; sam < nsamples; ++sam){
-		buf.ull = *full++;
+	dbg(3, "to:%p from:%p nsamples:%d channel_sam:%d",
+	    to, from, nsamples, channel_sam);
 
+	if (stub_transform){
+		dbg(3, "stub");
+		return;
+
+	}
+	for (sam = 0; sam < nsamples; ++sam){
+		buf.ull[0] = *full++;
+		buf.ull[1] = *full++;
+
+#ifdef DEBUGGING
+		if ((short*)full < from1 || (short*)full > from2){
+			err("from outrun at  %p %p %p sam:%d",
+			    from1, full, from2, sam);
+			return;
+		}
+#endif
+
+#ifndef UNROLL
 		for (chx = 0; chx < ROW_CHAN; ++chx){
+
+#ifdef DEBUGGING
+			short *pto = to + chx*channel_sam + sam;
+			if (pto < to1 || pto > to2){
+				err("buffer outrun at %p %p %p chx:%d sam:%d",
+				    to1, pto, to2, chx, sam);
+				return;
+			}
+#endif
 			to[chx*channel_sam + sam] = buf.ch[chx];
 		}			
+#else
+		chx = 0;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
+#endif
 	}
-	
+
+	dbg(3, "99");	
 }
 static void acq132_transform(short *to, short *from, int nwords, int stride)
 {
@@ -964,13 +1017,27 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 	int block;
 #define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 
-	if (blocks * block_words != nwords){
+	if (blocks * block_words < nwords){
 		++blocks;
 	}
+
+	dbg(1, "blocks:%d", blocks);
+	dbg(1, "nsamples:%d", nsamples);
+
+#ifdef DEBUGGING
+	to1 = to;
+	to2 = to+nwords;
+	dbg(1, "to   %p to %p", to1, to2);
+	from1 = from;
+	from2 = from+nwords;
+	dbg(1, "from %p to %p", from1, from2);
+#endif
+
 	for (block = 0; block < blocks; ++block, nw -= block_words){
-		int bwords = min(nw/rows, block_words);
-		int bsamples = bwords/ROW_CHAN;
+		int bsamples = min(nw, block_words)/rows/ROW_CHAN;
 		int row;
+
+		dbg(2, "block:%d to:%p from:%p", block, to, from);
 
 		for (row = 0; row < rows; ++row){
 			acq132_transform_row(
@@ -979,10 +1046,13 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 				bsamples,
 				nsamples
 			);
-			from += bwords;
+			from += ROW_WORDS;
 		}
 		to += bsamples;
+		dbg(2, "block:%d to:%p from:%p", block, to, from);
 	}
+
+	dbg(1, "99");
 }
 
 
