@@ -22,7 +22,7 @@
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID \
-"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1011\n"
+"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1012\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -304,7 +304,7 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 static struct DevGlobs acq132_dg = {
 	.btype = BTYPE_AI,
-	.hitide = 7,
+	.hitide = 9,
 	.max_alloc = 10240,
 	.busywait = 0,
 	.sample_read_start = 0,
@@ -321,11 +321,8 @@ static struct DevGlobs acq132_dg = {
 	.FEEDCODE = 0xfeedc0de,
 	.DEADBEEF = 0xdeadbeef,
 #endif
-#ifdef ALL_FIFO_FLAGS_HAPPY
-	.FIFERR = ACQ196_FIFSTAT_ADC_ERR,
-#else
 	.FIFERR = 0x00000060,       /* HOT OVER+UNDER */
-#endif
+
 	.pulse.pulse_count = 0, 
 	.pulse.ibit = 1,
 	.pulse.active_high = 0,
@@ -336,8 +333,7 @@ static struct DevGlobs acq132_dg = {
 	.get_max_active = 1024,
 	.active_batch_threshold = 64,
 	.init_endstops = 32,
-/* 	.eoc_int_modulo_mask = 3,	*/
-	.eoc_int_modulo_mask = 0,
+ 	.eoc_int_modulo_mask = 3,      
 	.activate_event_on_arm = 1,
 
 	.dcb.dcb_max = 2048,

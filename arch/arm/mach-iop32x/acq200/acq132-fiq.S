@@ -45,23 +45,23 @@
 #if defined ACQ132
 
 /*
- * HOTPOINT: 16 levels, 32K.
+ * HOTPOINT: 32 levels, 32K.
  * 0x2 : 2K
  * 0x4 : 4K
  * 0x6 : 6K
  * 0x8 : 8K
  */
 	
-#if 1
+#if 0
 #define CHECK_2B 0	
 #else	
-#define HOT7B 0x8	     /* for 96 channels */		
-#define CHECK_2B 7           /* Q Fourth block */		
+#define HOTxB 0x9
+#define CHECK_2B 7
 #endif	
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
 	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT
-	cmp	\tmp, #HOT7B
+	cmp	\tmp, #HOTxB
 	blt	\not_2b
 	.endm
 #else

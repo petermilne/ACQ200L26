@@ -3469,7 +3469,7 @@ static int acq200_proc_stat_timing(
 	DPRINTF(cdog_trips, "%d");
 
 	len += PRINTF( FMT "%d\n", "blocklen",  DG->dma_block_len);
-	len += PRINTF( FMT "[",	"blocks");
+	len += PRINTF( FMT "[",	"#blocks in dma chain");
 
 	for (iblock = 0; iblock != MAX_DMA_BLOCKS; ++iblock){
 		len += PRINTF(" %5d", DG->stats.dma_blocks[iblock]);

@@ -243,11 +243,11 @@ struct Phase {
 #define NEXT_PHASE(phase)     VALID_PLE(phase->list.next, &DMC_WO->phases)
 #define PREV_PHASE(phase)     VALID_PLE(phase->list.prev, &DMC_WO->phases)
 
-#define SET_PHASE_START_OFF(phase, value)			\
-	do {							\
-		phase->start_off = value;			\
-		info("SET_PHASE_START_OFF %d", phase->start_off);	\
-    } while(0)							\
+#define SET_PHASE_START_OFF(phase, value)				\
+	do {								\
+		phase->start_off = value;				\
+		dbg(1, "SET_PHASE_START_OFF %d", phase->start_off);	\
+    } while(0)
 
 
 static inline unsigned phase_end_sample(struct Phase *phase)
