@@ -1752,9 +1752,6 @@ static void preEnable(void)
 	run_pre_arm_hook();
 
 	DMC_WO_setState(ST_ARM);
-#ifdef ACQ132
-	if (!acq132_late_inten)
-#endif
 	*ACQ200_ICR = 0;
 
 	/* GO RTOS! */

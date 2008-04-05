@@ -56,9 +56,6 @@ module_param(stub_transform, int, 0664);
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
-int acq132_late_inten;
-module_param(acq132_late_inten, int, 0664);
-
 int acq132_trigger_debug = 0;
 module_param(acq132_trigger_debug, int, 0664);
 
@@ -500,11 +497,6 @@ static void enable_acq132_start(void)
 
 	if (DMC_WO->trigger_detect()){
 		onTrigger();
-	}
-
-	/** @todo pgm: try late interrupt enable (stub in preEnable()) */
-	if (acq132_late_inten){
-		*ACQ200_ICR = 0;
 	}
 }
 
