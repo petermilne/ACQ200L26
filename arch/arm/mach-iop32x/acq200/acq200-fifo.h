@@ -243,6 +243,11 @@ struct Phase {
 #define NEXT_PHASE(phase)     VALID_PLE(phase->list.next, &DMC_WO->phases)
 #define PREV_PHASE(phase)     VALID_PLE(phase->list.prev, &DMC_WO->phases)
 
+#define SET_PHASE_START_OFF(phase, value)			\
+	do {							\
+		phase->start_off = value;			\
+		info("SET_PHASE_START_OFF %d", phase->start_off);	\
+    } while(0)							\
 
 
 static inline unsigned phase_end_sample(struct Phase *phase)
@@ -464,7 +469,7 @@ struct DevGlobs {
 	u32 fiferr;   /* fifo error condition */
 	struct iop321_dma_desc *head;
 
-	int load_two_blocks_if_half;
+	int load_two_blocks_if_half;	/* not used */
 	unsigned DEADBEEF;
 	u32 istack[16]; /* private to ISR - may stash regs here */
 	unsigned FEEDCODE;

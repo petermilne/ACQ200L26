@@ -18,7 +18,7 @@
 #warning WORKTODO ACQ132 crib from ACQ196
 
 #define DTACQ_MACH 1
-#define ACQ196
+#define ACQ132
 
 #include "acq200-fifo-top.h"
 
@@ -376,15 +376,13 @@ int count_bits(unsigned mask) {
 
 void acq200_setChannelMask(unsigned mask)
 {
-	int nblocks;
-
 	if (mask&MASK_D) mask |= MASK_D;
 	if (mask&MASK_C) mask |= MASK_C;
 	if (mask&MASK_B) mask |= MASK_B;
 	if (mask&MASK_A) mask |= MASK_A;
 
-	CAPDEF->channel_mask = mask;
 	CAPDEF_set_nchan(count_bits(mask));
+	CAPDEF->channel_mask = mask;
 }
 
 

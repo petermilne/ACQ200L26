@@ -361,9 +361,11 @@ static int gather_block(
 			    tle->tblock->iblock);
 			return 0;
 		}
-
+		
 		tle->tblock_sample_start = 
 			TBLOCK_OFFSET(phase->start_off)/sample_size();
+		DBG(1, "tbss set %d because phase->start_off is %d",
+			tle->tblock_sample_start, phase->start_off);
 	}else{
 		TBLE* prev = TBLE_LIST_ENTRY(tle->list.prev);
 		tle->phase_sample_start = 
@@ -562,9 +564,10 @@ static void phase_rollup_end_fixed(struct Phase* phase)
 		case PR_DURING_FIRST:
 			if ((len = len0 = tboff) >= required_len){
 				int start_off = tboff - required_len;
-				
-				phase->start_off = 
-					tle->tblock->offset + start_off;
+
+				SET_PHASE_START_OFF(
+					phase,				
+					tle->tblock->offset + start_off);
 
 				phase->actual_len = required_len;
 				state = PR_AFTER;
@@ -579,8 +582,9 @@ static void phase_rollup_end_fixed(struct Phase* phase)
 					(full_len + len0);
 				int start_off = tblock_max_len - start_len;
 
-				phase->start_off = 
-					tle->tblock->offset + start_off;
+				SET_PHASE_START_OFF(
+					phase, 
+					tle->tblock->offset + start_off);
 				phase->actual_len = required_len;
 				state = PR_AFTER;
 			 }else{

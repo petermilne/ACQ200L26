@@ -303,9 +303,6 @@ static struct DevGlobs acq196_dg = {
 	.sample_read_stride = 1,
 	.bigbuf.tblocks.blocklen = TBLOCK_LEN,
 	.bigbuf.tblocks.blt = blt_memcpy,
-#ifdef PGMCOMOUT
-	.load_two_blocks_if_half = ACQ200_FIFCON_COLD_HALF,
-#endif
 	.enable_from_eoc_isr = 1,
 	.bh_unmasks_eoc = 0,
 	.is_oneshot = 1,

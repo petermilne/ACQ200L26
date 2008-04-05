@@ -139,8 +139,8 @@ acq132_read_config(struct pci_bus *bus, unsigned int devfn, int where,
 	u32 val = 0xffffffff;
 
 
-	if (G_iop321_pci_debug){
-		printk("acq132_read_config addr 0x%08x\n", addr);
+	if (G_iop321_pci_debug > 0){
+		printk("acq132_read_config addr 0x%08lx\n", addr);
 		if (G_iop321_pci_debug > 1){
 			goto done99;				
 		}

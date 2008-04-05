@@ -228,7 +228,7 @@ static ssize_t show_counter_update(
 		       CAPDEF->counter_update==2? "event1": "sample");
 }
 
-#if defined(ACQ196)
+#if defined(ACQ196) || defined (ACQ132)
 static ssize_t store_counter_update(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -1505,7 +1505,6 @@ static ssize_t show_asm_consts(
 	DEFPR( "DG_FIFERR",     OO(struct DevGlobs, fiferr));
 	DEFPR( "DG_FIFERR_MASK",OO(struct DevGlobs, FIFERR));
 	DEFPR( "DG_HEAD",       OO(struct DevGlobs, head));
-	DEFPR( "DG_2B_IF_HALF", OO(struct DevGlobs, load_two_blocks_if_half));
 
 	DEFPR( "WO_NEXT_LOAD",  OO(struct DMC_WORK_ORDER, next_load));
 	return len;
@@ -1836,7 +1835,7 @@ static DRIVER_ATTR(transformer_bs,S_IRUGO | S_IWUGO,
 		   show_transformer_blocksize, store_transformer_blocksize);
 
 
-#if defined(ACQ216) || defined(ACQ196)
+#if !defined(WAV232)
 
 
 extern void search_epos(
@@ -1954,8 +1953,8 @@ static ssize_t store_finalize_phases(
 
 	list_for_each_entry(phase, &DMC_WO->phases, list){
 
-		dbg(1, "phase \"%s\" %p len %d",
-		    phase->name, phase, phase_len(phase));
+		dbg(1, "phase \"%s\" %p start %d len %d",
+		    phase->name, phase, phase->start_sample, phase_len(phase));
 
 		if (phase_len(phase)){
 			acq200_phase_gather_tblocks(phase);
@@ -1978,14 +1977,9 @@ static DRIVER_ATTR(finalize_phases,S_IRUGO|S_IWUGO,
 static ssize_t store_transformer(
 	struct device_driver * driver, const char * buf, size_t count)
 {
-	struct BIGBUF *bb = &DG->bigbuf;
 	int cursor = DG->bigbuf.tblocks.cursor;
-
-
 	struct Phase* phase;
-	struct Phase* phase1 = 0;
 	struct TblockListElement *tble;
-	int nphases = 0;
 
 	if (strncmp(buf, "CLEAR", 5) == 0){
 		int ib;
@@ -1999,14 +1993,20 @@ static ssize_t store_transformer(
 		goto cleanup;
 	}
 
+#ifndef ACQ132
+/* @todo - no short transform for ACQ132 */
 	if (cursor == 0){
+		struct BIGBUF *bb = &DG->bigbuf;
+		struct Phase* phase1 = 0;
+		int nphases = 0;
+
 		list_for_each_entry(phase, &DMC_WO->phases, list){
 			++nphases;
 			if (phase1 == 0){
 				phase1 = phase;
 			}
 		}
-	      
+
 		if (nphases == 1 &&
 		    phase_len(phase) * sample_size() < 3*TBLOCK_LEN/2){
 			acq200_fifo_part_transform(phase);
@@ -2014,6 +2014,7 @@ static ssize_t store_transformer(
 			goto cursor_complete;
 		}
 	}
+#endif
 
 	/* iterate tblocks in phase order */
 	list_for_each_entry(phase, &DMC_WO->phases, list){
@@ -2027,7 +2028,9 @@ static ssize_t store_transformer(
 			}
 		}
 	}
+#ifndef ACQ132
 cursor_complete:
+#endif
 	DG->bigbuf.tblocks.cursor_complete = 1;
 	
 cleanup:
@@ -2035,7 +2038,7 @@ cleanup:
 	return strlen(buf);
 }
 
-#endif   /* #if defined(ACQ216) || defined(ACQ196) */
+#endif   /* #if !defined(WAV232) */
 
 
 static ssize_t show_transformer(
@@ -2501,7 +2504,7 @@ int mk_sysfs(struct device_driver *driver)
 	DRIVER_CREATE_FILE(driver, &driver_attr_bh_unmasks_eoc);
 	DRIVER_CREATE_FILE(driver, &driver_attr_pci_abort);
 	DRIVER_CREATE_FILE(driver, &driver_attr_debug_read_raw);
-#if defined(ACQ216) || defined(ACQ196)
+#if !defined(WAV232)
 	DRIVER_CREATE_FILE(driver, &driver_attr_epos);
 	DRIVER_CREATE_FILE(driver, &driver_attr_es_search);
 	DRIVER_CREATE_FILE(driver, &driver_attr_finalize_phases);
@@ -2557,7 +2560,7 @@ void rm_sysfs(struct device_driver *driver)
 	driver_remove_file(driver, &driver_attr_bh_unmasks_eoc);
 	driver_remove_file(driver, &driver_attr_pci_abort);
 	driver_remove_file(driver, &driver_attr_debug_read_raw);
-#if defined(ACQ216) || defined(ACQ196)
+#if !defined(WAV232)
 	driver_remove_file(driver, &driver_attr_epos);
 	driver_remove_file(driver, &driver_attr_es_search);
 	driver_remove_file(driver, &driver_attr_finalize_phases);
@@ -2678,7 +2681,7 @@ static int acq200_proc_coldpoint_histo(
 {
 	
 #define PRINTF(fmt, args...) sprintf(buf+len, fmt, ## args)
-#ifndef ACQ196
+#if defined (ACQ216) || defined (WAV232)
 	struct histogram cold_fifo = {
 		.data = DG->stats.cold_fifo_histo,
 		.title = "cold fifo isr"
@@ -2689,7 +2692,7 @@ static int acq200_proc_coldpoint_histo(
 		.title = "cold fifo eoc"
 	};
 #endif
-#ifdef ACQ196
+#if defined(ACQ196) || defined(ACQ132)
 	struct histogram hot_fifo = {
 		.data = DG->stats.hot_fifo_histo,
 		.title = "hot fifo isr"
@@ -2705,10 +2708,10 @@ static int acq200_proc_coldpoint_histo(
 	};
 
 	struct histogram *hg[] = {
-#ifdef ACQ196
+#if defined(ACQ196) || defined(ACQ132)
 		&hot_fifo, 
 #endif
-#ifndef ACQ196
+#if defined (ACQ216) || defined (WAV232)
 		&cold_fifo, &cold_fifo2, 
 #endif
 		&hot_fifo2,

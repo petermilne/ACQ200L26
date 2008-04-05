@@ -69,7 +69,7 @@
 
 
 #define VERID \
-"$Id: acq200-fifo.c,v 1.38 2006/10/04 09:07:43 pgm Exp $ Build 1201 " \
+"$Id: acq200-fifo.c,v 1.38 2006/10/04 09:07:43 pgm Exp $ Build 1202 " \
 __DATE__ " "__TIME__ MODEL_VERID
 
 
@@ -494,7 +494,13 @@ static int woOnRefill(
 		return END_OF_PHASE;
 	}
 	if (phase->actual_len == 0){
-		phase->start_off = *offset;
+		SET_PHASE_START_OFF(phase, *offset);
+#if 0
+/** major kludge here: mask to avoid bogus 1k offset*/
+		if (*offset&0x7ff){
+			SET_PHASE_START_OFF(phase, *offset&~0x7ff);
+		}
+#endif
 		dbg(1, "%d set phase->start_off phase:%s start_off %d",
 		    __LINE__, phase->name, phase->start_off);
 	}
@@ -705,12 +711,8 @@ static void _dmc_handle_dcb(
 {
 	struct list_head* clients = &DG->dcb.clients;
 
-
-	dbg(2, "clients %p", clients);
-
 	spin_lock(&DG->dcb.lock);
 
-	
 	if (!list_empty(clients)){
 		struct DataConsumerBuffer *dcb;
 		int ic = 0;
@@ -836,6 +838,11 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 	no_clidat:
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
+
+		if (wo->scc.scc == 0){
+			dbg(1, "first dmad offset:%d %s",
+			    offset, dmad_diag(pbuf));
+		}
 
 		if (wo->dmc_dma_buf_modulus == 0){
 			if (clv != 0){
@@ -1171,6 +1178,11 @@ static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
 			dbg( 3, "rb_put %s", dmad_diag( dmad ) );
 		}
 #endif
+
+		if (RB_IS_EMPTY(IPC->empties)){
+			dbg(1, "first DMAD: %s", dmad_diag(dmad));
+		}
+
 		rb_put( &IPC->empties, dmad );
 
 		if (++nput >= PUT_MAX_EMPTIES){
@@ -1523,7 +1535,7 @@ static int acq200_dmc0_task(void *arg)
 		if (kthread_should_stop()){
 			return 0;
 		}
-		dbg(2, "run: %s %s", 
+		dbg((timeout? 4: 2), "run: %s %s", 
 		    timeout? "TIMEOUT": "",
 		    run_request? "RUN_REQUEST": "");
 
@@ -1605,7 +1617,7 @@ static struct Phase * onPIT_clear(
 	/* @@todo WHY NOT eve[1] ?? */
 	deactivateSignal(CAPDEF->ev[0]);
 	if (next){
-		next->start_off = phase->end_off;
+		SET_PHASE_START_OFF(next, phase->end_off);
 	}
 	return next;
 }
@@ -1740,6 +1752,9 @@ static void preEnable(void)
 	run_pre_arm_hook();
 
 	DMC_WO_setState(ST_ARM);
+#ifdef ACQ132
+	if (!acq132_late_inten)
+#endif
 	*ACQ200_ICR = 0;
 
 	/* GO RTOS! */
@@ -1810,10 +1825,11 @@ static int soft_trigger_retry;
 
 static int fiq_init_action(void)
 {
-	struct pt_regs regs = {
-		.ARM_fp  = (long)IOP321_DMA0_CCR,
-	};
+	struct pt_regs regs;
 
+	memset(&regs, 0, sizeof(regs));
+
+	regs.ARM_fp = (long)IOP321_DMA0_CCR;
 	regs.ARM_ip = (long)DG,
 	regs.ARM_r8 = DG->head->pa;
 
@@ -2724,7 +2740,7 @@ int search_for_epos_in_tblock(
 			dbg(1, "FOUND AT phase:%s %10d ilast %10d", 
 			    phase->name, isearch, ilast  );
 
-			phase->start_off = ilast;
+			SET_PHASE_START_OFF(phase, ilast);
 			phase->flags |= PH_FIXED_AT_START;
 			if (PREV_PHASE(phase) != phase){
 				shuffle_up(PREV_PHASE(phase), isearch);

@@ -22,7 +22,7 @@
 #warning WORKTODO ACQ132 crib of ACQ196
 		
 #define DTACQ_MACH 2
-#define ACQ196
+#define ACQ132
 
 #include "acq200-fifo-top.h"
 	
@@ -42,66 +42,34 @@
 #define ACQ200_SYSCON ACQ196_SYSCON
 #define ACQ200_FIFCON_MASK 0xf
 
-#if defined ACQ196M
+#if defined ACQ132
 
-/* special short block - we want to Q N every time */
-#define CHECK_2B 7
-	
-	.macro DO_CHECK_2B tmp, fifcon, not_2b
-	.endm
-
-#elif defined ACQ196C
-
-#if (ISR_ADDS_ENDSTOP == 1)
-/* if FIFO mark>=1, pull an extra block. 
- * 512 bytes available, 2 blocks@192bytes each means we are safe from underrun.
- */	
-#define CHECK_2B 1
-	.macro DO_CHECK_2B tmp, fifcon, not_2b
-	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT
-	cmp	\tmp, #1
-	blt	\not_2b		
-	.endm
-#else
-#define CHECK_2B 0
-#endif
-				
-#elif defined ACQ196F
-#define CHECK_2B 0
-	
-	.macro DO_CHECK_2B tmp, fifcon, not_2b
-	.endm	
-#else
-	/* regular ACQ196 */
 /*
- * HOTPOINT: 16 levels, 8K.
- * 0x2 : 1K
- * 0x4 : 2K
- * 0x6 : 3K
- * 0x8 : 4K
- * But we also have min 2K in the colds
+ * HOTPOINT: 16 levels, 32K.
+ * 0x2 : 2K
+ * 0x4 : 4K
+ * 0x6 : 6K
+ * 0x8 : 8K
  */
 	
-#if DMA_BLOCK_LEN < 256
+#if 1
 #define CHECK_2B 0	
 #else	
-#define HOT3B 0x8	     /* for 96 channels */		
-#define CHECK_2B 3           /* Q Fourth block */		
+#define HOT7B 0x8	     /* for 96 channels */		
+#define CHECK_2B 7           /* Q Fourth block */		
 #endif	
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
 	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT
-	cmp	\tmp, #HOT3B
+	cmp	\tmp, #HOT7B
 	blt	\not_2b
 	.endm
-#endif
+#else
+#error BAD STATE, we want ACQ132 ONLY HERE
+#endif	
 	
 #define UPDATE_COLD_HISTO 0
 #define UPDATE_HOT_HISTO 1
-
-#if defined (ACQ216)
-#error BAD STATE, BROKEN BUILD, STOP.
-#endif
 
 	.macro GET_HOT tmp, fifcon
 	and	\tmp, \fifcon, #ACQ200_FIFCON_MASK

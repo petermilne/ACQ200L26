@@ -1,4 +1,4 @@
-/* acq132-fifo.c customisation for acq196-fifo driver                        */
+/* acq132-fifo.c customisation for acq132-fifo driver                        */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
@@ -22,12 +22,12 @@
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID \
-"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1007\n"
+"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1011\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
 
-#define ACQ196_VERID "$Revision: 1.13 $ " __DATE__ " " __TIME__
+#define ACQ132_VERID "$Revision: 1.13 $ " __DATE__ " " __TIME__
 
 #define MTTR2	0x80
 
@@ -53,7 +53,18 @@ module_param(int_clk_calcmode, int, 0664);
 int stub_transform;
 module_param(stub_transform, int, 0664);
 
-#define AICHAN_DEFAULT 96
+int acq132_transform_debug = 0;
+module_param(acq132_transform_debug, int, 0664);
+
+int acq132_late_inten;
+module_param(acq132_late_inten, int, 0664);
+
+int acq132_trigger_debug = 0;
+module_param(acq132_trigger_debug, int, 0664);
+
+#define TBG if (acq132_transform_debug) dbg
+
+#define AICHAN_DEFAULT 32
 
 
 #define HOT_FIFO_FULL_ENTRIES(fifstat) (((fifstat)&ACQ196_FIFSTAT_HOTPOINT)>>1)
@@ -82,8 +93,10 @@ static int enable_soft_trigger(void);
 static int enable_hard_trigger(void);
 /* return 1 on success, -1 on error */
 
-#define DBGSF(s) \
-        dbg(3, "S: 0x%08x FC: 0x%08x FX: 0x%08x %s", \
+#define DBGSF(s)						\
+        if (acq132_trigger_debug)				\
+	dbg(1, "%4d S: 0x%08x FC: 0x%08x FX: 0x%08x %s",	\
+	__LINE__,						\
         *SYSCON, *ACQ196_FIFCON, *FIFSTAT, s)
 
 
@@ -292,7 +305,7 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 
 
-static struct DevGlobs acq196_dg = {
+static struct DevGlobs acq132_dg = {
 	.btype = BTYPE_AI,
 	.hitide = 7,
 	.max_alloc = 10240,
@@ -301,9 +314,6 @@ static struct DevGlobs acq196_dg = {
 	.sample_read_stride = 1,
 	.bigbuf.tblocks.blocklen = TBLOCK_LEN,
 	.bigbuf.tblocks.blt = blt_memcpy,
-#ifdef PGMCOMOUT
-	.load_two_blocks_if_half = ACQ200_FIFCON_COLD_HALF,
-#endif
 	.enable_from_eoc_isr = 1,
 	.bh_unmasks_eoc = 0,
 	.is_oneshot = 1,
@@ -317,7 +327,7 @@ static struct DevGlobs acq196_dg = {
 #ifdef ALL_FIFO_FLAGS_HAPPY
 	.FIFERR = ACQ196_FIFSTAT_ADC_ERR,
 #else
-	.FIFERR = 0x00022260,       /* OVER|OVER|OVER|OVER+UNDER */
+	.FIFERR = 0x00000060,       /* HOT OVER+UNDER */
 #endif
 	.pulse.pulse_count = 0, 
 	.pulse.ibit = 1,
@@ -329,7 +339,8 @@ static struct DevGlobs acq196_dg = {
 	.get_max_active = 1024,
 	.active_batch_threshold = 64,
 	.init_endstops = 32,
-	.eoc_int_modulo_mask = 3,
+/* 	.eoc_int_modulo_mask = 3,	*/
+	.eoc_int_modulo_mask = 0,
 	.activate_event_on_arm = 1,
 
 	.dcb.dcb_max = 2048,
@@ -337,7 +348,7 @@ static struct DevGlobs acq196_dg = {
 };
 
 
-#define MYDG &acq196_dg
+#define MYDG &acq132_dg
 
 /* Slave FPGA Load:
 The complete programming sequence is 
@@ -435,7 +446,7 @@ static struct file_operations acq132_sfpga_load_ops = {
 #include "acq200-fifo.c"
 
 
-static void enable_acq196_start(void)
+static void enable_acq132_start(void)
 {
 	int rc;
 
@@ -445,12 +456,6 @@ static void enable_acq196_start(void)
 	DBGSF("TEMPORARY: blip enable");
 	disable_acq();
 
-#if 0
-/* enabling LOWLAT zaps the interrupt altogether */
-#if defined ACQ196c
-	*ACQ196_SYSCON_ADC |= ACQ196_SYSCON_LOWLAT;
-#endif
-#endif
 	if (acq196_trigger_detect()){
 		err("WOAAH - triggered already, an not yet enabled not good\n"
 		      "FIFCON: 0x%08x\n"
@@ -491,28 +496,15 @@ static void enable_acq196_start(void)
 	}else{
 		rc = enable_soft_trigger();
 	}
-
-	if (DMC_WO->trigger_detect()){
-		onEnable();
-	}	DBGSF("FINAL:next enable FIFCON");
-	enable_fifo(CAPDEF->channel_mask);
-
-	preEnable();
-
-	DBGSF("now trigger");
-	dbg(3, "use hard trigger if enabled %s", 
-	      CAPDEF->trig->is_active? "HARD": "soft");
-
 	onEnable();
-
-	if (CAPDEF->trig->is_active){
-		rc = enable_hard_trigger();
-	}else{
-		rc = enable_soft_trigger();
-	}
 
 	if (DMC_WO->trigger_detect()){
 		onTrigger();
+	}
+
+	/** @todo pgm: try late interrupt enable (stub in preEnable()) */
+	if (acq132_late_inten){
+		*ACQ200_ICR = 0;
 	}
 }
 
@@ -636,7 +628,7 @@ static int fifo_read_init_action(void)
 			activateSignal(phase->ev);
 		}
 	}
-	enable_acq196_start();
+	enable_acq132_start();
 	return 0;
 }
 
@@ -664,11 +656,14 @@ static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file)
 
 	init_phases();
 
+	dbg(1, "calling fifo_read_init_action()");
 	rc = fifo_read_init_action();
+	dbg(1, "return from fifo_read_init_action() %d", rc);
 	if (rc==0){
 		rc = oneshot_wait_for_done();
 	}
 
+	dbg(1, "returning %d", rc);
 	return rc;
 }
 
@@ -847,7 +842,7 @@ static int acq216_commitTcrSrc(struct Signal* signal)
 	return 0;
 }
 
-static struct CAPDEF* acq196_createCapdef(void)
+static struct CAPDEF* acq132_createCapdef(void)
 {
 	static struct CAPDEF _capdef = {
 		.demand_len = 0x100000,
@@ -859,7 +854,7 @@ static struct CAPDEF* acq196_createCapdef(void)
 
 	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
 
-	capdef_set_nchan(capdef, 32);
+	capdef_set_nchan(capdef, AICHAN_DEFAULT);
 	capdef_set_word_size(capdef, 2);
 
 	capdef->ev[0] = 
@@ -899,7 +894,7 @@ static struct CAPDEF* acq196_createCapdef(void)
 	return capdef;
 }
 
-static void acq196_destroyCapdef(struct CAPDEF *capdef)
+static void acq132_destroyCapdef(struct CAPDEF *capdef)
 {
 	destroySignal(capdef->ev[0]);
 	destroySignal(capdef->ev[1]);
@@ -913,7 +908,7 @@ static void acq196_destroyCapdef(struct CAPDEF *capdef)
 	destroySignal(capdef->sync_trig_mas);
 	kfree(capdef);
 }
-static struct device_driver acq196_fpga_driver;
+static struct device_driver acq132_fpga_driver;
 
 extern int init_arbiter(void);
 
@@ -937,8 +932,8 @@ extern int init_arbiter(void);
 #define ROW_WORDS	(ROW_SAM*ROW_CHAN)
 #define ROW_BLOCK_OFF   (ROW_SAM*BLOCKSAM)	 // words in row-block
 
-//#define DEBUGGING
-//#define UNROLL
+#define DEBUGGING
+
 
 #ifdef DEBUGGING
 short* to1;
@@ -959,11 +954,11 @@ void acq132_transform_row(
 	int sam;
 	int chx;
 
-	dbg(3, "to:%p from:%p nsamples:%d channel_sam:%d",
+	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
 	    to, from, nsamples, channel_sam);
 
 	if (stub_transform){
-		dbg(3, "stub");
+		TBG(3, "stub");
 		return;
 
 	}
@@ -979,7 +974,6 @@ void acq132_transform_row(
 		}
 #endif
 
-#ifndef UNROLL
 		for (chx = 0; chx < ROW_CHAN; ++chx){
 
 #ifdef DEBUGGING
@@ -992,26 +986,15 @@ void acq132_transform_row(
 #endif
 			to[chx*channel_sam + sam] = buf.ch[chx];
 		}			
-#else
-		chx = 0;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-		to[chx*channel_sam + sam] = buf.ch[chx]; chx++;
-#endif
 	}
 
-	dbg(3, "99");	
+	TBG(3, "99");	
 }
 static void acq132_transform(short *to, short *from, int nwords, int stride)
 {
-	int nsamples = nwords/stride;	
-	int rows = stride/ROW_CHAN;
-	int block_words = rows * ROW_CHAN * ROW_SAM;
+	const int nsamples = nwords/stride;	
+	const int rows = stride/ROW_CHAN;
+	const int block_words = rows * ROW_CHAN * ROW_SAM;
 	int blocks = nwords/block_words;
 	int nw = nwords;
 	int block;
@@ -1021,23 +1004,24 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 		++blocks;
 	}
 
-	dbg(1, "blocks:%d", blocks);
-	dbg(1, "nsamples:%d", nsamples);
+	TBG(1, "blocks:%d", blocks);
+	TBG(1, "nsamples:%d", nsamples);
 
 #ifdef DEBUGGING
 	to1 = to;
 	to2 = to+nwords;
-	dbg(1, "to   %p to %p", to1, to2);
+	TBG(1, "to   %p to %p", to1, to2);
 	from1 = from;
 	from2 = from+nwords;
-	dbg(1, "from %p to %p", from1, from2);
+	TBG(1, "from %p to %p", from1, from2);
 #endif
 
 	for (block = 0; block < blocks; ++block, nw -= block_words){
-		int bsamples = min(nw, block_words)/rows/ROW_CHAN;
+		const int bsamples = min(nw, block_words)/rows/ROW_CHAN;
 		int row;
 
-		dbg(2, "block:%d to:%p from:%p", block, to, from);
+		TBG(2, "block:%d to:%p from:%p bsamples %d", 
+		    block, to, from, bsamples);
 
 		for (row = 0; row < rows; ++row){
 			acq132_transform_row(
@@ -1046,13 +1030,13 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 				bsamples,
 				nsamples
 			);
-			from += ROW_WORDS;
+			from += bsamples*ROW_CHAN;
 		}
 		to += bsamples;
-		dbg(2, "block:%d to:%p from:%p", block, to, from);
+		TBG(2, "block:%d to:%p from:%p", block, to, from);
 	}
 
-	dbg(1, "99");
+	TBG(1, "99");
 }
 
 
@@ -1085,7 +1069,7 @@ static int acq132_fpga_probe(struct device *dev)
 		if (rc != 0){
 			err("fpga_probe() failed");
 		}else{
-			mk_sysfs(&acq196_fpga_driver);
+			mk_sysfs(&acq132_fpga_driver);
 		}
 		return rc;
 	}else{
@@ -1094,49 +1078,49 @@ static int acq132_fpga_probe(struct device *dev)
 	}
 }
 
-static int acq196_fpga_remove(struct device *dev)
+static int acq132_fpga_remove(struct device *dev)
 {
 	acqX00_fpga_remove(dev, IRQ_ACQ100_FPGA);
 	return 0;
 }
 
 
-static void acq196_fpga_dev_release(struct device * dev)
+static void acq132_fpga_dev_release(struct device * dev)
 {
 	info("");
 }
 
 
 
-static struct device_driver acq196_fpga_driver = {
-	.name     = "acq196fpga",
+static struct device_driver acq132_fpga_driver = {
+	.name     = "acq132fpga",
 	.probe    = acq132_fpga_probe,
-	.remove   = acq196_fpga_remove,
+	.remove   = acq132_fpga_remove,
 	.bus	  = &platform_bus_type,	
 };
 
 
 static u64 dma_mask = 0x00000000ffffffff;
 
-static struct platform_device acq196_fpga_device = {
-	.name = "acq196fpga",
+static struct platform_device acq132_fpga_device = {
+	.name = "acq132fpga",
 	.id   = 0,
 	.dev = {
-		.release    = acq196_fpga_dev_release,
+		.release    = acq132_fpga_dev_release,
 		.dma_mask   = &dma_mask
 	}
 
 };
 
 
-static int __init acq196_fifo_init( void )
+static int __init acq132_fifo_init( void )
 {
 	int rc;
 
 	IPC = kmalloc(sizeof(struct IPC), GFP_KERNEL);
 	memset(IPC, 0, sizeof(struct IPC));
 
-	CAPDEF = acq196_createCapdef();
+	CAPDEF = acq132_createCapdef();
 	init_dg();
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	init_phases();
@@ -1145,25 +1129,25 @@ static int __init acq196_fifo_init( void )
 
 	acq200_debug = acq200_fifo_debug;
 
-	info(ACQ196_VERID);
+	info(ACQ132_VERID);
 
 	dbg(1, "acq200_debug set %d\n", acq200_debug );
 
 
 /* extra kobject init needed to hook driver sysfs WHY? */
 
-	kobject_init(&acq196_fpga_driver.kobj);
-	kobject_set_name(&acq196_fpga_driver.kobj, acq196_fpga_driver.name);
+	kobject_init(&acq132_fpga_driver.kobj);
+	kobject_set_name(&acq132_fpga_driver.kobj, acq132_fpga_driver.name);
 
-	if ((rc = kobject_register(&acq196_fpga_driver.kobj)) != 0){
+	if ((rc = kobject_register(&acq132_fpga_driver.kobj)) != 0){
 		err("kobject_register() failed");
-	}else if ((rc = driver_register(&acq196_fpga_driver)) != 0){
+	}else if ((rc = driver_register(&acq132_fpga_driver)) != 0){
 		err("driver_register() failed");
-	}else if ((rc = platform_device_register(&acq196_fpga_device)) !=0){
+	}else if ((rc = platform_device_register(&acq132_fpga_device)) !=0){
 		err("platform_device_register() failed");
-	}else if ((rc = acq196_offset_fs_create(&acq196_fpga_device.dev)) !=0){
+	}else if ((rc = acq196_offset_fs_create(&acq132_fpga_device.dev)) !=0){
 		err("failed to register offset_fs");
-	}else if ((rc = acq196_AO_fs_create(&acq196_fpga_device.dev)) != 0){
+	}else if ((rc = acq196_AO_fs_create(&acq132_fpga_device.dev)) != 0){
 		err("failed to register AO fs");
 	}else{
 		info("all done");
@@ -1177,7 +1161,7 @@ static int __init acq196_fifo_init( void )
 
 
 static void __exit
-acq196_fifo_exit_module(void)
+acq132_fifo_exit_module(void)
 // Remove DRIVER resources on module exit
 {
 //	unregister_reboot_notifier(&e1000_notifier_reboot);
@@ -1186,29 +1170,29 @@ acq196_fifo_exit_module(void)
 	acq196_AO_fs_remove();
 	acq196_offset_fs_remove();
 	dbg(1, "rm_sysfs()" );
-	rm_sysfs(&acq196_fpga_driver);
+	rm_sysfs(&acq132_fpga_driver);
 	dbg(1, "platform_device_unregister()");
-	platform_device_unregister(&acq196_fpga_device);
+	platform_device_unregister(&acq132_fpga_device);
 	dbg(1, "pci_unregister_driver()" );
-	driver_unregister(&acq196_fpga_driver);
+	driver_unregister(&acq132_fpga_driver);
 	dbg(1, "kobject-unregister()");
-	kobject_unregister(&acq196_fpga_driver.kobj);
+	kobject_unregister(&acq132_fpga_driver.kobj);
 
 
 	delete_dg();
-	acq196_destroyCapdef(CAPDEF);
+	acq132_destroyCapdef(CAPDEF);
 	kfree(IPC);
 }
 
 
 
-module_init(acq196_fifo_init);
-module_exit(acq196_fifo_exit_module);
+module_init(acq132_fifo_init);
+module_exit(acq132_fifo_exit_module);
 
 EXPORT_SYMBOL_GPL(acq200_setIntClkHz);
 EXPORT_SYMBOL_GPL(acq200_setChannelMask);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
-MODULE_DESCRIPTION("Driver for ACQ100 FIFO");
+MODULE_DESCRIPTION("Driver for ACQ132 FIFO");
 
