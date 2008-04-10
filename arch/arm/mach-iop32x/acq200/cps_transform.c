@@ -65,7 +65,7 @@ int cps_transform_debug;
 module_param(cps_transform_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.0 $ build B1002 "
+#define VERID "$Revision: 1.0 $ build B1004 "
 
 
 char cps_transform_driver_name[] = "cps_transform";
@@ -158,11 +158,16 @@ static int adjust_tblock_in_phase(
 
 static void stash_sig(short *from) 
 {
+	if (block_cursor == -1){
+		++block_cursor;
+		SIG_TBLOCK->touched = 1;
+	}
 	if (sig_cursor + ROWLEN > TBLOCK_LEN){
 		if (++block_cursor > nsigtblocks){
 			err("not enough captiuve tblocks to store all sigs");
 			return;
 		}else{
+			SIG_TBLOCK->touched = 1;
 			sig_cursor = 0;
 		}
 	}
@@ -283,31 +288,27 @@ static void reserve_tblocks(void)
 {
 	int it;
 
+	if (captives){
+		kfree(captives);
+	}
 	captives = kmalloc(nsigtblocks*sizeof(struct TblockListElement *), 
 			   GFP_KERNEL);
 
 
 	for (it = 0; it < nsigtblocks; ++it){
 		captives[it] = acq200_reserveFreeTblock();
-		atomic_inc(&captives[it]->tblock->in_phase);				
+		atomic_inc(&captives[it]->tblock->in_phase);
+
+		dbg(1, "%d: tblock:%03d in_phase:%d",
+		    it, captives[it]->tblock->iblock,
+		    atomic_read(&captives[it]->tblock->in_phase));
 	}	
 }
 
-static void replace_tblocks(void)
-{
-	int it;
-
-	for (it = 0; it < nsigtblocks; ++it){
-		atomic_dec(&captives[it]->tblock->in_phase);
-		acq200_replaceFreeTblock(captives[it]);
-	}
-	kfree(captives);
-}
-
-
 static void onStart(void *notused)
 {
-	block_cursor = 0;
+	reserve_tblocks();
+	block_cursor = -1;
 	sig_cursor = 0;
 	last_stride = 0;
 	dbg(1, "01 cursor:%d", sig_cursor);
@@ -341,7 +342,6 @@ static int cps_transform_probe(struct device *dev)
 		err("transformer NOT registered");
 	}
 
-	reserve_tblocks();
 	mk_ppcustom_sysfs(dev);
 	dbg(1, "99");
 	return 0;
@@ -349,7 +349,9 @@ static int cps_transform_probe(struct device *dev)
 
 static int cps_transform_remove(struct device *dev)
 {
-	replace_tblocks();
+	if (captives){
+		kfree(captives);
+	}
 	rm_ppcustom_sysfs(dev);
 	acq200_unregisterTransformer(&transformer);
 	acq200_del_start_of_shot_hook(&startHook);
