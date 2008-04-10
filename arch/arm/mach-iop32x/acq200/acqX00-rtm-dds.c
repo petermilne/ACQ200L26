@@ -163,7 +163,6 @@ static void set_dds_out(u8 out)
 #define DDS_UPDATE_CLK1    DDS_REG(0x17
 #define DDS_UPDATE_CLK2    DDS_REG(0x18)
 #define DDS_UPDATE_CLK3    DDS_REG(0x19)
-
 #define DDS_RAMP_RATE_CLK0 DDS_REG(0x1a)
 #define DDS_RAMP_RATE_CLK1 DDS_REG(0x1b)
 #define DDS_RAMP_RATE_CLK2 DDS_REG(0x1c)
@@ -184,7 +183,8 @@ static void set_dds_out(u8 out)
 #define DDS_QDAC_0         DDS_REG(0x26)
 #define DDS_QDAC_1         DDS_REG(0x27)
 
-#define DDS_CSR1_DTACQ_PLL 0x40                  /** remove PLL bypass */
+#define DDS_CSR1_HISPEED_PLL 0x40
+#define DDS_CSR1_DTACQ_PLL DDS_CSR1_HISPEED_PLL      /** remove PLL bypass */
 #define DDS_CSR1_MULT_MIN  4
 #define DDS_CSR1_MULT_MAX  20
 
@@ -247,9 +247,13 @@ static void get_ftw1(unsigned ftw[6])
 }
 
 static int dds_refclk_mult = 4;
+static int dds_hispeed = 0;
 
-static void set_csr1(void) {
-	SET_DDS(DDS_CSR1, DDS_CSR1_DTACQ_PLL|dds_refclk_mult);
+static void set_csr1(int hispeed) {
+	unsigned char csr1 = hispeed? DDS_CSR1_HISPEED_PLL: 0;
+	dds_hispeed = hispeed;
+	SET_DDS(DDS_CSR1, csr1|dds_refclk_mult);
+	dbg(1, "hispeed:0x%02x  write 0x%02x", csr1, csr1|dds_refclk_mult);
 }
 
 
@@ -262,7 +266,7 @@ static void init_dds(void)
          */
 
 	SET_DDS(DDS_CSR0, 0);             /** Comp PD off */
-	set_csr1();
+	set_csr1(1);
 	SET_DDS(DDS_CSR3, 0x40);          /** default power save mode */
 	SET_DDS(DDS_OSKEY_I_M0, 0x0f);
 	SET_DDS(DDS_OSKEY_I_M1, 0xc0);
@@ -341,7 +345,15 @@ static ssize_t show_ftw1(
 
 static DEVICE_ATTR(ftw1, S_IRUGO|S_IWUGO, show_ftw1, store_ftw1);
 
+static ssize_t show_hispeed(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf(buf, "%d\n", dds_hispeed);
+}
 
+static DEVICE_ATTR(hispeed, S_IRUGO, show_hispeed, 0);
 
 static ssize_t store_ftw1_bin(
 	struct device * dev, 
@@ -366,12 +378,14 @@ static ssize_t store_dds_clksrc(
 	size_t count)
 {
 	int isel;
+	int hispeed = 0;
 
 	if (sscanf(buf, "%d", &isel) && 
 	    IN_RANGE(isel, DDS_SRC_MIN, DDS_SRC_MAX)){
 		switch(isel){
 		case DDS_SRC_REFCLK:
 			dds_refclk_mult = 4;
+			hispeed = 1;
 			break;
 		case DDS_SRC_ECM:
 			dds_refclk_mult = 20;
@@ -379,7 +393,7 @@ static ssize_t store_dds_clksrc(
 		default:
 			break;
 		}
-		set_csr1();
+		set_csr1(hispeed);
 		set_dds_in(isel);
 	}
             
@@ -535,12 +549,13 @@ static ssize_t store_refclk_mult(
 	size_t count)
 {
 	int isel = 0;
+	int hispeed = 0;
 
-	if (sscanf(buf, "%d", &isel)){
+	if (sscanf(buf, "%d %d", &isel, &hispeed) >= 1){
 		if (isel < 4) isel = 4;
 		if (isel > 20) isel = 20;
 		dds_refclk_mult = isel;
-		set_csr1();
+		set_csr1(hispeed);
 	}
             
         return strlen(buf);
@@ -571,6 +586,7 @@ static void mk_rtm_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_refclk_mult);
 	DEVICE_CREATE_FILE(dev, &dev_attr_qdacsrc);
 	DEVICE_CREATE_FILE(dev, &dev_attr_qdac);
+	DEVICE_CREATE_FILE(dev, &dev_attr_hispeed);
 }
 
 static void rtm_dev_release(struct device * dev)
