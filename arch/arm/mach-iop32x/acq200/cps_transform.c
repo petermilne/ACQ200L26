@@ -65,7 +65,7 @@ int cps_transform_debug;
 module_param(cps_transform_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.0 $ build B1001 "
+#define VERID "$Revision: 1.0 $ build B1002 "
 
 
 char cps_transform_driver_name[] = "cps_transform";
@@ -188,17 +188,25 @@ static void cps_transform(short *to, short *from, int nwords, int stride)
 {
 	int nsamples = nwords/stride;
 	int isample, ichannel;
-	int max_stride = sigstride * nsigtblocks;
+	const int max_stride = sigstride * nsigtblocks;
 	int delta_sam = 0;
 	int po = 0;
 	int tosample = 0;
 
+	dbg(1, "to:%p from:%p nwords:%d stride:%d max_stride:%d last_stride:%d",
+	    to, from, nwords, stride, max_stride, last_stride);
+
 	for (isample = 0; isample != nsamples; ++isample){
 		int fromrow = isample * stride;
-		if (++last_stride == max_stride){
+		if (last_stride++ == max_stride){
 			stash_sig(from+fromrow);
-			last_stride = 0;
+
 			++delta_sam;
+
+			dbg(2, "stash:%d delta_sam:%d isample:%d", 
+			    last_stride, delta_sam, isample);
+
+			last_stride = 0;
 		}else{
 			for (ichannel = 0; ichannel != stride; ++ichannel){
 				to[ichannel*nsamples + tosample] =
@@ -245,7 +253,7 @@ static ssize_t show_sigtblocks(
 			captives[iblock]->tblock->iblock);
 
 		if (iblock){
-			strcat(buf, "");
+			strcat(buf, " ");
 		}
 		strcat(buf, blockid);
 	}
@@ -384,7 +392,6 @@ static int __init cps_transform_init( void )
 		return rc;
 	}
 
-	acq200_debug = cps_transform_debug;
 	return platform_device_register(&cps_transform_device);
 }
 
