@@ -722,24 +722,46 @@ static  ssize_t show_pci_env(
 {
 	char* str = "not-supported";
 
-	if (ACQ100_CPLD_SSM_CAPABLE){
-		switch(acq100_get_pci_env()){
-		case ACQ100_PCIENV_SSM:
-			str = "SSM"; break;
-		case ACQ100_PCIENV_PM:
-			str = "PM"; break;
-		case ACQ100_PCIENV_SAM:
-			str = "SAM"; break;
-		default:
-			str = "illegal";
+	if (machine_is_acq100()){
+		if (ACQ100_CPLD_SSM_CAPABLE){
+			switch(acq100_get_pci_env()){
+			case ACQ100_PCIENV_SSM:
+				str = "SSM"; break;
+			case ACQ100_PCIENV_PM:
+				str = "PM"; break;
+			case ACQ100_PCIENV_SAM:
+				str = "SAM"; break;
+			default:
+				str = "illegal";
+			}
 		}
+	        return sprintf(buf,"%d %s\n", acq100_get_pci_env(), str);
+	}else{
+		return sprintf(buf, "%d %s", -1, "acq196 only");
 	}
-        return sprintf(buf,"%d %s\n", acq100_get_pci_env(), str);
+
 }
 
 static DEVICE_ATTR(pci_env, S_IRUGO, show_pci_env, 0);
 
 
+#define ACQ200_SYSSLOT() ((*(volatile u8*)(ACQ200_CPLD+3) & 0x01) == 0)
+
+static ssize_t show_sysslot(
+	struct device * device, struct device_attribute *attr, char * buf)
+{
+	int is_sysslot = 0;
+
+	if (machine_is_acq100()){
+		is_sysslot = acq100_get_pci_env() == ACQ100_PCIENV_SSM;
+	}else if (machine_is_acq200()){
+		is_sysslot = ACQ200_SYSSLOT();
+	}	
+	/** @todo acq132 */
+	return sprintf(buf, "%d\n", is_sysslot);
+}
+
+static DEVICE_ATTR(sysslot, S_IRUGO, show_sysslot, 0);
 
 static ssize_t show_pmmr(
 	struct device * device, char * buf, void *reg)
@@ -781,6 +803,7 @@ static void mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_hpi_mask);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ticks);
 	DEVICE_CREATE_FILE(dev, &dev_attr_auxClock);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sysslot);
 
 	MK_DEV_FILE(ATUVID);
 	MK_DEV_FILE(ATUCMD);
