@@ -634,11 +634,12 @@ static int _acq200_post_dmac_request(
 	SMC_LP->pstats.dma_block_count[ichain]++;
 #endif
 
-	_acq200_wait_dma_done();
+	if (acq100_dma_threshold > 1 || !ACQ100_DO_DMA_NOBLOCK){
+		_acq200_wait_dma_done();
+	}
 	return rc;
 }
 
-#if 1
 static ssize_t show_dma_structs(
 	struct device * dev, 
 	struct device_attribute *attr, 
@@ -681,7 +682,7 @@ static void rm_dma_hooks(struct device* dev)
 {
 	device_remove_file(dev, &dev_attr_dma_structs);
 }
-#endif
+
 
 #endif  /* SMC_USE_ACQX00_DMA */
 
