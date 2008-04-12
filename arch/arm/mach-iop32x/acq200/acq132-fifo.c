@@ -198,9 +198,9 @@ static void _setIntClkHz(int hz, long masterclk, u32 clksel)
 	     hz, clkdiv, *ACQ200_CLKDAT, acq200_clk_hz, masterclk);
 }
 
-#define MASTERCLK_66 66666666  
+#define MASTERCLK_100 99999999  
 
-#define MASTERCLK MASTERCLK_66
+#define MASTERCLK MASTERCLK_100
 
 
 	static struct IntClkConsts {
@@ -208,7 +208,7 @@ static void _setIntClkHz(int hz, long masterclk, u32 clksel)
 		u32  clksel;
 	} intclk[2] = {
 		{
-			.masterclk = MASTERCLK_66,
+			.masterclk = MASTERCLK_100,
 			.clksel    = ACQ196_CLKCON_CS_66M
 		}
 	};
