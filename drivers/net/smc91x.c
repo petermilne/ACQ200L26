@@ -347,6 +347,9 @@ module_param(acq100_debug, int, 0664);
 #define ACQ100_SMC_BLOCK (ACQ200_LOCALIO_P+0x400)
 
 
+static int acq100_dma_threshold = 100;
+module_param(acq100_dma_threshold, int, 0644);
+
 static void acq100_do_dma_push_skb(void* ioaddr, struct sk_buff *skb);
 
 #define MAXBLT 0x400                         /* address limit on SMC */
@@ -535,7 +538,11 @@ static int _acq200_wait_dma_done(void)
 	struct DmaChannel *channel = &channels[ich];
 	int npolls = 0;
 	u32 stat;
+
 	while(!DMA_DONE(*channel, stat)){
+		if (npolls == 0){
+			++waits;
+		}
 		++npolls;
 	}	
 	DMA_STA(*channel) = EOX;
@@ -543,9 +550,11 @@ static int _acq200_wait_dma_done(void)
 }
 
 
+#ifdef ATWEAKTOOFAR
+
 static int _acq200_wait_dma_eot(struct DmaChannel *channel)
 {
-	u32 stat;
+	u32 stat = 0;
 	int npolls = 0;
 
 	++waits;
@@ -563,6 +572,10 @@ static int _acq200_wait_dma_eot(struct DmaChannel *channel)
 	}
 	return eot_pollcat += npolls;
 }
+
+#endif
+
+
 static int _acq200_post_dmac_request(
 	u32 laddr,
 	u32 offset,
@@ -621,15 +634,14 @@ static int _acq200_post_dmac_request(
 	SMC_LP->pstats.dma_block_count[ichain]++;
 #endif
 
-#ifdef PGMTERMINATED_IT
-	_acq200_wait_dma_eot(channel);
-#endif
+	_acq200_wait_dma_done();
 	return rc;
 }
 
-#if 0
+#if 1
 static ssize_t show_dma_structs(
 	struct device * dev, 
+	struct device_attribute *attr, 
 	char * buf)
 {
 	int ich, iblock;
@@ -639,8 +651,14 @@ static ssize_t show_dma_structs(
 		for (iblock = 0; iblock != MAXCHAIN; ++iblock){
 			struct iop321_dma_desc* dmad = 
 				channels[ich].dmad[iblock];
-			PRINTF("%08x %08x %08x %08x\n",
-			       dmad->LAD, dmad->PDA, dmad->BC, dmad->DC);
+			if (dmad){
+				PRINTF("[%d][%d]: %08x %08x %08x %08x\n",
+				       ich, iblock,
+					dmad->LAD, dmad->PDA, 
+					dmad->BC, dmad->DC);
+			}else{
+				PRINTF("[%d][%d] null dmad\n", ich, iblock);
+			}
 		}
 	}
 	PRINTF("waits:%d pollcat:%d eot_pollcat %d p/w:%d\n", 
@@ -654,7 +672,9 @@ static DEVICE_ATTR(dma_structs, S_IRUGO, show_dma_structs, 0);
 
 static void mk_dma_hooks(struct device* dev)
 {
-	device_create_file(dev, &dev_attr_dma_structs);
+	if (device_create_file(dev, &dev_attr_dma_structs)){
+		PRINTK("error, failed to create file");
+	}
 }
 
 static void rm_dma_hooks(struct device* dev)
@@ -1029,7 +1049,7 @@ static void smc_hardware_send_pkt(unsigned long data)
 	SMC_PUT_PKT_HDR(0, len + 6);
 
 #if SMC_USE_ACQX00_DMA  
-	if (ACQ100_USE_DMA && skb_tailroom(skb) > 1){
+	if (ACQ100_USE_DMA && len > acq100_dma_threshold && skb_tailroom(skb) > 1){
 		acq100_do_dma_push_skb(ioaddr, skb);
 	}else{
 #endif /* SMC_USE_ACQX00_DMA */
@@ -2022,6 +2042,13 @@ smc_ethtool_getsettings(struct net_device *dev, struct ethtool_cmd *cmd)
 	cmd->maxtxpkt = 1;
 	cmd->maxrxpkt = 1;
 
+/** pgm 20080412 - check phystatus */
+	{
+		int cfg2;
+		cfg2 = smc_phy_read(dev, lp->mii.phy_id, PHY_INT_REG);
+		printk("smc91x PHY_INT_REG = 0x%08x\n", cfg2);
+	}
+
 	if (lp->phy_type != 0) {
 		spin_lock_irq(&lp->lock);
 		ret = mii_ethtool_gset(&lp->mii, cmd);
@@ -2386,9 +2413,7 @@ static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr)
 			dev->dma = dma;
 	}
 #endif
-#ifdef SMC_USE_ACQX00_DMA
-	smc91x_acq100_dmac_init();
-#endif
+
 
 	retval = register_netdev(dev);
 	if (retval == 0) {
@@ -2622,6 +2647,10 @@ static int smc_drv_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_MACH_ACQ100)
 	PRINTK("[%d] ioremap(0x%08x) returned %p\n", __LINE__, base, addr);
+#if SMC_USE_ACQX00_DMA
+	smc91x_acq100_dmac_init();
+	mk_dma_hooks(&pdev->dev);
+#endif
 #endif
 
 	platform_set_drvdata(pdev, ndev);
@@ -2665,7 +2694,9 @@ static int smc_drv_remove(struct platform_device *pdev)
 	unregister_netdev(ndev);
 
 	free_irq(ndev->irq, ndev);
-
+#if defined(CONFIG_MACH_ACQ100) && SMC_USE_ACQX00_DMA
+	rm_dma_hooks(&pdev->dev);
+#endif 
 #ifdef SMC_USE_PXA_DMA
 	if (ndev->dma != (unsigned char)-1)
 		pxa_free_dma(ndev->dma);
