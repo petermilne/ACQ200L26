@@ -3173,7 +3173,7 @@ static int tblocks_seq_show(struct seq_file *sfile, void *v)
 
 
 	len = seq_printf(sfile,
-			"<bl id=\"%2d\" addr=\"%08x\" st=\"%s\"/>\n", 
+			"<bl id=\"%03d\" addr=\"%08x\" st=\"%s\"/>\n", 
 		       ib, offset, stat);
 
 	return len;
