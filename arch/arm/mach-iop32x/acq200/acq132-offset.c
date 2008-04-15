@@ -56,7 +56,7 @@
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+1)*TD_SZ)
 
 
-#define MAXCHAN 96
+#define MAXCHAN 32
 
 #define DACX 0
 #define DACY 1
@@ -91,6 +91,9 @@ static const int MAP[NDACSBLOCK+1][NDACSCHIP+1] = {
 
 
 static	int plut[] = {
+/* index: memory order 1:32 
+ * value: nameplate order 1:32 
+ */
 	[ 1] =  1, [ 2] = 17,
 	[ 3] =  2, [ 4] = 18,
 	[ 5] =  3, [ 6] = 19,
@@ -109,21 +112,24 @@ static	int plut[] = {
 	[31] = 16, [32] = 32
 };
 
-int acq200_lookup_pchan(int lchannel)
-{
-	return plut[lchannel] - 1;
-}
 
-int acq200_lookup_lchan(int pchan)
+int acq200_lookup_pchan(int lchannel)
+/** lchannel in = 1:32 nameplate order return 0:32 memory order */
 {
 	int index = 1;
 
 	for (; index <= 32; ++index){
-		if (plut[index] == pchan){
-			return index;
+		if (plut[index] == lchannel){
+			return index -1;
 		}
 	}
 	return -1;
+}
+
+int acq200_lookup_lchan(int pchan)
+/* lookup pchan = 0:31 return 1:32 nameplate */
+{
+	return plut[pchan+1];
 }
 
 /*
