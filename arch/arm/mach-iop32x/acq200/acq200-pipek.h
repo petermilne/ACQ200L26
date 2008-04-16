@@ -6,7 +6,7 @@
  */
 
 
-/* acq200-fifo.h $Revision: 1.23 $ */
+/* acq200-fifo.h $Revision: 1.23 $ 20080417 */
 #define CONSTS_VERSION       5
 #define FIQDEBUG             0
 #define RBLEN                16384
@@ -23,9 +23,9 @@
 #define IPC_ENDSTOPS           48 /* 0x30 */
 #define STATS_NFINTS            0 /* 0x00 */
 #define STATS_DMA_BLOCKS        4 /* 0x04 */
-#define STATS_COLD_FIFO_HISTO   36 /* 0x24 */
-#define STATS_HOT_FIFO_HISTO  100 /* 0x64 */
-#define STATS_STARVE_FIFCON   356 /* 0x164 */
+#define STATS_COLD_FIFO_HISTO   68 /* 0x44 */
+#define STATS_HOT_FIFO_HISTO  132 /* 0x84 */
+#define STATS_STARVE_FIFCON   388 /* 0x184 */
 #define DG_STATS              192 /* 0xc0 */
 #define DG_IPC                 44 /* 0x2c */
 #define DG_WO                  48 /* 0x30 */
@@ -34,5 +34,4 @@
 #define DG_FIFERR              56 /* 0x38 */
 #define DG_FIFERR_MASK         52 /* 0x34 */
 #define DG_HEAD                60 /* 0x3c */
-#define DG_2B_IF_HALF          64 /* 0x40 */
 #define WO_NEXT_LOAD           28 /* 0x1c */

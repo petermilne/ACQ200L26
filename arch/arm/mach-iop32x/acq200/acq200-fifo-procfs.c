@@ -3473,6 +3473,9 @@ static int acq200_proc_stat_timing(
 
 	for (iblock = 0; iblock != MAX_DMA_BLOCKS; ++iblock){
 		len += PRINTF(" %5d", DG->stats.dma_blocks[iblock]);
+		if (iblock == 7){			
+			len += PRINTF("\n" FMT " ", " ");
+		}		
 	}
 
         len += PRINTF("]\n");

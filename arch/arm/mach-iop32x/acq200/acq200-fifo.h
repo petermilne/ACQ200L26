@@ -26,7 +26,7 @@
 #define FIQDEBUG 0
 #define ACQ200_FIFO_H_VERSION 5
 
-#define ACQ200_FIFO_H_VERSION_STR "acq200-fifo.h $Revision: 1.23 $"
+#define ACQ200_FIFO_H_VERSION_STR "acq200-fifo.h $Revision: 1.23 $ 20080417"
 
 #include <linux/list.h>
 #include "ringbuffer.h"
@@ -430,7 +430,7 @@ void acq200_resetBigBufCursor(void);
 void acq200_transform_init(void);
 void acq200_transform_destroy(void);
 
-#define MAX_DMA_BLOCKS 8
+#define MAX_DMA_BLOCKS 16
 
 #define MAX_TBLOCK_POOL (1024/6)       /** maximal tblock sharing case .. */
 
