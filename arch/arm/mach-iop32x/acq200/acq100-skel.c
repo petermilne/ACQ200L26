@@ -66,6 +66,8 @@ module_param(acq100_skel_debug, int, 0664);
 
 #define VERID "$Revision: 1.4 $ build B1000 "
 
+#define DIO_REG_TYPE (volatile u32*)
+#include "acqX00-rtm.h"
 
 static void speed_test(void) 
 {
@@ -117,9 +119,34 @@ static void speed_test(void)
 
 }
 
+static void dio_test(void)
+{
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+	*RTM_DIO_DATA_A = 0xffff;
+	*RTM_DIO_DATA_A = 0x0000;
+
+}
 static int mk_skel_sysfs(struct device *dev)
 {
 	speed_test();
+	dio_test();
 	return 0;
 }
 
