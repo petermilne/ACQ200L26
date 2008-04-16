@@ -20,7 +20,9 @@
 /* ------------------------------------------------------------------------- */
 
 #warning WORKTODO ACQ132 crib of ACQ196
-		
+
+/* NB: fifcon in case ACQ132, ACQ196 is actually FIFO_STATUS !! */
+	
 #define DTACQ_MACH 2
 #define ACQ132
 
@@ -44,6 +46,8 @@
 
 #if defined ACQ132
 
+#define ACQ132_FIFSTAT_HOTPOINT 0x0000001f
+	
 /*
  * HOTPOINT: 32 levels, 32K.
  * 0x2 : 2K
@@ -54,9 +58,10 @@
 	
 #if 0
 #define CHECK_2B 0	
-#else	
-#define HOTxB 0x9
-#define CHECK_2B 7
+#else
+#define HOTxB 12
+/* remember, we already moved one block */	
+#define CHECK_2B 11
 #endif	
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
@@ -70,9 +75,12 @@
 	
 #define UPDATE_COLD_HISTO 0
 #define UPDATE_HOT_HISTO 1
+	
+#define HOT_HISTO_LSR 1	
 
 	.macro GET_HOT tmp, fifcon
-	and	\tmp, \fifcon, #ACQ200_FIFCON_MASK
+	and	\tmp, \fifcon, #ACQ132_FIFSTAT_HOTPOINT
+	mov	\tmp, \tmp, lsr #HOT_HISTO_LSR
 	.endm
 
 #define MACH_VER CHECK_2B

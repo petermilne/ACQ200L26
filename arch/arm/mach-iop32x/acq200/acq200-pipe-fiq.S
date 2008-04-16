@@ -57,9 +57,10 @@
 @ 170 - re-introduce ISR_ADDS_ENDSTOP for ACQ216/16K
 @ 171 - remember to Q to active
 @ 172 - CAF fail (196) caused stack fail
-@ 173 - DMA_DELAY - force tight loop in FIQ to allow DMA priority	
+@ 173 - DMA_DELAY - force tight loop in FIQ to allow DMA priority
+@ 174 - HOT_HISTO_LSR for ACQ132 (5 bit hot fifo)
 	
-#define VERSION 0x00000173
+#define VERSION 0x00000174
 
 /*
  * WE DONT CARE if CAF still set. 'cos first thing we do is DISABLE IT
