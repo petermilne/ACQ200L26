@@ -964,24 +964,60 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 /* str should be a sequence of bytes :XX:XX:XX */
 {
 #define MACFMT "%x:%x:%x:%x:%x:%x"
-	unsigned tmac[6];
-	int imac;
+#define DECFMT "%d:%d:%d:%d:%d:%d"
+	unsigned hmac[6] = { 0, };	/* octets, hex decoded */
+	unsigned dmac[6] = { 0, };	/* octets, dec decoded */
+	int ito, ifrom;				
+	int is_decimal_def = 0;		/* once dec discovered, all dec */
+ 
+/** IEEE standard is to define octets in hex. 
+ *  We do this by default
+ *  But older D-TACQ u-boot defs were dec. 
+ *  We attempt to detect these by looking for rollover past 255.
+ *  doesn't work for values < 100, so we trap ls octet < 100 (*)
+ *  Only do this for affected machines
+ */
+	int replace_count = sscanf( str, MACFMT,
+			&hmac[0], &hmac[1], &hmac[2],
+			&hmac[3], &hmac[4], &hmac[5] );
 
-	int itmac = sscanf( str, MACFMT,
-			&tmac[0], &tmac[1], &tmac[2],
-			&tmac[3], &tmac[4], &tmac[5] );
+	sscanf(str, DECFMT,
+			&dmac[0], &dmac[1], &dmac[2],
+			&dmac[3], &dmac[4], &dmac[5] );
 
-	/* fill the mac from the back */
+
+	/* fill the mac from the back. The front side is already there */
 	
-	for ( imac = 5; itmac--; imac-- ){
-		the_mac[imac] = tmac[itmac];
+	for (ifrom = replace_count, ito = 5; ifrom--; ito--){
+		if (is_decimal_def == 0 && hmac[ifrom] <= 255){			
+			if (ito == 5 &&
+                            (machine_is_acq100() || machine_is_acq200()) &&
+			    hmac[ifrom] < 100 && dmac[ifrom] > 0	     ){
+				/* (*) special case, assume old dec setting */
+				the_mac[ito] = dmac[ifrom]; 
+				is_decimal_def = 1;
+
+				info("special low octet: [5] %x", dmac[ifrom]);
+			}else{
+				the_mac[ito] = hmac[ifrom];
+			}
+		}else if (dmac[ifrom]){
+			/* hex overflow, must be dec def > 100 => use dec */
+			the_mac[ito] = dmac[ifrom];
+			is_decimal_def = 1;
+
+			info("decimal octet definition detected: [%d] %x", 
+			     ifrom, dmac[ifrom]);
+		}else{
+			err("no decimal value for octet %d of %s", ifrom, str);
+		}
 	}
 
-	info( "[%s] "MACFMT" %d",
+	info( "[%s] "MACFMT" replaced last %d",
 	      str,
 		the_mac[0], the_mac[1], the_mac[2],
 		the_mac[3], the_mac[4], the_mac[5],
-		5 - imac );
+		replace_count );
 
 	return 0;
 }
