@@ -81,7 +81,7 @@ char cps_transform_copyright[] = "Copyright (c) 2008 D-TACQ Solutions Ltd";
 int sigstride = SIGSTRIDE;
 module_param(sigstride, int, 0664);
 
-int nsigtblocks = 3;
+int nsigtblocks = 9;
 module_param(nsigtblocks, int, 0444);
 
 static struct TblockListElement ** captives;
