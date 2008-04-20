@@ -74,14 +74,20 @@ char cps_transform_driver_version[] = VERID __DATE__;
 char cps_transform_copyright[] = "Copyright (c) 2008 D-TACQ Solutions Ltd";
 
 #define NCHANNELS	12
+
+/* one ES ever SIGSTRIDE samples, but inserted only as 
+ *	SIGSTRIDE*SUPERSTRIDE 
+ * samples.
+ */
 #define SIGSTRIDE	6
+#define SUPERSTRIDE	3
 
 #define ROWLEN (NCHANNELS*sizeof(short))
 
 int sigstride = SIGSTRIDE;
 module_param(sigstride, int, 0664);
 
-int nsigtblocks = 9;
+int nsigtblocks = 10;
 module_param(nsigtblocks, int, 0444);
 
 static struct TblockListElement ** captives;
@@ -193,7 +199,7 @@ static void cps_transform(short *to, short *from, int nwords, int stride)
 {
 	int nsamples = nwords/stride;
 	int isample, ichannel;
-	const int max_stride = sigstride * nsigtblocks;
+	const int max_stride = sigstride * SUPERSTRIDE;
 	int delta_sam = 0;
 	int po = 0;
 	int tosample = 0;
