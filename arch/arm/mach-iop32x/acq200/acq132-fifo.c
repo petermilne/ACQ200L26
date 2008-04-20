@@ -333,7 +333,7 @@ static struct DevGlobs acq132_dg = {
 	.get_max_active = 1024,
 	.active_batch_threshold = 64,
 	.init_endstops = 32,
- 	.eoc_int_modulo_mask = 3,      
+ 	.eoc_int_modulo_mask = 0xf,      
 	.activate_event_on_arm = 1,
 
 	.dcb.dcb_max = 2048,

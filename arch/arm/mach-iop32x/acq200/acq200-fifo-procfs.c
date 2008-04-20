@@ -1568,7 +1568,7 @@ DEFINE_DG_RANGE_FIELD(put_max_empties, 1, 16000);
 DEFINE_DG_RANGE_FIELD(get_max_active, 1, 16000);
 DEFINE_DG_RANGE_FIELD(active_batch_threshold, 0, 16000);
 DEFINE_DG_RANGE_FIELD(init_endstops, 1, 128);
-DEFINE_DG_RANGE_FIELD(eoc_int_modulo_mask, 0, 7);
+DEFINE_DG_RANGE_FIELD(eoc_int_modulo_mask, 0, 15);
 
 extern char *acq200_fifo_verid(void);
 
