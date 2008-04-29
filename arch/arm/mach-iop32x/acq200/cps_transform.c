@@ -65,7 +65,7 @@ int cps_transform_debug;
 module_param(cps_transform_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.0 $ build B1004 "
+#define VERID "$Revision: 1.0 $ build B1008 "
 
 
 char cps_transform_driver_name[] = "cps_transform";
@@ -94,6 +94,7 @@ static struct TblockListElement ** captives;
 unsigned sig_cursor;
 int last_stride;
 int block_cursor;
+int delta_sam_total;
 
 #define SIG_TBLOCK (captives[block_cursor]->tblock)
 
@@ -104,15 +105,14 @@ static void adjust_this_tblock(
 {
 	if (!phase_only){
 		tble->sample_count -= delta_sam;
+		tble->phase_sample_start -= delta_sam_total;
 	}
 
+	phase->actual_len -= delta_sam;
+	phase->actual_samples -= delta_sam;
 
-	if (phase->transformer_private == 0){
-		phase->actual_len -= delta_sam;
-		phase->actual_samples -=delta_sam;				
-		phase->transformer_private = 1;
-	}
 
+#ifdef DODGYISGOOD
 	if (tble->phase_sample_start+tble->sample_count ==
 	    phase->actual_samples - 1){
 		struct Phase *next_phase;
@@ -127,6 +127,7 @@ static void adjust_this_tblock(
 			next_phase -> start_sample -= 1;
 		}
 	}
+#endif
 }
 
 #define ADJUSTED 1
@@ -229,6 +230,7 @@ static void cps_transform(short *to, short *from, int nwords, int stride)
 
 	po = adjust_tblock_in_phase(DMC_WO->pre, from, delta_sam, po)==ADJUSTED;
 	adjust_tblock_in_phase(DMC_WO->post, from, delta_sam, po);
+	delta_sam_total += delta_sam;
 }
 
 
@@ -295,14 +297,25 @@ static void reserve_tblocks(void)
 	int it;
 
 	if (captives){
+		for (it = 0; it < nsigtblocks; ++it){
+			if (captives[it] == 0){
+				info("captives[%d] was null (ignore)", it);
+				continue;
+			}
+			acq200_replaceFreeTblock(captives[it]);
+		}
 		kfree(captives);
 	}
-	captives = kmalloc(nsigtblocks*sizeof(struct TblockListElement *), 
+	captives = kzalloc(nsigtblocks*sizeof(struct TblockListElement *), 
 			   GFP_KERNEL);
 
 
 	for (it = 0; it < nsigtblocks; ++it){
 		captives[it] = acq200_reserveFreeTblock();
+		if (captives[it] == 0){
+			info("captives[%d] was null (ignore)", it);
+			break;
+		}
 		atomic_inc(&captives[it]->tblock->in_phase);
 
 		dbg(1, "%d: tblock:%03d in_phase:%d",
@@ -317,6 +330,7 @@ static void onStart(void *notused)
 	block_cursor = -1;
 	sig_cursor = 0;
 	last_stride = 0;
+	delta_sam_total = 0;
 	dbg(1, "01 cursor:%d", sig_cursor);
 }
 
