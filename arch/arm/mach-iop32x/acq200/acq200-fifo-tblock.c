@@ -621,15 +621,21 @@ void acq200_phase_rollup_excess(struct Phase* phase)
 }
 
 TBLE* acq200_reserveFreeTblock(void)
+/** reserve a TBLOCK
+ *  return TBLE or 0 => no free tblocks available. 
+ */
 {
 	struct BIGBUF *bb = &DG->bigbuf;
 	unsigned long flags;
-	TBLE* tble;
+	TBLE* tble = 0;
 
 	spin_lock_irqsave(&bb->tb_list_lock, flags);
-	tble = TBLE_LIST_ENTRY(bb->free_tblocks.next);
-	list_del(&tble->list);
+	if (!list_empty(&bb->free_tblocks)){
+		tble = TBLE_LIST_ENTRY(bb->free_tblocks.next);
+		list_del(&tble->list);
+	}
 	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+
 	return tble;
 }
 
