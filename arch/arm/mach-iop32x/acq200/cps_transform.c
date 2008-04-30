@@ -65,7 +65,7 @@ int cps_transform_debug;
 module_param(cps_transform_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.0 $ build B1008 "
+#define VERID "$Revision: 1.0 $ build B1013 "
 
 
 char cps_transform_driver_name[] = "cps_transform";
@@ -91,12 +91,19 @@ int nsigtblocks = 10;
 module_param(nsigtblocks, int, 0444);
 
 static struct TblockListElement ** captives;
-unsigned sig_cursor;
 int last_stride;
-int block_cursor;
+int sig_cursor;
+int block_cursor = -1;
 int delta_sam_total;
 
-#define SIG_TBLOCK (captives[block_cursor]->tblock)
+int cps_major = 0;
+
+#define SIG(block) (captives[block])
+
+/** NB SIG_TBLOCK usage:
+ * SIG(block)->phase_sample_start is in BYTES
+ * SIG(block)->sample_count is in BYTES
+ */
 
 static void adjust_this_tblock(
 	struct Phase * phase, struct TblockListElement *tble, 
@@ -167,19 +174,23 @@ static void stash_sig(short *from)
 {
 	if (block_cursor == -1){
 		++block_cursor;
-		SIG_TBLOCK->touched = 1;
+		SIG(block_cursor)->tblock->touched = 1;
 	}
 	if (sig_cursor + ROWLEN > TBLOCK_LEN){
 		if (++block_cursor > nsigtblocks){
-			err("not enough captiuve tblocks to store all sigs");
+			err("not enough captive tblocks to store all sigs");
 			return;
 		}else{
-			SIG_TBLOCK->touched = 1;
+			SIG(block_cursor)->phase_sample_start = 
+					block_cursor*TBLOCK_LEN;
+			SIG(block_cursor)->tblock->touched = 1;
 			sig_cursor = 0;
 		}
+	}else{
+		SIG(block_cursor)->sample_count += ROWLEN;
 	}
 
-	memcpy(VA_TBLOCK(SIG_TBLOCK)+sig_cursor, from, ROWLEN);
+	memcpy(VA_TBLOCK(SIG(block_cursor)->tblock)+sig_cursor, from, ROWLEN);
 	sig_cursor += ROWLEN;
 }
 
@@ -311,12 +322,16 @@ static void reserve_tblocks(void)
 
 
 	for (it = 0; it < nsigtblocks; ++it){
-		captives[it] = acq200_reserveFreeTblock();
-		if (captives[it] == 0){
-			info("captives[%d] was null (ignore)", it);
+		SIG(it) = acq200_reserveFreeTblock();
+		if (SIG(it) == 0){
+			info("SIG(%d) was null (ignore)", it);
 			break;
 		}
-		atomic_inc(&captives[it]->tblock->in_phase);
+		atomic_inc(&SIG(it)->tblock->in_phase);
+		SIG(it)->tblock->touched = 0;
+		SIG(it)->phase_sample_start = 0;
+		SIG(it)->sample_count = 0;
+		
 
 		dbg(1, "%d: tblock:%03d in_phase:%d",
 		    it, captives[it]->tblock->iblock,
@@ -334,10 +349,79 @@ static void onStart(void *notused)
 	dbg(1, "01 cursor:%d", sig_cursor);
 }
 
+static int cps_open(struct inode *inode, struct file *filp)
+{
+	dbg(1, "return 0");
+	return 0;	/* WORKTODO */
+}
+static int cps_release(struct inode *inode, struct file *filp)
+{
+	dbg(1, "return 0");
+        return 0;
+}
+ssize_t cps_read(struct file *filp, char __user *buf, size_t count,
+                loff_t *f_pos)
+{
+	int iblock;
+	loff_t _pos = *f_pos;
+
+	dbg(1, "01");
+
+	for (iblock = 0; iblock <= block_cursor; ++iblock){
+		loff_t p1 = (loff_t)SIG(iblock)->phase_sample_start;
+		loff_t p2 = p1 + SIG(iblock)->sample_count;
+		if (_pos >= p1 && _pos < p2){
+			size_t headroom = (size_t)(p2 - _pos);
+			int nbytes = min(count, headroom);
+			void *src = VA_TBLOCK(SIG(iblock)->tblock) + (_pos-p1);
+
+			if (copy_to_user(buf, src, nbytes)){
+				dbg(1, "return %d", -EFAULT);
+				return -EFAULT;
+			}else{
+				*f_pos += nbytes;
+				dbg(1, "return %d", nbytes);
+				return nbytes;
+			}			
+		}
+	}
+
+	dbg(1, "return 0");
+	return 0;
+}
+
+
+static int cps_cdev_create(void)
+{
+	static struct file_operations cps_fops = {
+		.owner = THIS_MODULE,
+		.open = cps_open,
+		.read = cps_read,
+		.release = cps_release
+	};
+	int rc = register_chrdev(0, "cps_transform", &cps_fops);
+
+	if (rc >= 0){
+		cps_major = rc;
+		return 0;
+	}else{
+		err("can't get major %d", rc);
+		return rc;
+	}
+}
+
+static void cps_cdev_remove(void)
+{
+	unregister_chrdev(cps_major, "cps_transform");
+}
+
+
 static struct Hookup startHook = {
 	.the_hook = onStart,
 	.clidata = 0,
 };
+
+
 
 static struct device_driver cps_transform_driver;
 
@@ -345,6 +429,7 @@ static 	struct Transformer transformer = {
 	.name = "cps",
 	.transform = cps_transform
 };
+
 
 static int cps_transform_probe(struct device *dev)
 {
@@ -362,6 +447,7 @@ static int cps_transform_probe(struct device *dev)
 		err("transformer NOT registered");
 	}
 
+	cps_cdev_create();
 	mk_ppcustom_sysfs(dev);
 	dbg(1, "99");
 	return 0;
@@ -373,6 +459,7 @@ static int cps_transform_remove(struct device *dev)
 		kfree(captives);
 	}
 	rm_ppcustom_sysfs(dev);
+	cps_cdev_remove();
 	acq200_unregisterTransformer(&transformer);
 	acq200_del_start_of_shot_hook(&startHook);
 	return 0;
