@@ -764,6 +764,17 @@ static ssize_t store_user_abort(
 static DEVICE_ATTR(user_abort, S_IRUGO|S_IWUGO,
 		   show_user_abort, store_user_abort);
 
+static ssize_t show_cap_status(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf(buf, "%s\n", 
+		DMC_WO->error == 0? "OK": DMC_WO->error);
+}
+
+static DEVICE_ATTR(cap_status, S_IRUGO, show_cap_status, 0);
+
 static int decodeBinaryMask(
 	const char * buf, 
 	unsigned* mask)
@@ -1411,6 +1422,7 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_simulate);
 	DEVICE_CREATE_FILE(dev, &dev_attr_oneshot);
 	DEVICE_CREATE_FILE(dev, &dev_attr_user_abort);
+	DEVICE_CREATE_FILE(dev, &dev_attr_cap_status);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pit_stop);
 	DEVICE_CREATE_FILE(dev, &dev_attr_burst_delay);
 	DEVICE_CREATE_FILE(dev, &dev_attr_burst_len);
