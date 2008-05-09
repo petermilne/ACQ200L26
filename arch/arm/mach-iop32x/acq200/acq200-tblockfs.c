@@ -198,12 +198,22 @@ static ssize_t tblock_data_read(struct file *filp, char *buf,
 	}
 }
 
+/*
+ * StateListener
+ */
+/* store per path StateListener object */
 #define SL(filp) ((struct StateListener*)(filp)->private_data)
+/* stash previous state value in second StateListener element */
+#define _SL_STATE(filp) (u32*)(&SL(filp)[1])
+
+#define SL_PUT_STATE(filp, value) (*_SL_STATE(filp) = (value))
+#define SL_GET_STATE(filp)        (*_SL_STATE(filp))
 
 static int state_open(struct inode *inode, struct file *filp)
 {
-	filp->private_data = kzalloc(sizeof(struct StateListener), GFP_KERNEL);
+	filp->private_data = kzalloc(sizeof(struct StateListener)*2,GFP_KERNEL);
 	init_waitqueue_head(&SL(filp)->waitq);
+	SL_PUT_STATE(filp, 12345);
 	INIT_LIST_HEAD(&SL(filp)->list);
 	u32rb_init(&SL(filp)->rb, 16);
 	list_add_tail(&SL(filp)->list, &DMC_WO->stateListeners);
@@ -231,24 +241,27 @@ static char *stateString(u32 state)
 }
 static int state_read(struct file *filp, char *buf,
 		size_t count, loff_t *offset)
+/** report changes of state. If the state is the same, don't report */
 {
 	char sbuf[32];
 	u32 scode;
-	u32 state;
+	u32 state = SL_GET_STATE(filp);	
 	u32 tcode;
 	u32 sec;
 	int len;
 
-	wait_event_interruptible(SL(filp)->waitq, 
+	do {
+		wait_event_interruptible(SL(filp)->waitq, 
 				!u32rb_is_empty(&SL(filp)->rb));
 
-	if (u32rb_is_empty(&SL(filp)->rb)){
-		return -EINTR;
-	}
-	u32rb_get(&SL(filp)->rb, &scode);
+		if (u32rb_is_empty(&SL(filp)->rb)){
+			return -EINTR;
+		}
+		u32rb_get(&SL(filp)->rb, &scode);
+	} while(SL_TO_STATE(scode) == state);
 	
-	state = scode >> 28;
-	tcode = scode & ~0xf0000000;
+	state = SL_TO_STATE(scode);
+	tcode = SL_TO_TCODE(scode);
 	sec = tcode / 100;
 	tcode = tcode - sec*100;
 	
@@ -262,9 +275,9 @@ static int state_read(struct file *filp, char *buf,
 		if (offset){
 			*offset += len;
 		}
+		SL_PUT_STATE(filp, state);
 		return len;
 	}
-	return 0;
 }
 static int state_release(struct inode *inode, struct file *filp)
 {
