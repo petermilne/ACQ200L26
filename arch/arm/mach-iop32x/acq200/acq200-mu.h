@@ -84,7 +84,12 @@ int acq200mu_post_ob(MFA mfa);
 MFA acq200mu_get_ib(void);
 int acq200mu_return_free_ib(MFA mfa);
 
+unsigned acq200mu_get_hb_phys(void);
+unsigned acq200mu_get_hb_len(void);
 
+unsigned acq200mu_get_hb_mask(void) {
+	return ~(acq200mu_get_hb_len() - 1);
+}
 
 #define __ACQ200_MU_Q_OFF(ix) (ACQ200_MU_QSZ*(ix))
 

@@ -153,7 +153,7 @@ module_param(acq100_dropACQEN_on_exit, int, 0664);
 
 /** increment BUILD and VERID each build */
 #define BUILD 1069
-#define VERID "$Revision: 1.24 $ build B1069"
+#define VERID "$Revision: 1.24 $ build B1070"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -254,6 +254,7 @@ static struct LlcDevGlobs {
 	int sample_size;
 	int dac_lowlat;
 	int sync_output;                  /* ao, do sync with ai */
+	unsigned hb_mask;		  /* host buffer size limit */
 
 /* @@todo - publish SETTINGS thru /sys/.../settings (ro) */
 	struct SETTINGS {                /* user specified things */
@@ -475,6 +476,7 @@ static int llc_onEntry(int entry_code)
 	enable_fifo(CHANNEL_MASK);
 	set_fifo_ne_mask(CHANNEL_MASK);
 	dg.sample_size = get_sample_size(CHANNEL_MASK);
+	dg.hb_mask = acq200mu_get_hb_mask();
 	
 
 	/**
@@ -1061,7 +1063,7 @@ static void llc_loop(int entry_code)
 			DBG(1, "AO DATA 0x%08x", ao_data);
 #endif
 			DMA_PRECHARGE_AO(ao_dma, 
-			        (dg.settings.AI_target&0xff000000)|ao_data);
+			        (dg.settings.AI_target&dg.hb_mask)|ao_data);
 			DMA_ARM(ao_dma);
 			DMA_FIRE(ao_dma);
 				      
@@ -1713,8 +1715,14 @@ static ssize_t show_sync_output(
 
 static DEVICE_ATTR(sync_output, S_IWUGO|S_IRUGO, show_sync_output, set_sync_output);
 
-
-
+static ssize_t show_hb_mask(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "0x%08x\n", dg.hb_mask);
+}
+static DEVICE_ATTR(hb_mask, S_IRUGO, show_hb_mask, 0);
 
 static ssize_t set_llc_debug(
 	struct device *dev, 
@@ -1980,6 +1988,7 @@ static int mk_llc_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_mode);
 	DEVICE_CREATE_FILE(dev, &dev_attr_version);
 	DEVICE_CREATE_FILE(dev, &dev_attr_imask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_hb_mask);
 	DEVICE_CREATE_FILE(dev, &dev_attr_debug);
 	DEVICE_CREATE_FILE(dev, &dev_attr_settings);
 	DEVICE_CREATE_FILE(dev, &dev_attr_emergency_stop);

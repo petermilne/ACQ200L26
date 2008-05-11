@@ -129,6 +129,9 @@ int acq200_databuf_debug = 0;
 module_param(acq200_databuf_debug, int, 0664);
 
 
+int HBPHYS;
+module_param(HBPHYS, int, 0444);
+
 int HBLEN = _HBLEN24;
 module_param(HBLEN, int, 0444);
 
@@ -159,6 +162,14 @@ static inline int isEmpty( MFA tail, MFA head )
 static inline int isFull(MFA tail, MFA head)
 {
 	return INCR(head) == tail;
+}
+
+unsigned acq200mu_get_hb_phys(void) {
+	return HBPHYS;
+}
+
+unsigned acq200mu_get_hb_len(void) {
+	return HBLEN;
 }
 
 static int qCount(MFA tail, MFA head)
@@ -1951,6 +1962,7 @@ static ssize_t set_downstream_window(
 
         if (downstream_is_set == 0 && 
 	    sscanf(buf, "0x%x 0x%08x %x", &offset, &HBLEN, &dw_mask) >= 1){
+		HBPHYS = offset;
 		if (machine_is_acq100()){
 			*IOP321_OMWTVR0 = offset;
 		/*
@@ -2150,6 +2162,8 @@ EXPORT_SYMBOL_GPL(acq200mu_get_free_ob);
 EXPORT_SYMBOL_GPL(acq200mu_post_ob);
 EXPORT_SYMBOL_GPL(acq200mu_get_ib);
 EXPORT_SYMBOL_GPL(acq200mu_return_free_ib);
+EXPORT_SYMBOL_GPL(acq200mu_get_hb_len);
+EXPORT_SYMBOL_GPL(acq200mu_get_hb_phys);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
