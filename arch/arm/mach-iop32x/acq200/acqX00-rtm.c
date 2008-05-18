@@ -347,6 +347,13 @@ rtm_exit_module(void)
 	driver_unregister(&rtm_driver);
 }
 
+
+unsigned acq200_getDIO32(void) {
+	return read_inputs();
+}
+
+EXPORT_SYMBOL_GPL(acq200_getDIO32);
+
 module_init(rtm_init);
 module_exit(rtm_exit_module);
 

@@ -18,7 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define VERID "$Revision: 1.5 $ build B1028 "
+#define VERID "$Revision: 1.5 $ build B1029 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -68,9 +68,6 @@ module_param(skip, int, 0664);
 
 int iter = 0;
 module_param(iter, int, 0444);
-
-int nice_mean = 10;
-module_param(nice_mean, int, 0644);
 
 char* verid = VERID;
 module_param(verid, charp, 0444);
@@ -350,22 +347,28 @@ static void initFrame(struct TagState *tag_state)
 	const unsigned long long scc = DMC_WO->scc.scc;
 	tag_state->s0 = scc&0xffffffffUL;
 	tag_state->s1 = scc>>32;
+	tag_state->extra = update_interval_ms;
 }
 
 static unsigned short tag_getDIO32(int ibyte)
 {
-	static char* gash_dio32 = "1234";
-	return gash_dio32[ibyte];
+	union {
+		unsigned dio32;
+		unsigned bytes[4];
+	} u;
+
+	u.dio32 = acq200_getDIO32();
+	return u.bytes[ibyte];
 }
 
 static unsigned short tag_getDIO6(void)
 {
-	return '5';
+	return acq200_getDI6();
 }
 
 static unsigned short getTrigger(void)
 {
-	return 0;
+	return DMC_WO->pit_count != 0;
 }
 static unsigned short buildTag(struct TagState *tag_state)
 {

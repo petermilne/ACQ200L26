@@ -3908,7 +3908,12 @@ void DMC_WO_setState(enum STATE s) {
 	alertStateListeners(s);
 }
 
+unsigned acq200_getDI6(void) {
+	return *ACQ200_DIOCON&0x0ff;
+}
+
 EXPORT_SYMBOL_GPL(acq200_check_entire_es);
+EXPORT_SYMBOL_GPL(acq200_getDI6);
 EXPORT_SYMBOL_GPL(acq200_setDO6_bit);
 EXPORT_SYMBOL_GPL(CAPDEF_set_nchan);
 EXPORT_SYMBOL_GPL(CAPDEF_set_word_size);

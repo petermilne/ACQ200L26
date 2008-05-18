@@ -1275,6 +1275,10 @@ extern struct proc_dir_entry* proc_acq200;
 extern TBLE* acq200_reserveFreeTblock(void);
 extern void acq200_replaceFreeTblock(TBLE* tble);
 
+extern unsigned acq200_getDI6(void);
+/* dio32 - actually instantiated by the RTM module */
+extern unsigned acq200_getDIO32(void);
+
 /* StateListener defs */
 #define SL_TO_STATE(s) ((s) >> 28)
 #define SL_FM_STATE(s) ((s) << 28)
