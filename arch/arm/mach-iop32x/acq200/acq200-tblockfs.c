@@ -212,10 +212,8 @@ static ssize_t tblock_data_read(struct file *filp, char *buf,
 static int state_open(struct inode *inode, struct file *filp)
 {
 	filp->private_data = kzalloc(sizeof(struct StateListener)*2,GFP_KERNEL);
-	init_waitqueue_head(&SL(filp)->waitq);
+	sl_init(SL(filp), 16);
 	SL_PUT_STATE(filp, 12345);
-	INIT_LIST_HEAD(&SL(filp)->list);
-	u32rb_init(&SL(filp)->rb, 16);
 	list_add_tail(&SL(filp)->list, &DMC_WO->stateListeners);
 	return 0;
 }

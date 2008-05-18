@@ -150,6 +150,13 @@ struct StateListener {
 	struct list_head list;		/* List of StateListners */
 };
 
+static inline void sl_init(struct StateListener *sl, int nbuf)
+{
+	init_waitqueue_head(&sl->waitq);
+	u32rb_init(&sl->rb, nbuf);
+	INIT_LIST_HEAD(&sl->list);
+}
+
 #define ACQ200_FPGA_REG_BAR  0
 #define ACQ200_FPGA_FIFO_BAR 1
 

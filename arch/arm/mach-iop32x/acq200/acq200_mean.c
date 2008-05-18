@@ -18,7 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define VERID "$Revision: 1.5 $ build B1021 "
+#define VERID "$Revision: 1.5 $ build B1028 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -47,6 +47,7 @@
 #include "acq200_debug.h"
 #include "acq200-fifo-local.h"     /* DG */
 
+#include "acq32busprot.h"
 
 /* example: 20kHz capture, 10Hz output, nmean=16 (2 bit SNR improvement)
  *
@@ -78,8 +79,11 @@ module_param(verid, charp, 0444);
 int update_interval_ms;
 module_param(update_interval_ms, int, 0444);
 
+int overruns;
+module_param(overruns, int, 0644);
+
 #define TD_SZ (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+1+2+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((1+(numchan)+1+3+1)*TD_SZ)
 
 #define MEANFS_MAGIC 0xbea02005
 #define TMPSIZE 20
@@ -122,6 +126,39 @@ static struct MEAN_WORK_STATE {
 	int imean;
 	int *the_sums;
 } work_state;
+
+/** MC - Mean Consumer - task context data consumer */
+#define NCB	4
+#define DLEN	512
+
+#define MCP	struct MC*
+
+/** state store for D-TACQ streaming frame protocol. */
+struct TagState {
+	int line;
+	unsigned s0, s1;
+	unsigned extra;
+};
+
+struct MC {
+	union {
+		struct MC_HEADER {
+			struct StateListener listener;
+			int (*filler)(MCP self, const void* from, int nbytes);
+			struct u32_ringbuffer empties;
+			struct TagState tagState;	/* streaming only */
+		}
+			header;			
+		char _pad[DLEN];
+	} u;
+	char buffers[NCB][DLEN];
+};
+
+
+static struct MEAN_CONSUMERS {
+	struct list_head clients;
+	spinlock_t lock;
+} mc_list;
 
 static void sum_up(void *data)
 {
@@ -168,6 +205,20 @@ static void calculate_interval(void)
 	ix = HINC(ix);
 }
 
+static void run_consumers(u32 *sums, int sumslen)
+{
+	struct MC *mc;
+
+	spin_lock(&mc_list.lock);
+	
+	/* now alert any listeners */
+	list_for_each_entry(mc, &mc_list.clients, u.header.listener.list){
+		dbg(2, "filler %p", mc->u.header.filler);
+		mc->u.header.filler(mc, sums, sumslen);
+	}		
+
+	spin_unlock(&mc_list.lock);
+}
 static void mean_work(void *data) 
 {
 	if (++work_state.iskip >= skip){
@@ -185,6 +236,7 @@ static void mean_work(void *data)
 			work_state.imean = 0;
 			iter++;
 			calculate_interval();
+			run_consumers(app_state.the_sums, SUMSLEN);	
 		}
 		work_state.iskip = 0;
 	}
@@ -197,6 +249,20 @@ void acq200_setRefillClient(void (*client)(void *pbuf))
 	spin_lock(&DG->refillClient.lock);
 	DG->refillClient.client = mean_work;
 	spin_unlock(&DG->refillClient.lock);
+}
+
+void add_mc(struct MC *mc)
+{
+	spin_lock(&mc_list.lock);
+	list_add_tail(&mc_list.clients, &mc->u.header.listener.list);
+	spin_unlock(&mc_list.lock);
+}
+
+void del_mc(struct MC *mc)
+{
+	spin_lock(&mc_list.lock);
+	list_del(&mc->u.header.listener.list);
+	spin_unlock(&mc_list.lock);
 }
 
 static void start_work(void) 
@@ -247,32 +313,253 @@ static ssize_t ch_read(
 	return 0;
 }
 
-static ssize_t xx_read(	
-	struct file *filp, char *buf, size_t count, loff_t *offset)
-/** read a single sample and return */
-/** WARNING: NO EOF, so it only makes sense to read on timer */
-{
-	int nread = 0;
-	int ichan;
-
-	if (count > app_state.sample_size*sizeof(int)){
-		count = app_state.sample_size*sizeof(int);
-	}
-
-	for (ichan = 1; nread < count; nread += sizeof(int), ++ichan){
-		int my_mean = getMean(ichan);
-		COPY_TO_USER(buf+nread, &my_mean, sizeof(int));
-	}
-	*offset += count;
-
-	return count;
-}
 
 
 static int ch_release(struct inode *inode, struct file *filp) 
 {
 	return 0;
 }
+
+static int mean_filler(MCP self, const void *from, int nbytes)
+{
+	u32 ibuf;
+	dbg(1, "self :%p from:%p nbytes:%d", self, from, nbytes);
+
+	if (u32rb_get(&self->u.header.empties, &ibuf) == 0){
+		++overruns;
+		return -1;
+	}else{
+		int *pbuf = (int*)self->buffers[ibuf];
+		int ichan;
+		int cursor = 0;
+		int nchan = nbytes/sizeof(int);
+
+		for (ichan = 1; cursor < nchan; ++cursor, ++ichan){
+			int my_mean = getMean(ichan);
+			pbuf[cursor] = my_mean;
+		}
+		u32rb_put(&self->u.header.listener.rb, ibuf);
+		wake_up_interruptible(&self->u.header.listener.waitq);
+	}
+       
+	return 0;
+}
+
+static void initFrame(struct TagState *tag_state)
+{
+	const unsigned long long scc = DMC_WO->scc.scc;
+	tag_state->s0 = scc&0xffffffffUL;
+	tag_state->s1 = scc>>32;
+}
+
+static unsigned short tag_getDIO32(int ibyte)
+{
+	static char* gash_dio32 = "1234";
+	return gash_dio32[ibyte];
+}
+
+static unsigned short tag_getDIO6(void)
+{
+	return '5';
+}
+
+static unsigned short getTrigger(void)
+{
+	return 0;
+}
+static unsigned short buildTag(struct TagState *tag_state)
+{
+	const int iline = tag_state->line;
+	unsigned short the_tag;
+	unsigned nX;
+
+	switch (iline){
+	case 0:
+		initFrame(tag_state);
+		the_tag = 0xfe;
+		break;
+	case 1:
+		the_tag = 0xed;
+		break;
+	default:
+		if (iline&1){
+			the_tag = tag_getDIO32((iline>>1)&0x3);
+		}else{
+			the_tag = tag_getDIO6();
+		}
+	}
+
+	the_tag |= (iline << s0_bit) | (getTrigger() << T_bit);
+
+	if (iline < 32){
+		nX = (tag_state->s0 >> iline) & 0x1U;
+	}else if (iline < NID_BITS){
+		nX = (tag_state->s1 >> (iline-32)) & 0x1U;
+	}else{
+		nX = (tag_state->extra >> (iline-NID_BITS)) & 0x1U;       
+	}
+	the_tag |= nX << nX_bit;
+
+	tag_state->line = (iline+1)&0x3f;
+
+	return the_tag;
+}
+
+static int stream_filler(struct MC *self, const void *from, int nbytes)
+{
+	u32 ibuf;
+	dbg(1, "self :%p from:%p nbytes:%d", self, from, nbytes);
+
+	if (u32rb_get(&self->u.header.empties, &ibuf) == 0){
+		++overruns;
+		return -1;
+	}else{
+		short *pbuf = (short*)self->buffers[ibuf];
+		int ichan;
+		int cursor = 0;
+		int nchan = nbytes/sizeof(int);
+
+		*(unsigned short*)pbuf = buildTag(&self->u.header.tagState);
+		pbuf++;
+
+		for (ichan = 1; cursor < nchan; ++cursor, ++ichan){
+			short my_mean = (short)getMean(ichan);
+			pbuf[cursor] = my_mean;
+		}
+		u32rb_put(&self->u.header.listener.rb, ibuf);
+		wake_up_interruptible(&self->u.header.listener.waitq);
+	}
+       
+	return 0;
+}
+
+#define FMC(filp) (struct MC*)((filp)->private_data)
+
+static void create_mc(
+	struct file* filp, 
+	int (*filler)(struct MC *self, const void *from, int nbytes)
+	)
+{
+	struct MC *mc = (struct MC*)__get_free_page(GFP_KERNEL);	
+	int ibuf;
+
+	clear_page(mc);
+
+	sl_init(&mc->u.header.listener, NCB);
+	u32rb_init(&mc->u.header.empties, NCB);
+	for (ibuf = 0; ibuf < NCB; ++ibuf){
+		u32rb_put(&mc->u.header.empties, ibuf);
+	}	
+	mc->u.header.filler = filler;
+	add_mc(mc);	
+	filp->private_data = mc;
+}
+
+static void delete_mc(struct file* filp)
+{
+	struct MC* mc = FMC(filp);
+	assert(FMC(filp) != 0);
+	del_mc(mc);
+	free_page((unsigned)mc);
+}
+static int xx_open(struct inode *inode, struct file *filp) 
+{
+	create_mc(filp, mean_filler);
+	return 0;
+}
+
+static int stream_open(struct inode *inode, struct file *filp) 
+{
+	create_mc(filp, stream_filler);
+	
+	return 0;
+}  
+static ssize_t xx_read(	
+	struct file *filp, char *buf, size_t count, loff_t *offset)
+/** WARNING: NO EOF, so it only makes sense to read on timer */
+/** read a single sample and return */
+{
+	struct MC *mc = FMC(filp);
+	u32 ibuf = 0;
+
+	if (count > app_state.sample_size*sizeof(int)){
+		count = app_state.sample_size*sizeof(int);
+	}
+
+	if ((filp->f_flags & O_NONBLOCK) == 0){
+		while(u32rb_get(&mc->u.header.listener.rb, &ibuf) == 0){
+			int rc = wait_event_interruptible(
+				mc->u.header.listener.waitq,
+				!u32rb_is_empty(&mc->u.header.listener.rb));
+			if (rc != 0){
+				return rc;
+			}
+		}
+		COPY_TO_USER(buf, mc->buffers[ibuf], count);
+		u32rb_put(&mc->u.header.empties, ibuf);
+	}else{
+		int ichan;
+		int nread = 0;
+
+		for (ichan = 1; nread < count; nread += sizeof(int), ++ichan){
+			int my_mean = getMean(ichan);
+			COPY_TO_USER(buf+nread, &my_mean, sizeof(int));
+		}
+	}
+
+	*offset += count;
+
+	return count;
+}
+
+static int xx_release(struct inode *inode, struct file *filp) 
+{
+	delete_mc(filp);
+	return 0;
+}
+
+static ssize_t stream_read(	
+	struct file *filp, char *buf, size_t count, loff_t *offset)
+/** read a single sample and return */
+/** WARNING: NO EOF, so it only makes sense to read on timer */
+{
+	struct MC *mc = FMC(filp);
+	u32 ibuf = 0;
+
+	/* (file->f_flags & O_NONBLOCK) */
+
+	if (count > app_state.sample_size*sizeof(short) + 2){
+		count = app_state.sample_size*sizeof(int);
+	}
+
+	if ((filp->f_flags & O_NONBLOCK) == 0){
+		while(u32rb_get(&mc->u.header.listener.rb, &ibuf) == 0){
+			int rc = wait_event_interruptible(
+				mc->u.header.listener.waitq,
+				!u32rb_is_empty(&mc->u.header.listener.rb));
+			if (rc != 0){
+				return rc;
+			}
+		}
+		
+		COPY_TO_USER(buf, mc->buffers[ibuf], count);
+		u32rb_put(&mc->u.header.empties, ibuf);
+	}else{
+		int ichan;
+		int nread = 0;
+
+		for (ichan = 1; nread < count; nread += sizeof(short), ++ichan){
+			short my_mean = (short)getMean(ichan);
+			COPY_TO_USER(buf+nread, &my_mean, sizeof(short));
+		}
+	}
+
+
+	*offset += count;
+
+	return count;
+}
+
 
 static ssize_t enable_read(
 	struct file *filp, char *buf, size_t count, loff_t *offset)
@@ -313,9 +600,14 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 		.release = ch_release
 	};
 	static struct file_operations xxops = {
-		.open = ch_open,
+		.open = xx_open,
 		.read = xx_read,
-		.release = ch_release
+		.release = xx_release
+	};
+	static struct file_operations stream_ops = {
+		.open = stream_open,
+		.read = stream_read,
+		.release = xx_release
 	};
 	static struct file_operations enops = {
 		.write = enable_write,
@@ -332,28 +624,28 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 	int ichan;
 	int fn = 0;
 
+#define ADDFILE(_name, _ops, _mode) do {	\
+	my_files[fn].name = _name;		\
+	my_files[fn].ops = _ops;		\
+	my_files[fn++].mode = _mode;		\
+} while(0)
 
 	memcpy(&my_files[fn++], &front, TD_SZ);
 	memcpy(&my_files[fn++], &front, TD_SZ);
 
-	for (ichan = 1; ichan <= nchan; ++ichan, ++fn){
+	for (ichan = 1; ichan <= nchan; ++ichan){
 		sprintf(my_names[ichan].name, "%02d", ichan);
-		my_files[fn].name = my_names[ichan].name;
-		my_files[fn].ops = &chops;
-		my_files[fn].mode = S_IRUGO;
+		ADDFILE(my_names[ichan].name, &chops, S_IRUGO);
 	}
 
-	my_files[fn].name = "XX";
-	my_files[fn].ops = &xxops;
-	my_files[fn].mode = S_IRUGO;
-	fn++;
-
-	my_files[fn].name = "enable";
-	my_files[fn].ops = &enops;
-	my_files[fn].mode = S_IRUGO|S_IWUGO;
-	fn++;
+	ADDFILE("XX",		&xxops,		S_IRUGO);
+	ADDFILE("XXS",		&stream_ops,	S_IRUGO);
+	ADDFILE("enable",	&enops,		S_IRUGO|S_IWUGO);
 
 	memcpy(&my_files[fn], &backstop, TD_SZ);
+
+	dbg(1, "mean_filler:   %p", mean_filler);
+	dbg(1, "stream_filler: %p", stream_filler);
 
 	return simple_fill_super(sb, MEANFS_MAGIC, my_files);
 }
@@ -386,6 +678,9 @@ static void init_buffers(void)
 	app_state.nchannels = CAPDEF_get_nchan();
 	app_state.the_sums = kmalloc(SUMSLEN, GFP_KERNEL);
 	work_state.the_sums = kmalloc(SUMSLEN, GFP_KERNEL);
+
+	INIT_LIST_HEAD(&mc_list.clients);
+	spin_lock_init(&mc_list.lock);
 }
 
 static void release_buffers(void)
