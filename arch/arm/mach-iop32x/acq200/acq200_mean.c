@@ -18,7 +18,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define VERID "$Revision: 1.5 $ build B1029 "
+#define VERID "$Revision: 1.5 $ build B1035 "
 
 /*
  * VFS From example at http://lwn.net/Articles/57373/
@@ -79,6 +79,12 @@ module_param(update_interval_ms, int, 0444);
 int overruns;
 module_param(overruns, int, 0644);
 
+int xxs_waiting;
+module_param(xxs_waiting, int, 0644);
+
+int xxs_nowaiting;
+module_param(xxs_nowaiting, int, 0644);
+
 #define TD_SZ (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+3+1)*TD_SZ)
 
@@ -125,10 +131,14 @@ static struct MEAN_WORK_STATE {
 } work_state;
 
 /** MC - Mean Consumer - task context data consumer */
-#define NCB	4
-#define DLEN	512
 
+#define DLEN	512
+#define NCB	4
 #define MCP	struct MC*
+
+/** histogram of number of samples per read, XXS */
+int xxs_readsam[NCB];
+module_param_array(xxs_readsam, int, NULL, 0644);
 
 /** state store for D-TACQ streaming frame protocol. */
 struct TagState {
@@ -354,7 +364,7 @@ static unsigned short tag_getDIO32(int ibyte)
 {
 	union {
 		unsigned dio32;
-		unsigned bytes[4];
+		unsigned char bytes[4];
 	} u;
 
 	u.dio32 = acq200_getDIO32();
@@ -528,11 +538,15 @@ static ssize_t stream_read(
 {
 	struct MC *mc = FMC(filp);
 	u32 ibuf = 0;
+	int line_sz = app_state.sample_size + 2;
+	int nbytes = 0;
+	int waited = 0;
+	int readsam = 0;
 
 	/* (file->f_flags & O_NONBLOCK) */
 
-	if (count > app_state.sample_size*sizeof(short) + 2){
-		count = app_state.sample_size*sizeof(int);
+	if (count < line_sz){
+		return -1;
 	}
 
 	if ((filp->f_flags & O_NONBLOCK) == 0){
@@ -543,24 +557,38 @@ static ssize_t stream_read(
 			if (rc != 0){
 				return rc;
 			}
+			waited = 1;
 		}
 		
-		COPY_TO_USER(buf, mc->buffers[ibuf], count);
-		u32rb_put(&mc->u.header.empties, ibuf);
+		do {		
+			COPY_TO_USER(buf+nbytes, mc->buffers[ibuf], line_sz);
+			u32rb_put(&mc->u.header.empties, ibuf);
+			nbytes += line_sz;
+			++readsam;
+		} while( nbytes+line_sz <= count && 
+			 u32rb_get(&mc->u.header.listener.rb, &ibuf) != 0);
+
+		xxs_readsam[min(readsam, NCB)-1]++;
+		if (waited){
+			xxs_waiting++;
+		}else{
+			xxs_nowaiting++;
+		}
 	}else{
 		int ichan;
 		int nread = 0;
-
-		for (ichan = 1; nread < count; nread += sizeof(short), ++ichan){
-			short my_mean = (short)getMean(ichan);
+		
+		for (ichan = 1; nread < line_sz; nread += sizeof(short)){
+			short my_mean = (short)getMean(ichan++);
 			COPY_TO_USER(buf+nread, &my_mean, sizeof(short));
 		}
+		nbytes = line_sz;		
 	}
 
 
-	*offset += count;
+	*offset += nbytes;
 
-	return count;
+	return nbytes;
 }
 
 
