@@ -154,6 +154,10 @@ module_param(eot_to_ticks, int, 0644);
 
 #define INCR(qp) (((qp+4)&(ACQ200_MU_QSZ-1))|((qp)&~(ACQ200_MU_QSZ-1)))
 
+
+#define machine_has_bridge() machine_is_acq200()
+
+
 static inline int isEmpty( MFA tail, MFA head )
 {
 	return tail == head;
@@ -1726,17 +1730,17 @@ static int acq200_mu_host_window_mmap(
 	unsigned paddr;
 	unsigned len;
 
-	if (machine_is_acq100()){
-		paddr = ACQ100_PCIMEM_P + mug.host_window_offset;
-		len = 0x04000000 - mug.host_window_offset;
-
-		info("acq100: paddr 0x%08x", paddr);
-	}else{
+	if (machine_has_bridge()){
 		/* assumes direct mapping - NB this may change */
 		paddr = ACQ200_PCIMEM + mug.host_window_offset;;   
 		len = ACQ200_PCIMEM_SIZE - mug.host_window_offset;
 
 		info("acq200: paddr 0x%08x", paddr);
+	}else{
+		paddr = ACQ100_PCIMEM_P + mug.host_window_offset;
+		len = 0x04000000 - mug.host_window_offset;
+
+		info("acq100: paddr 0x%08x", paddr);
 	}	
 
 	if ( vma->vm_end - vma->vm_start < len ){
@@ -1963,7 +1967,10 @@ static ssize_t set_downstream_window(
         if (downstream_is_set == 0 && 
 	    sscanf(buf, "0x%x 0x%08x %x", &offset, &HBLEN, &dw_mask) >= 1){
 		HBPHYS = offset;
-		if (machine_is_acq100()){
+		if (machine_has_bridge()){
+			/* mug.rma_base is already set */
+			mug.host_window_offset = offset&dw_mask;
+		}else{
 			*IOP321_OMWTVR0 = offset;
 		/*
 		 * Outbound translate window sits on 64MB boundary
@@ -1973,9 +1980,6 @@ static ssize_t set_downstream_window(
                  */
 			mug.host_window_offset = offset - *IOP321_OMWTVR0;
 			mug.rma_base = offset;
-		}else if (machine_is_acq200()){
-			/* mug.rma_base is already set */
-			mug.host_window_offset = offset&dw_mask;
 		}
 #if (MU_LAZY_ALLOC != 0)
 		alloc_databufs();
@@ -2061,12 +2065,7 @@ static int acq200_mu_probe(struct device * dev)
 /* 
  * WORKTODO IMPROVE THIS PLEASE! - ioremap not needed??
  */
-	if (machine_is_acq100()){
-		mug.host_base_pa = ACQ100_PCIMEM_P;
-		mug.host_base_va = (void*)ACQ100_PCIMEM_START;
-		mug.host_base_len = ACQ100_PCIMEM_END - ACQ100_PCIMEM_START;
-		mug.rma_base = 0xdeadbeef;  /** set_downstream_window() */
-	}else{
+	if (machine_has_bridge()){
 		mug.host_base_va = 
 			ioremap(mug.host_base_pa, mug.host_base_len);
                 /**
@@ -2074,6 +2073,11 @@ static int acq200_mu_probe(struct device * dev)
                  * it should NOT be rocket science to hook this up
 		 */
 		mug.rma_base = ACQ216_BRIDGE_WINDOW_BASE;
+	}else{
+		mug.host_base_pa = ACQ100_PCIMEM_P;
+		mug.host_base_va = (void*)ACQ100_PCIMEM_START;
+		mug.host_base_len = ACQ100_PCIMEM_END - ACQ100_PCIMEM_START;
+		mug.rma_base = 0xdeadbeef;  /** set_downstream_window() */
 	}
 
 	u32rb_init(&DMADQ, 16);
