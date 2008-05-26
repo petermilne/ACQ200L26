@@ -214,7 +214,9 @@ static int state_open(struct inode *inode, struct file *filp)
 	filp->private_data = kzalloc(sizeof(struct StateListener)*2,GFP_KERNEL);
 	sl_init(SL(filp), 16);
 	SL_PUT_STATE(filp, 12345);
-	list_add_tail(&SL(filp)->list, &DMC_WO->stateListeners);
+	spin_lock(&DMC_WO->stateListeners.lock);
+	list_add_tail(&SL(filp)->list, &DMC_WO->stateListeners.list);
+	spin_unlock(&DMC_WO->stateListeners.lock);
 	return 0;
 }
 
@@ -279,8 +281,11 @@ static int state_read(struct file *filp, char *buf,
 }
 static int state_release(struct inode *inode, struct file *filp)
 {
-	u32rb_destroy(&SL(filp)->rb);
+	spin_lock(&DMC_WO->stateListeners.lock);
 	list_del(&SL(filp)->list);
+	spin_unlock(&DMC_WO->stateListeners.lock);	
+
+	u32rb_destroy(&SL(filp)->rb);
 	kfree(filp->private_data);
 	return 0;
 }

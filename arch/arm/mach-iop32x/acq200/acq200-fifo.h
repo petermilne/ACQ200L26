@@ -357,7 +357,10 @@ struct DMC_WORK_ORDER {
 		int iodd;           
 	} control_target;
 
-	struct list_head stateListeners;
+	struct {
+		struct list_head list;
+		spinlock_t lock;
+	} stateListeners;
 };
 
 

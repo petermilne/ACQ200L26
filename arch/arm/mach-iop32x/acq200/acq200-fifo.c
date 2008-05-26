@@ -3774,7 +3774,8 @@ static void init_dg(void)
 	IPC = kzalloc(sizeof(struct IPC), GFP_KERNEL);
 	DG = kzalloc(sizeof(struct DevGlobs), GFP_KERNEL);
 
-	INIT_LIST_HEAD(&DMC_WO->stateListeners);
+	INIT_LIST_HEAD(&DMC_WO->stateListeners.list);
+	DMC_WO->stateListeners.lock = SPIN_LOCK_UNLOCKED;
 	INIT_LIST_HEAD(&DMC_WO->phases);
 	memcpy(DG, MYDG, sizeof(struct DevGlobs));
 	DG->ipc = IPC;
@@ -3895,11 +3896,13 @@ static void alertStateListeners(enum STATE s)
 	scode += ts.tv_usec/10000;
 	scode |= SL_FM_STATE(s);
 
+	spin_lock(&DMC_WO->stateListeners.lock);
 	/* now alert any listeners */
-	list_for_each_entry(sl, &DMC_WO->stateListeners, list){
+	list_for_each_entry(sl, &DMC_WO->stateListeners.list, list){
 		u32rb_put(&sl->rb, scode);
 		wake_up_interruptible(&sl->waitq);
 	}
+	spin_unlock(&DMC_WO->stateListeners.lock);
 }
 
 void DMC_WO_setState(enum STATE s) {
