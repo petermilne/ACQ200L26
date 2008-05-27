@@ -26,10 +26,10 @@
  * This file may be redistributed under the terms of the GNU GPL.
  */
 
-#define REVID "$Revision: 1.4 $ B101\n"
+#define REVID "$Revision: 1.4 $ B102\n"
 
 #define DTACQ_MACH 2
-#define ACQ196
+#define ACQ132
 #define ACQ_IS_INPUT 1
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
@@ -50,7 +50,7 @@
 #include <asm/uaccess.h>	/* copy_to_user */
 
 
-#define LFS_MAGIC 0xa196a196
+#define LFS_MAGIC 0xa132a132
 
 #define TD_SZ  (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+1)*TD_SZ)
@@ -61,7 +61,7 @@
 #define DACX 0
 #define DACY 1
 
-#define MAXBLOCKS  3
+#define MAXBLOCKS  1
 #define NCHANNELSBLOCK 32
 #define NDACSBLOCK 4
 #define NDACSCHIP  8
@@ -71,22 +71,23 @@
  */
 static const int MAP[NDACSBLOCK+1][NDACSCHIP+1] = {
 /* MAP[chip][dac] ... unfortunately, these numbers are pchan order :-( */
-	[ 1][DACA] = 1,  [ 1][DACB] = 2,
-	[ 1][DACC] = 17, [ 1][DACD] = 18,
-	[ 1][DACE] = 9,  [ 1][DACF] = 10,
-	[ 1][DACG] = 25, [ 1][DACH] = 26,
-	[ 2][DACA] = 3,  [ 2][DACB] = 4,
-	[ 2][DACC] = 19, [ 2][DACD] = 20,
-	[ 2][DACE] = 11, [ 2][DACF] = 12,
-	[ 2][DACG] = 27, [ 2][DACH] = 28,
-	[ 3][DACA] = 5,  [ 3][DACB] = 6,
-	[ 3][DACC] = 21, [ 3][DACD] = 22,
-	[ 3][DACE] = 13, [ 3][DACF] = 14,
-	[ 3][DACG] = 29, [ 3][DACH] = 30,
-	[ 4][DACA] = 7,  [ 4][DACB] = 8,
-	[ 4][DACC] = 23, [ 4][DACD] = 24,
-	[ 4][DACE] = 15, [ 4][DACF] = 16,
-	[ 4][DACG] = 31, [ 4][DACH] = 32,
+	[ 1][DACA] = 17,	[ 2][DACA] = 25,  
+	[ 1][DACB] = 18,	[ 2][DACB] = 26,
+	[ 1][DACC] = 19,	[ 2][DACC] = 27,
+	[ 1][DACD] = 20,	[ 2][DACD] = 28,
+	[ 1][DACE] = 21,	[ 2][DACE] = 29, 
+	[ 1][DACF] = 22,	[ 2][DACF] = 30,
+	[ 1][DACG] = 23,	[ 2][DACG] = 31,
+	[ 1][DACH] = 24,	[ 2][DACH] = 32,
+	
+	[ 3][DACA] =  1,	[ 4][DACA] =  9,   
+	[ 3][DACB] =  2,	[ 4][DACB] = 10,
+	[ 3][DACC] =  3,	[ 4][DACC] = 11,
+	[ 3][DACD] =  4,	[ 4][DACD] = 12,
+	[ 3][DACE] =  5,	[ 4][DACE] = 13,
+	[ 3][DACF] =  6,	[ 4][DACF] = 14,
+	[ 3][DACG] =  7,	[ 4][DACG] = 15,
+	[ 3][DACH] =  8,	[ 4][DACH] = 16,	 
 };
 
 
@@ -178,13 +179,17 @@ static unsigned short offsets[MAXBLOCKS+1][NCHANNELSBLOCK+1];
 
 
 static inline unsigned short *key2offset(int ikey)
-/* ikey 1..96 */
+/* ikey 1..32. in this case, NO pchan lookup is required */
 {
 	int block = (ikey-1)/NCHANNELSBLOCK + 1;
 	int lchan = (ikey-1)%NCHANNELSBLOCK + 1;
+#if 0
 	int pchan = acq200_lookup_pchan(lchan);
 
 	return &offsets[block][pchan+1];
+#else
+	return &offsets[block][lchan];
+#endif
 }
 static void set_offset(int ikey, unsigned short offset)
 {
