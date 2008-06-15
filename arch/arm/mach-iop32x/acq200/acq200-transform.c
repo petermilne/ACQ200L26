@@ -345,10 +345,10 @@ void transform12344321(short *to, short *from, int nwords, int stride)
 		int iq;
 		int sq4;
 		int dq4;
-		int iss;
+		int iss = isample * stride;
 
+		/* Q1..QN */
 		for (iq = 0; iq < nq; ++iq){
-			iss = isample * stride;
 			sq4 = iq*4; 			      
 			dq4 = iq * 4 * ns + isample; 
 
@@ -357,10 +357,10 @@ void transform12344321(short *to, short *from, int nwords, int stride)
 			to[dq4] = from[iss + sq4 + 2]; dq4 += ns;
 			to[dq4] = from[iss + sq4 + 3];
 		}
-		++isample;
-
+	
+		iss = ++isample*stride;
+		/* QN..Q1 */
 		for (iq = 0; iq < nq; ++iq){
-			iss = isample*stride;
 			sq4 = (nq - 1 - iq) * 4; 
 			dq4 = iq * 4 * ns + isample;
 
