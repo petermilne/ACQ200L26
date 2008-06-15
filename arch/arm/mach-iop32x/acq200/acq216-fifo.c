@@ -64,6 +64,9 @@ module_param(abort_acq_on_dma_error, int, 0600);
 int stub_event_adjust;
 module_param(stub_event_adjust, int, 0600);
 
+int flood_es;
+module_param(flood_es, int, 0600);
+
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
@@ -76,6 +79,8 @@ static void acq216_event_adjust(
 	struct Phase *phase, unsigned isearch, 
 	unsigned* first, unsigned* last);
 
+
+
 #define DTACQ_MACH_CREATE_CAPDEF acq216_createCapdef
 #define DTACQ_MACH_DESTROY_CAPDEF acq216_destroyCapdef
 #define DTACQ_MACH_DRIVER_INIT(dev) acq216_driverInit(dev)
@@ -84,6 +89,7 @@ static void acq216_event_adjust(
 #undef DTACQ_MACH_EVENT_ADJUST
 #define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last) \
 	if (!stub_event_adjust){ \
+		dbg(1, "DTACQ_MACH_EVENT_ADJUST: isearch 0x%08x", isearch); \
 	        acq216_event_adjust(phase, isearch, first, last); \
 	}
 

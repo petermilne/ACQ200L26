@@ -2597,16 +2597,9 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 				memcpy(ES_DIAG_BUFFER, searchp+ileft, ndiag);
 			}
 			valid = CHECK_ENTIRE_ES(&searchp[isL]);
-
-			initPhaseDiagBufFound(valid, matches,
-				searchp[isL-1], 
-				searchp[isL],
-				searchp[isL+ES_LONGS-1],
-				searchp[isL+ES_LONGS],
-				*first, isL * USS);
 			*first = isL * USS;
 
-			if (ilast){
+			{
 				int outsize = 0;
 
 				isR = isL + ES_LONGS;
@@ -2620,13 +2613,49 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 					err("WARNING: outsize sample");
 					pdb.outsize = outsize;
 				}
-				*ilast = isR * USS;
+				if (ilast) *ilast = isR * USS;
 			}
+
 			DTACQ_MACH_EVENT_ADJUST(phase, isL, first, ilast);
 
-			dbg(1, "return first %08x last %08x",
-			    first? *first: 0, ilast? *ilast: 0);
+			initPhaseDiagBufFound(valid, matches,
+				searchp[isL-1], 
+				searchp[isL],
+				searchp[isR-1],
+				searchp[isR],
+				*first, isL * USS);
 
+#ifdef ACQ216
+			{
+				int offsetb = isL*USS;
+
+				if ((offsetb%ES_SIZE) != 0){
+					err("ES offset NOT on ES_SIZE %d "
+					    "boundary want:%08x got:%08x",
+					    ES_SIZE,
+					    offsetb& ~(ES_SIZE-1),
+					    offsetb);
+				}
+			}
+			if (flood_es){
+				int ii;
+
+				  dbg(1, "flood_es:"
+				      " fill frm %p isL4 %08x ES_LONGS %d * %d",
+				      &searchp[isL], isL*USS, 
+					flood_es, ES_LONGS);
+
+				for (ii = 0; ii != ES_LONGS*flood_es; ++ii){
+					searchp[ii+isL] = 
+						((0xd000|ii*2) << 16) |
+						(0xd000|(ii*2+1));
+				}
+			}	
+#endif
+			if (first != 0 && ilast != 0){				
+				dbg(1, "return first %08x last %08x",
+				    *first, *ilast);
+			}
 			return 1;
 		}
 	}
