@@ -110,6 +110,10 @@ struct DmaChannelSync* acq200_dma_getDmaChannelSync(void)
 	return acq200_is_dma;
 }
 
+int acq200_dma_error_count(int channel)
+{
+	return D_ERRB[channel&1].ecount;
+}
 
 void acq200_init_interrupt_hook(
 	int irq, struct InterruptSync *is, volatile u32* regs)
@@ -808,6 +812,7 @@ EXPORT_SYMBOL_GPL(acq200_dma_getDmaChannelSync);
 EXPORT_SYMBOL_GPL(acq200_dmad_alloc);
 EXPORT_SYMBOL_GPL(acq200_dmad_free);
 EXPORT_SYMBOL_GPL(acq200_dmad_clear);
+EXPORT_SYMBOL_GPL(acq200_dma_error_count);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");

@@ -162,4 +162,7 @@ int acq200_dma_init_interrupt_hook(
                 free_irq(is_dma[chan].type.irq, &is_dma[chan].type);\
                 is_dma[chan].type.requested = 0; \
         }
+
+int acq200_dma_error_count(int channel);
+
 #endif /* ACQ200_DMAC_H__ */
