@@ -2616,14 +2616,15 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 				if (ilast) *ilast = isR * USS;
 			}
 
-			DTACQ_MACH_EVENT_ADJUST(phase, isL, first, ilast);
-
 			initPhaseDiagBufFound(valid, matches,
 				searchp[isL-1], 
 				searchp[isL],
 				searchp[isR-1],
 				searchp[isR],
 				*first, isL * USS);
+
+			DTACQ_MACH_EVENT_ADJUST(phase, isL, first, ilast);
+			
 
 #ifdef ACQ216
 			{
@@ -2795,8 +2796,7 @@ void search_epos(struct Phase* phase, int search_metric)
 
 
 
-	dbg(1, "01");
-	info("");
+	dbg(1, "01");	
 
 	if (search_metric < 0){
 		isearch += search_metric * DMA_BLOCK_LEN; /* decrement */
@@ -2806,7 +2806,7 @@ void search_epos(struct Phase* phase, int search_metric)
 /** most likely: search forward in  TBLOCK 0 in phase */
 
 	if (search_for_epos_in_tblock(phase, isearch, MAX_BLOCKS) == 0){
-		info("SUCCESS in initial tblock");
+		dbg(1, "SUCCESS in initial tblock");
 		return;
 	}else if (rem_blocks == 0){
 		err("FAILED to find epos in tblock 0, over %d bytes consider "
