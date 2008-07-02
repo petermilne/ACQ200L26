@@ -105,11 +105,12 @@ static ssize_t debugfs2_read(struct file *file, char __user *user_buf,
 {
 	char buf[32];
 	struct DebugFs2NodeInfo *nodeInfo = file->private_data;
+	const char* fmt = nodeInfo->read_fmt? nodeInfo->read_fmt: "%u";
 
 	u32 value = *nodeInfo->pread;
 	
 	value = from_mask(nodeInfo->mask, value);
-	sprintf(buf, "%u", value);
+	sprintf(buf, fmt, value);
 
 	dbg(2, "call simple_read_from_buffer  \"%s\"", buf);
 

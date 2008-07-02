@@ -27,6 +27,7 @@ struct DebugFs2NodeInfo {
 	u32 *pcache;
 	u32 mask;
 	u32 mode;
+	const char* read_fmt;
 };
 #define DBGFS2_NI_SZ	sizeof(struct DebugFs2NodeInfo)
 
