@@ -765,7 +765,7 @@ static struct CAPDEF* acq196_createCapdef(void)
 		createSignal("trig", 0, 5, 3, 0, 0, acq196_commitTrg);
 	
 	capdef->ext_clk = 
-		createSignal("ext_clk", 0, 2, 0, 0, 0, acq196_commitAIClk);
+		createSignal("ext_clk", 0, 5, 0, 0, 0, acq196_commitAIClk);
 	capdef->ext_clk->has_internal_option = 1;
 	
 	capdef->ao_trig = 
