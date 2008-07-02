@@ -67,6 +67,21 @@ module_param(stub_event_adjust, int, 0600);
 int flood_es;
 module_param(flood_es, int, 0600);
 
+int nonaligned_es;
+module_param(nonaligned_es, int, 0600);
+
+/* the shift we had to apply to compensate non-aligned ESW */
+int esw_shift;
+module_param(esw_shift, int, 0400);
+
+/* the expected ESW alignment */
+int esw_expected_modulus;
+module_param(esw_expected_modulus, int, 0400);
+
+/* the actual ESW alignment */
+int esw_actual_residue;
+module_param(esw_actual_residue, int, 0400);
+
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
@@ -478,9 +493,18 @@ static void acq216_event_adjust(
 	int cold_samples = cold_bytes/ssb;
 	int cold_pairs = 0;
 	unsigned es_len = *last - *first;
+	int align_pairs = 0;	/* compensate nonaligned ES */
 
 	static char ES_BUF[ES_SIZE_MAX];
 
+	if (nonaligned_es){
+		align_pairs = isearch % ES_LONGS;
+	        dbg(1, "nonaligned_es test shift longs: %d", align_pairs);
+		esw_shift = align_pairs * sizeof(int);
+		esw_expected_modulus = NCHAN==12? 
+			10 * sample_size(): 4 * sample_size();
+		esw_actual_residue = esw_shift % esw_expected_modulus;
+	}
 	if (cold_samples*ssb < cold_bytes){
 		cold_samples++;
 	}
@@ -495,7 +519,7 @@ static void acq216_event_adjust(
 	    cold_samples + CAPDEF_get_pipeline_offset());
 
 	cold_samples += CAPDEF_get_pipeline_offset();
-	cold_pairs = cold_samples*ssu;
+	cold_pairs = cold_samples*ssu - align_pairs;
 
 	dbg(1, "cold_samples %d cold_pairs %d bytes %d",
 	    cold_samples, cold_pairs, cold_pairs*4);
