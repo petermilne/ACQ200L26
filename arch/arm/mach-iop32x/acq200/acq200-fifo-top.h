@@ -75,6 +75,7 @@
 #elif defined ACQ132
 
 #define DMA_BLOCK_LEN 1024
+/* @todo Big blocks 4096 work better but PBI will go out of order */
 #define ISR_ADDS_ENDSTOP 1
 #define FPGA_IS_PCI_DEVICE 0
 

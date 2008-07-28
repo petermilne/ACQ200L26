@@ -50,19 +50,12 @@
 	
 /*
  * HOTPOINT: 32 levels, 32K.
- * 0x2 : 2K
- * 0x4 : 4K
- * 0x6 : 6K
- * 0x8 : 8K
  */
 	
-#if 0
-#define CHECK_2B 0	
-#else
-#define HOTxB 12
-/* remember, we already moved one block */	
+#define HOTxB 11	/* overdrive by 1K */
+/* remember, we already moved one block */
 #define CHECK_2B 11
-#endif	
+
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
 	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT

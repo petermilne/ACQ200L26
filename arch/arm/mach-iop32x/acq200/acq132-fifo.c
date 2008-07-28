@@ -304,7 +304,7 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 static struct DevGlobs acq132_dg = {
 	.btype = BTYPE_AI,
-	.hitide = 9,
+	.hitide = 2,
 	.max_alloc = 10240,
 	.busywait = 0,
 	.sample_read_start = 0,
