@@ -24,7 +24,7 @@
 
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
-#include "acq196.h"
+#include "acq132.h"
 
 #include "iop321-auxtimer.h"
 
@@ -82,6 +82,80 @@ static ssize_t store_coding(
 }
 
 static DEVICE_ATTR(coding, S_IRUGO|S_IWUGO, show_coding, store_coding);
+
+
+/* @todo - single bit all channel control atm.
+ * but simulate multi channel control
+ */
+static ssize_t store_adc_range(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	u32 range_sel = 0;
+	int ibit;
+	int max_bit = count < 32? count: 32;
+
+	if (sscanf(buf, "%x", &range_sel) == 1){
+		acq132_set_adc_range(range_sel);
+	}
+
+	return count;
+}
+
+static ssize_t show_adc_range(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	u32 range_sel = acq132_get_adc_range();
+	return sprintf(buf, "%08x\n", range_sel);
+}
+
+static DEVICE_ATTR(ADC_RANGE, S_IRUGO|S_IWUGO, show_adc_range, store_adc_range);
+
+
+static struct OB_CLOCK_DEF {
+	int demand;
+	int actual;
+	int FDW;
+	int RDW;
+	int R;
+	int Sx;
+} ob_clock_def;
+
+static ssize_t store_ob_clock(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct OB_CLOCK_DEF def;
+	
+	if (sscanf(buf, "%d %d %d %d %d %d",
+		   &def.demand, &def.actual,
+		   &def.FDW, &def.RDW, &def.R, &def.Sx) == 6){
+		ob_clock_def = def;
+		acq132_set_obclock(def.FDW, def.RDW, def.R, def.Sx);
+	}	
+
+	return count;
+}
+
+static ssize_t show_ob_clock(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+#define def ob_clock_def
+	return sprintf(buf, "%d %d %d %d %d %d",
+		   def.demand, def.actual,
+		       def.FDW, def.RDW, def.R, def.Sx);
+#undef def
+}
+
+static DEVICE_ATTR(ob_clock, S_IRUGO|S_IWUGO, show_ob_clock, store_ob_clock);
+
+
 
 
 static ssize_t show_FAWG_div(
@@ -355,6 +429,8 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 #ifdef ACQ196F
 	DEVICE_CREATE_FIRK_GROUP(dev);
 #endif
+	DEVICE_CREATE_FILE(dev, &dev_attr_ADC_RANGE);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 }
 
 #define MASK_D	0x000f000f

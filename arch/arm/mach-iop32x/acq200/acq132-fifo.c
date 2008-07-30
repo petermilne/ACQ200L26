@@ -145,14 +145,10 @@ static unsigned check_fifstat(
 #define CHECK_FIFSTAT(wo, fifstat, offset) check_fifstat(wo, fifstat, offset)
 
 
-#define SET_SIMULATION_MODE(enable)				\
-        do {							\
-	        if (enable){					\
-		        *SYSCON |= ACQ196_SYSCON_SIM_MODE;	\
-	        }else{						\
-		        *SYSCON &=~ ACQ196_SYSCON_SIM_MODE;	\
-	        }						\
-        } while(0)	
+
+/* no simulation mode in ACQ132, bit is used for VRANGE @todo */
+#define SET_SIMULATION_MODE(enable)				
+
 
 void acq200_reset_fifo(void)
 {
@@ -1027,6 +1023,11 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 	TBG(1, "99");
 }
 
+static void acq132_set_defaults(void)
+{
+/* ICS527 - make "null modem" 4 /4 - works for 1..2MHz clocks */
+	acq132_set_obclock(6, 0, 2, 2);
+}
 
 
 static 	struct Transformer transformer = {
@@ -1058,6 +1059,7 @@ static int acq132_fpga_probe(struct device *dev)
 			err("fpga_probe() failed");
 		}else{
 			mk_sysfs(&acq132_fpga_driver);
+			acq132_set_defaults();
 		}
 		return rc;
 	}else{
@@ -1173,6 +1175,16 @@ acq132_fifo_exit_module(void)
 }
 
 
+void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
+{
+	u32 ics527 = 0;
+	ics527 |= to_mask(ACQ132_ICS527_FDW, FDW);
+	ics527 |= to_mask(ACQ132_ICS527_RDW, RDW);
+	ics527 |= to_mask(ACQ132_ICS527_CLKDIV, R);
+	ics527 |= to_mask(ACQ132_ICS527_S1S0, Sx);
+
+	*ACQ132_ICS527 = ics527;
+}
 
 module_init(acq132_fifo_init);
 module_exit(acq132_fifo_exit_module);

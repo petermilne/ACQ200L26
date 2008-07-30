@@ -20,8 +20,15 @@
 #define __ACQ132_H__
 
 #include "acq196.h"
-
+#define ACQ132_SYSCON	ACQ196_SYSCON_ADC
+/* custom regs */
 #define ACQ132_SFPGA_CONF	FPGA_REG(0x10)
+#define ACQ132_ICS527		FPGA_REG(0x18)
+
+/* custom bits */
+#define ACQ132_SYSCON_RANGE_HI	0x00800000
+
+
 
 #define ACQ132_SFPGA_CONF_PROG		31
 #define ACQ132_SFPGA_CONF_INIT_LR	29	
@@ -32,6 +39,27 @@
 
 #define ACQ132_SFPGA_CONF_LRMASK	0x3
 #define ACQ132_SFPGA_CONF_8MASK		0xff
+
+
+#define ACQ132_ICS527_FDW	0x003f0000
+#define ACQ132_ICS527_RDW	0x00003f00
+#define ACQ132_ICS527_S1S0	0x000000c0
+#define ACQ132_ICS527_CLKDIV	0x00000007
+
+/* @todo one bit, all bits. multiple settings todo */
+static inline void acq132_set_adc_range(u32 channels)
+{
+        if (channels){
+		*ACQ132_SYSCON |= ACQ132_SYSCON_RANGE_HI;
+	}else{
+		*ACQ132_SYSCON &= ~ACQ132_SYSCON_RANGE_HI;
+	}
+}
+
+static inline u32 acq132_get_adc_range(void)
+{
+	return *ACQ132_SYSCON & ACQ132_SYSCON_RANGE_HI? 0xffffffff: 0;
+}
 
 
 static inline void sfpga_conf_clr_all(void) {
@@ -96,5 +124,7 @@ static inline int sfpga_conf_done(void) {
 	dbg(2, "conf 0x%08x done %d", conf, done);
 	return done;
 }
+
+void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
 #endif	/*  __ACQ132_H__ */
 

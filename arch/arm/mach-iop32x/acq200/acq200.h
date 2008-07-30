@@ -63,4 +63,33 @@ static inline int PO(int len)
 	}
 	return order;
 }
+
+static inline u32 to_mask(u32 mask, u32 value)
+{
+	int shl;
+
+	if (mask == 0){
+		return 0;
+	}
+
+	for (shl = 0; ((1<<shl)&mask) == 0; ++shl){
+		;
+	}
+	return (value << shl) & mask;
+}
+
+static inline u32 from_mask(u32 mask, u32 value)
+{
+	int shr;
+
+	if (mask == 0){
+		return 0;
+	}
+
+	for (shr = 0; ((1<<shr)&mask) == 0; ++shr){
+		;
+	}
+	return (value & mask) >> shr;
+}
+
 #endif /* #define __ACQ200_H__ */
