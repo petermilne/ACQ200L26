@@ -198,7 +198,7 @@ EXPORT_SYMBOL_GPL(acq200_set_user_led);
 
 static int __init leds_init(void)
 {
-	if (machine_is_acq200()|| machine_is_acq100()){
+	if (machine_is_acq200()|| machine_is_acq100() || machine_is_acq132()){
 		leds_event = acq200_leds_event;
 
 		*IOP321_GPOE &= ~ACQ200_LEDS;
