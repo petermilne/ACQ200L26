@@ -93,9 +93,10 @@ static ssize_t store_adc_range(
 	const char *buf, size_t count)
 {
 	u32 range_sel = 0;
+#ifdef WORKTODO
 	int ibit;
 	int max_bit = count < 32? count: 32;
-
+#endif
 	if (sscanf(buf, "%x", &range_sel) == 1){
 		acq132_set_adc_range(range_sel);
 	}
