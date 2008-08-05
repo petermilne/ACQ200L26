@@ -59,6 +59,8 @@
 #define ACQ196_MACSUB   FPGA_REG(0x34)
 #define ACQ196_FIRK     FPGA_REG(0x38)
 
+/* Repeating Gate. */
+#define ACQ196_RGATE	FPGA_REG(0x50)
 
 #define ACQ196_DIO_COPY      FPGA_REG(0x40)
 #define ACQ196_TCR_IMMEDIATE FPGA_REG(0x44)
@@ -611,5 +613,15 @@ static inline unsigned acq100_get_maccon_ref(unsigned bank) {
 #define ACQ196_PGTIMER_MAX_PULSECOUNT   63
 #define ACQ196_PGTIMER_MAX_ONTIME	0x007f
 #define ACQ196_PGTIMER_MAX_DELAY	0x007f
+
+/* Repeating Gate. */
+#define ACQ196_RGATE_TLEN	0x0000ffff
+#define ACQ196_RGATE_MODE	0xc0000000
+#define ACQ196_RGATE_MODE_SHL	30
+
+#define ACQ196_RGATE_MODE_OFF	0
+#define ACQ196_RGATE_MODE_TRAN  1	/* transient */
+#define ACQ196_RGATE_MODE_GATE  2	/* gated */
+#define ACQ196_RGATE_MODE_COMB  3	/* combined transient, gated */
 
 #endif /* acq196.h */

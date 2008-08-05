@@ -107,6 +107,56 @@ static DEVICE_ATTR(
 	FAWG_div, S_IRUGO|S_IWUGO, show_FAWG_div, store_FAWG_div);
 
 
+
+static ssize_t show_RGM(
+	struct device * dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	static const char* modes[] = {
+		[ACQ196_RGATE_MODE_OFF] = "OFF",
+		[ACQ196_RGATE_MODE_TRAN] = "TRAN",
+		[ACQ196_RGATE_MODE_GATE] = "GATE",
+		[ACQ196_RGATE_MODE_COMB] = "TRAN+GATE"
+	};
+	u32 rgm = *ACQ196_RGATE;
+	int tlen = rgm&ACQ196_RGATE_TLEN;
+	int mode = (rgm&ACQ196_RGATE_MODE)>>ACQ196_RGATE_MODE_SHL;
+
+	switch (mode){
+	case ACQ196_RGATE_MODE_TRAN:
+	case ACQ196_RGATE_MODE_COMB:
+		break;
+	case ACQ196_RGATE_MODE_OFF:
+	case ACQ196_RGATE_MODE_GATE:
+	default:
+		tlen = 0;
+		break;
+	}
+	return sprintf(buf, "%d %d %s\n", mode, tlen, modes[mode]);		
+}
+
+static ssize_t store_RGM(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned tlen = 0;
+	unsigned mode;
+
+	if (sscanf(buf, "%u %u", &mode, &tlen) > 0 &&
+	    mode <= ACQ196_RGATE_MODE_COMB &&
+	    tlen <= ACQ196_RGATE_TLEN){
+		*ACQ196_RGATE = (mode << ACQ196_RGATE_MODE_SHL)|tlen;
+		return count;
+	}else{
+		return -EPERM;
+	}
+}
+
+static DEVICE_ATTR(RepeatingGateMode, S_IRUGO|S_IWUGO, show_RGM, store_RGM);
+
+
 static ssize_t show_slow_clock(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -369,6 +419,7 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 #ifdef ACQ196F
 	DEVICE_CREATE_FIRK_GROUP(dev);
 #endif
+	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
 }
 
 void acq200_setChannelMask(unsigned mask)

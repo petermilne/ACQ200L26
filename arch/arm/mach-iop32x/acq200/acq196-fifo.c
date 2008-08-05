@@ -93,12 +93,18 @@ static int acq196_trigger_detect(void)
 	return (*SYSCON & ACQ196_SYSCON_TRIGGERED) != 0;
 }
 
+#define NOLOOK_FOR_PIT	-1
+
 static unsigned check_fifstat(
 	struct DMC_WORK_ORDER *wo, u32 fifstat, u32* offset)
 /* returns 1 if trigger handled */
 /** @todo this needs refactoring with the ACQ216 version ! */
 {
 	int adc_ev = fifstat&ACQ196_FIFSTAT_ADC_EVX;
+
+	if (wo->looking_for_pit == NOLOOK_FOR_PIT){
+		return 0;
+	}
 
 	dbg(3, "F%08x %s %s", fifstat,
 	    adc_ev? "TR":"tr", wo->looking_for_pit? "LOOKING":"-");
@@ -558,6 +564,9 @@ static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file)
 #endif
 
 	init_phases();
+	if ((*ACQ196_RGATE & ACQ196_RGATE_MODE) != 0){
+		DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
+	}
 
 	rc = fifo_read_init_action();
 	if (rc==0){
