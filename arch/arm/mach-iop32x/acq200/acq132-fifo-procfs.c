@@ -403,6 +403,40 @@ static ssize_t show_channel_mapping_bin(
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
+static ssize_t show_fpga_state(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	int len = 0;
+	u32 debug_old;
+	u32 t1, t2;
+	int s_ok, a_ok = 0;
+	u32 a_done = 0;
+	
+	
+	debug_old = *ACQ196_BDR;
+	*ACQ196_BDR = 0xdeadbeef;
+	t1 = *ACQ196_BDR;
+	*ACQ196_BDR = ~0xdeadbeef;
+	t2 = *ACQ196_BDR;
+	*ACQ196_BDR = debug_old;
+
+	s_ok = t1 == 0xdeadbeef && t2 == ~t1 && *ACQ196_BDR == debug_old;
+	if (s_ok){
+		a_done = ((*ACQ132_SFPGA_CONF) >> ACQ132_SFPGA_CONF_DONE_8) &
+				ACQ132_SFPGA_CONF_8MASK;
+		a_ok = a_done == ACQ132_SFPGA_CONF_8MASK;
+		if (!a_ok){
+			err("A_FPGA not OK: %08x", *ACQ132_SFPGA_CONF);
+		}
+	}
+	len = sprintf(buf, "%s S_FPGA=%s A_FPGA=%02x\n",
+		      s_ok && a_ok? "GOOD": "ERR", s_ok? "OK": "ERR", a_done);
+	return len;
+}
+
+static DEVICE_ATTR(fpga_state, S_IRUGO, show_fpga_state, 0);
 
 
 
@@ -432,6 +466,7 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 #endif
 	DEVICE_CREATE_FILE(dev, &dev_attr_ADC_RANGE);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
+	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
 }
 
 #define MASK_D	0x000f000f
