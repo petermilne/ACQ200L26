@@ -94,7 +94,7 @@ int acq200_prep_debug;
 module_param(acq200_prep_debug, int, 0664);
 
 
-#define VERID "$Revision: 1.3 $ build B1000 "
+#define VERID "$Revision: 1.3 $ build B1003 "
 
 #define TD_SZ (sizeof(struct tree_descr))
 
@@ -120,6 +120,37 @@ struct PrepPhase {
 };
 
 
+struct PrepInode {
+	int id;
+	int ch;			/* 0=>XX */
+	struct Phase *phase;
+	char name[4];
+};
+
+#define PREPID 0xca11eeee
+#define PREPI(inode) ((struct PrepInode*)inode->i_private)
+
+#define XXP_ID	0
+
+static struct PrepInode* createPrepi(struct Phase *phase, int chan_id)
+{
+	struct PrepInode *prepi = kmalloc(sizeof(struct PrepInode), GFP_KERNEL);
+	prepi->id = PREPID;
+	prepi->phase = phase;
+	prepi->ch = chan_id;
+	if (chan_id == XXP_ID){
+		strcpy(prepi->name, "XXP");
+	}else{
+		snprintf(prepi->name, 4, "%02d", chan_id);
+	}
+	return prepi;
+}
+
+static void deletePrepi(struct PrepInode* prepi)
+{
+	prepi->id = 0xdeadbeef;
+	kfree(prepi);
+}
 
 struct Spec {
 	int id;
@@ -366,10 +397,11 @@ static inline int getPhaseTblockCount(struct Phase *phase)
 
 static int xxp_open(struct inode *inode, struct file *file)
 {
+	struct PrepInode *prepi = PREPI(inode);
 	dbg(1, "");
 	acq200_fifo_bigbuf_xx_open (inode, file);
 
-	DCI_PHASE(file) = (struct Phase*)inode->i_private;
+	DCI_PHASE(file) = prepi->phase;
 
 	dbg(1, "phase %s tb %d ssize %d", 
 	    DCI_PHASE(file)->name,
@@ -440,7 +472,8 @@ static int prep_gather_block(
 		min(phase_num_samples(phase) - tle->phase_sample_start,
 		    getTblockMaxSam() - tle->tblock_sample_start);
 
-	dbg(1, "entry [%2d] %s", tle->tblock->iblock, tle2string(tle));
+	dbg(1, "entry [%2d] %s sample_count %d", 
+	    tle->tblock->iblock, tle2string(tle), tle->sample_count);
 
 	return tle->sample_count;
 }
@@ -466,8 +499,12 @@ phase->ref_start_scc/phase->ref_offset : ref points to find start.
 			phase->actual_samples += ngather;
 			++nb;
 		}
-	}	
+	}
+	dbg(1, "actual_len:%d actual_samples:%d",
+	    phase->actual_len, phase->actual_samples);	
 }
+
+
 static void prep_create_xxp(
 	struct super_block *sb, 
 	struct dentry *dir, 
@@ -478,28 +515,67 @@ static void prep_create_xxp(
 		.read 	= xxp_read,
 		.release= xxp_release
 	};
+
+	struct PrepInode *prepi = createPrepi(phase, XXP_ID);
 	struct dentry *d = 
-		prepfs_create_file(sb, dir, &xxp_fops, "XXP", phase);
+		prepfs_create_file(sb, dir, &xxp_fops, prepi->name, prepi);
 
         if (d == 0){
 		err( "ERROR:failed to create file");
+/* @@todo BOGUS handled by attr
 	}else{
 		dbg(1, "d->d_inode %p IS IT REAL?", d->d_inode);
 		if (d->d_inode && (((unsigned)d->d_inode)&0xc0000000)){
 			d->d_inode->i_size = phase->actual_len *sample_size();
 		}
+*/
 	}
 }
+
+static void prep_create_chx(
+	struct super_block *sb, 
+	struct dentry *dir, 
+	struct Phase* phase,
+	int chx
+	)
+{
+	/* @todo ... put in chx equivs */
+	static struct file_operations chx_fops = {
+		.open	= xxp_open,
+		.read 	= xxp_read,
+		.release= xxp_release
+	};
+
+	struct PrepInode *prepi = createPrepi(phase, chx);
+	struct dentry *d = 
+		prepfs_create_file(sb, dir, &chx_fops, prepi->name, prepi);
+
+        if (d == 0){
+		err( "ERROR:failed to create file");
+/* @@todo BOGUS handled by attr
+	}else{
+		dbg(1, "d->d_inode %p IS IT REAL?", d->d_inode);
+		if (d->d_inode && (((unsigned)d->d_inode)&0xc0000000)){
+			d->d_inode->i_size = phase->actual_len;
+		}
+*/
+	}
+}
+
 
 static void prep_on_new_phase(struct Phase* phase)
 {
 	struct dentry *dir = prepfs_create_dir(PFG.sb, PFG.data, phase->name);
+	int ch;
 
 	dir->d_inode->i_private = phase;
 
 	if (dir){
 		prep_gather_blocks(phase);
-		prep_create_xxp(PFG.sb, dir, phase);
+		prep_create_xxp(PFG.sb, dir, phase);		
+		for (ch = 1; ch <= NCHAN; ++ch){
+			prep_create_chx(PFG.sb, dir, phase, ch);
+		}
 		((struct PrepPhase *)phase)->spec->state = SS_COMPLETE;
 	}else{
 		((struct PrepPhase *)phase)->spec->state = SS_ERROR;
@@ -998,6 +1074,12 @@ static int prepfs_fill_super_statics(
 
 int pgm_unlink(struct inode *dir, struct dentry *dentry)
 {
+	struct PrepInode *prepi = PREPI(dentry->d_inode);
+	dbg(1, "prepi: %p id 0x%08x %s", 
+	     prepi, prepi->id, prepi->id==PREPID? "PREPID": "ERR - no PREPID");
+	if (prepi->id == PREPID){
+		deletePrepi(prepi);
+	}
 	return simple_unlink(dir, dentry);
 }
 
@@ -1013,6 +1095,45 @@ int pgm_rmdir(struct inode *dir, struct dentry *dentry)
 
 	return rc;
 }
+
+static unsigned update_inode_stats(struct inode *inode)
+{
+	struct PrepInode *prepi = PREPI(inode);
+	struct Phase *phase = prepi->phase;
+       	unsigned ssize;
+	unsigned totsam;
+
+	dbg(1, "prepi %p id 0x%08x ch 0x%08x", prepi, prepi->id, prepi->ch);
+
+	if (prepi->ch == XXP_ID){
+		ssize = sample_size();
+	}else{
+		ssize = CSIZE;
+	}
+	totsam = phase->actual_samples;
+	dbg(1, "ssize %d totsam %d total %d",
+	    ssize, totsam, ssize*totsam);
+		/* could be better ... */
+	inode->i_mtime = DG->stats.finish_time;
+	inode->i_size = ssize * totsam;	
+
+	return inode->i_size;
+
+}
+
+/** copy from acq200-fifo-bigbuf-fops.c */
+static int ai_getattr (struct vfsmount *mnt, struct dentry *d, struct kstat *k)
+{
+	struct inode *inode = d->d_inode;
+	int was;
+
+	generic_fillattr(inode, k);
+	was = k->size;
+	k->size = update_inode_stats(inode);
+	dbg(1, "size was %d set to %d", was, (int)k->size);
+	return 0;
+}
+
 static struct dentry *prepfs_create_file (
 	struct super_block *sb,
 	struct dentry *dir, 
@@ -1021,6 +1142,9 @@ static struct dentry *prepfs_create_file (
 	void *clidata
 	)
 {
+	static struct inode_operations inops = {
+		.getattr = ai_getattr
+	};
 	struct dentry *dentry;
 	struct inode *inode;
 	struct qstr qname;
@@ -1041,6 +1165,7 @@ static struct dentry *prepfs_create_file (
 		goto out_dput;
 	inode->i_fop = fops;
 	inode->i_private = clidata;
+	inode->i_op = &inops;
 /*
  * Put it all into the dentry cache and we're done.
  */
