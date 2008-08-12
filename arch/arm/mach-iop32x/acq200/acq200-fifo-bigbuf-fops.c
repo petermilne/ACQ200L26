@@ -416,7 +416,7 @@ static int acq200_AIfs_fifo_bigbuf_open (
 }
 
 
-static ssize_t acq200_fifo_bigbuf_read ( 
+ssize_t acq200_fifo_bigbuf_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset
 	)
 /* read a linear buffer. len, offset in bytes */
@@ -1711,6 +1711,7 @@ int acq200_removeDataConsumer(struct DataConsumerBuffer *dcb)
 }
 
 
+EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_read);
 EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_xxX_read);
 EXPORT_SYMBOL_GPL(acq200_initBBRP_using_phase);
 EXPORT_SYMBOL_GPL(acq200_initDCI);
