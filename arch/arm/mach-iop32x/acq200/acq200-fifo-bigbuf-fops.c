@@ -416,60 +416,34 @@ static int acq200_AIfs_fifo_bigbuf_open (
 }
 
 
-ssize_t acq200_fifo_bigbuf_read ( 
-	struct file *file, char *buf, size_t len, loff_t *offset
+ssize_t acq200_fifo_bigbuf_read_bbrp(
+	struct file *file, char *buf, size_t len, loff_t *offset,
+	struct BigbufReadPrams* bbrp
 	)
-/* read a linear buffer. len, offset in bytes */
-/*
- * BEWARE: this is a nightmare of mixed units
- *
- * contract with caller: read bytes, return bytes
- * contract with extract: units are words
- * but we also have a concept of samples, NCHAN*sizeof(short)
- *
- */
 {
 	int channel = DCI(file)->pchan;
 	int stride = DG->sample_read_stride;
-
-	struct BigbufReadPrams bbrp = { 0, };
 	int cpwords = 0;
 	int cpbytes;
 	int rc;
 #define LOCDEB(lv) dbg(3,"%20s %d", #lv, lv)
 #define RETURN(val) do { rc = val; LOCDEB(__LINE__); return rc; } while(0)
 
-	if (unlikely(len <= 0)){
-		return 0;
-	}
-
-	initBBRP(file, len, offset, &bbrp);
-	
-/*
- * check for tblock rounddown trap - if trapped, force move into next tblock
- */
-	if (bbrp.status != BBRP_COMPLETE && bbrp.my_samples_reqlen == 0 ){
-		dbg(1, "block rounddown trap");
-		*offset += CSIZE;
-		memset(&bbrp, 0, sizeof(bbrp));
-	        initBBRP(file, len, offset, &bbrp);
-	}
-	
-	if (bbrp.status == BBRP_COMPLETE){
+	if (bbrp->status == BBRP_COMPLETE){
 		RETURN(0);
-	}else if (bbrp.status < 0){
-		RETURN(bbrp.status);
+	}else if (bbrp->status < 0){
+		RETURN(bbrp->status);
 	}else if (channel >= NCHAN ){
 		RETURN(0);
-	}else if ( bbrp.my_samples_reqlen == 0 ){
+	}else if ( bbrp->my_samples_reqlen == 0 ){
 		RETURN(0);
 	}else{
-		cpwords = bbrp.extract(
-			        bbrp.tblock, 
+		cpwords = bbrp->extract(
+			        bbrp->tblock, 
 				(short*)buf, 
-				bbrp.my_samples_reqlen,
+				bbrp->my_samples_reqlen,
 				channel,
-				bbrp.block_off_sample, 
+				bbrp->block_off_sample, 
 				stride );
 		
 		cpbytes = cpwords * sizeof(short);
@@ -483,6 +457,42 @@ ssize_t acq200_fifo_bigbuf_read (
 	}
 #undef RETURN
 #undef LOCDEB
+}
+ssize_t acq200_fifo_bigbuf_read ( 
+	struct file *file, char *buf, size_t len, loff_t *offset
+	)
+/* read a linear buffer. len, offset in bytes */
+/*
+ * BEWARE: this is a nightmare of mixed units
+ *
+ * contract with caller: read bytes, return bytes
+ * contract with extract: units are words
+ * but we also have a concept of samples, NCHAN*sizeof(short)
+ *
+ */
+{
+	struct BigbufReadPrams bbrp = { 0, };
+
+	if (unlikely(len <= 0)){
+		return 0;
+	}
+
+	initBBRP(file, len, offset, &bbrp);
+
+/*
+ * check for tblock rounddown trap - if trapped, force move into next tblock
+ */
+	if (bbrp.status != BBRP_COMPLETE && bbrp.my_samples_reqlen == 0 ){
+		dbg(1, "block rounddown trap");
+		*offset += CSIZE;
+		memset(&bbrp, 0, sizeof(bbrp));
+	        initBBRP(file, len, offset, &bbrp);
+	}
+	
+
+	return acq200_fifo_bigbuf_read_bbrp(
+		file, buf, len, offset, &bbrp);	
+
 }
 
 
@@ -1711,7 +1721,7 @@ int acq200_removeDataConsumer(struct DataConsumerBuffer *dcb)
 }
 
 
-EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_read);
+EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_read_bbrp);
 EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_xxX_read);
 EXPORT_SYMBOL_GPL(acq200_initBBRP_using_phase);
 EXPORT_SYMBOL_GPL(acq200_initDCI);

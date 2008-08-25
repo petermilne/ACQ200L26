@@ -1232,13 +1232,15 @@ static inline unsigned get_fileOffsetSamples(
 	}
 }
 
+ssize_t acq200_fifo_bigbuf_read_bbrp(
+	struct file *file, char *buf, size_t len, loff_t *offset,
+	struct BigbufReadPrams* bbrp
+	);
 ssize_t acq200_fifo_bigbuf_xxX_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset,
 	struct BigbufReadPrams* bbrp
 	);
-ssize_t acq200_fifo_bigbuf_read ( 
-	struct file *file, char *buf, size_t len, loff_t *offset
-	);
+
 #define CDOG_INIT 0
 #define CDOG_REFRESH 1
 
