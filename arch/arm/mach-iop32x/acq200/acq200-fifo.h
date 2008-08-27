@@ -1280,6 +1280,7 @@ extern int store_hook(
 extern struct proc_dir_entry* proc_acq200;
 
 extern TBLE* acq200_reserveFreeTblock(void);
+extern TBLE* acq200_reserveSpecificTblock(int iblock);
 extern void acq200_replaceFreeTblock(TBLE* tble);
 
 extern unsigned acq200_getDI6(void);

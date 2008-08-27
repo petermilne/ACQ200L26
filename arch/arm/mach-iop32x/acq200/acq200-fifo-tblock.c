@@ -639,6 +639,27 @@ TBLE* acq200_reserveFreeTblock(void)
 	return tble;
 }
 
+TBLE* acq200_reserveSpecificTblock(int iblock)
+{
+	struct BIGBUF *bb = &DG->bigbuf;
+	unsigned long flags;
+	TBLE* tble = 0;
+	TBLE *n;
+	TBLE *found = 0;
+
+	spin_lock_irqsave(&bb->tb_list_lock, flags);
+	
+	list_for_each_entry_safe(tble, n, &bb->free_tblocks, list){
+		if (tble->tblock->iblock == iblock){
+			found = tble;
+			list_del(&tble->list);
+		}
+	}
+	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+
+	return found;
+}
+
 void acq200_replaceFreeTblock(TBLE* tble)
 {
 	struct BIGBUF *bb = &DG->bigbuf;
@@ -652,4 +673,5 @@ void acq200_replaceFreeTblock(TBLE* tble)
 
 EXPORT_SYMBOL_GPL(acq200_phase_release_tblocks);
 EXPORT_SYMBOL_GPL(acq200_reserveFreeTblock);
+EXPORT_SYMBOL_GPL(acq200_reserveSpecificTblock);
 EXPORT_SYMBOL_GPL(acq200_replaceFreeTblock);

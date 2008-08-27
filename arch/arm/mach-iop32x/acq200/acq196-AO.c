@@ -18,7 +18,16 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-
+/*
+ * @todo LFAWG: Long FAWG : unlimited XX device, loaded from tblocks.
+ * echo TBL,...0xbytes >XXL
+ * TBL is a list of 3 digit tblock #'s, 0xbytes is a final length
+ * NB: the tblocks MUST be contiguous
+ * NB: number is decimal, lead 0 does NOT mean octal
+ * reserve the tblocks.
+ * Then, on COMMIT_LFAWG, feed tblocks to FAWG engine
+ * on stop, release the tblocks.
+ */
 /*
  * VFS From example at http://lwn.net/Articles/57373/
  * Copyright 2002, 2003 Jonathan Corbet <corbet-AT-lwn.net>
@@ -32,9 +41,6 @@
 #define DTACQ_MACH 2
 #define ACQ196
 #define ACQ_IS_INPUT 1
-#define USE_DMAC 1
-
-#warning USE_DMAC SET
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -92,7 +98,9 @@
 #define COMMIT_REF  0x08    /** enables REF output (MAC firmware only)  */
 #define COMMIT_TRIG 0x10    /** software trigger on commit              */
 #define COMMIT_ONESHOT 0x20 /** oneshot FAWG action when enabled        */
+#define COMMIT_LFAWG 0x40    /** FAWG with large (tblock) buffer         */
 
+#define COMMIT_XFAWG (COMMIT_FAWG|COMMIT_LFAWG)
 
 #define COMMIT_XAWG (COMMIT_HAWG|COMMIT_FAWG)
 #define COMMIT_OUTPUT (COMMIT_HAWG|COMMIT_FAWG|COMMIT_DC)
@@ -709,8 +717,108 @@ static void prepareFawgDma(struct SawgBuffer *sb)
 	
 	dbg(1, "99");
 }
-static void sawg_arm(void)
-/* load all wavedefs from channel buffers to single block buffer */
+
+struct LawgStatic {
+	struct list_head lawg_tblocks;
+	struct SawgBuffer sb;
+}
+	LAWG;
+
+static void lawg_init(void)
+{
+	INIT_LIST_HEAD(&LAWG.lawg_tblocks);
+}
+
+static void lawg_release(void)
+{
+	TBLE* tble;
+	TBLE *n;
+	
+	list_for_each_entry_safe(tble, n, &LAWG.lawg_tblocks, list){
+		list_del(&tble->list);
+		acq200_replaceFreeTblock(tble);
+	}
+}
+
+static inline void chomp(char *str)
+{
+	char *cursor;
+
+	for (cursor = &str[strlen(str)-1]; cursor > str; --cursor){
+		if (*cursor == '\n'){
+			*cursor = '\0';
+		}else{
+			break;
+		}
+	}
+}
+static struct SawgBuffer *lawg_load(char *def)
+{
+	static struct SawgBuffer *sb = &LAWG.sb;
+
+	int cursor = 0;
+	int delta;
+	int first_block = -1;
+	int current_block = -1;
+	char tok[80];
+
+	chomp(def);
+/* def is COMMIT[ TB[,TB...]] */
+	for(cursor = 0; sscanf(def+cursor, "%s%n", tok, &delta) >= 1;
+			cursor += delta					){
+		if (cursor != 0){
+			/* force base 10 from leading zero */
+			int iblock = simple_strtol(tok, 0, 10);
+			TBLE *tble = acq200_reserveSpecificTblock(iblock);
+
+			dbg(2, "scan:\"%s\" tok \"%s\" delta %d", 
+			    def+cursor, tok, delta);
+
+			dbg(1, "iblock: %d TBLE:%p", iblock, tble);
+
+			if (tble == 0){
+				err("Failed to allocate tblock %d", iblock);
+				return 0;
+			}
+			if (first_block == -1){
+				first_block = current_block = iblock;
+			}else{
+				if (++current_block != iblock){
+					err("Blocks must be consecutive");
+					return 0;
+				}
+			}
+			list_add_tail(&tble->list, &LAWG.lawg_tblocks);
+		}
+	}
+	{
+		TBLE *first = list_entry(LAWG.lawg_tblocks.next, TBLE, list);
+		TBLE *last = list_entry(LAWG.lawg_tblocks.prev, TBLE, list);
+		int lawg_len = (current_block-first_block+1)*TBLOCK_LEN;
+
+		if (first == 0){
+			err( "first is null"); return 0;
+		}
+		if (last == 0){
+			err("last is null"); return 0;
+		}
+		dbg(1, "first: %p id %d", first, first->tblock->iblock);
+		dbg(1, "last: %p id %d", last, last->tblock->iblock);
+		memset(&sb, 0, sizeof(sb));
+		sb->block = sb->cursor = (u32*)VA_TBLOCK(first->tblock);
+		sb->last = (u32*)(VA_TBLOCK(last->tblock)+TBLOCK_LEN);
+		dbg(1, "dma_map_single %d", lawg_len);
+		/* mapping leaks ... */
+		sb->pa = dma_map_single(DG->dev, sb->block,
+					lawg_len, PCI_DMA_TODEVICE);
+
+		info("va:%p pa0x%08x length:%08x",
+		     sb->block, sb->pa, (sb->last-sb->block)*sizeof(u32));
+		/* now return thing */			
+	}
+	return 0;
+}
+static struct SawgBuffer *sawg_load(void)
 {
 	int isample;
 	int ichannel;
@@ -770,10 +878,16 @@ static void sawg_arm(void)
 	sb->cursor = sb->block;
 
 	dbg(2, "block: %p cursor:%p max:%p", sb->block, sb->cursor, sb->last);
-
-	AO_shot++;	
-	prepareFawgDma(sb);
-	sawg_timer_arm(sb);
+	return sb;
+}
+static void sawg_arm(struct SawgBuffer *sb)
+/* load all wavedefs from channel buffers to single block buffer */
+{
+	if (sb != 0){
+		AO_shot++;	
+		prepareFawgDma(sb);
+		sawg_timer_arm(sb);
+	}
 }
 
 static void stop_sawg(void)
@@ -862,10 +976,12 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 	if (*offset != 0){
 		return -EINVAL;
 	}else{
-		char my_buf[20];
+		char my_buf[128];
 		unsigned commit_word;
+		int ncopy = min(count, sizeof(my_buf)-1);
 
-		COPY_FROM_USER(my_buf, buf, min(count, (size_t)20));
+		COPY_FROM_USER(my_buf, buf, ncopy);
+		my_buf[ncopy] = '\0';
 
 		if (sscanf(my_buf, "0x%x", &commit_word) == 1 ||
                     sscanf(my_buf, "%d", &commit_word) == 1 ){
@@ -885,9 +1001,12 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 		/* this to enable trigger to work on next try */
 		acq196_fifcon_clr_all(ACQ196_FIFCON_DAC_ENABLE);
 
-		if ((AOG->commit_word&COMMIT_FAWG) != 0 && 
+		if ((AOG->commit_word&COMMIT_XFAWG) != 0 && 
 		    (commit_word&COMMIT_FAWG) == 0){
 			stop_sawg();
+			if ((AOG->commit_word&COMMIT_LFAWG) != 0){
+				; /* free tblocks */
+			}
 		}
 
 		clearStats();
@@ -904,12 +1023,16 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 		if ((commit_word&COMMIT_OUTPUT) != 0){
 			dac_reset();
 		}
-		if ((commit_word&COMMIT_FAWG) != 0){
+		if ((commit_word&COMMIT_XFAWG) != 0){
 			*ACQ196_SYSCON_DAC &= ~ACQ196_SYSCON_LOWLAT;
 			if (AO_channels == 2){
 				*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_2CHAN;
 			}
-			sawg_arm();
+			if ((commit_word&COMMIT_LFAWG) != 0){
+				sawg_arm(lawg_load(my_buf));
+			}else{
+				sawg_arm(sawg_load());
+			}
 		}
 		if ((commit_word&COMMIT_DC) != 0){
 			*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_LOWLAT;
@@ -1343,7 +1466,7 @@ static ssize_t show_status(
 
 static DEVICE_ATTR(AO_status, S_IRUGO, show_status, 0);
 
-
+/** Entry Point */
 int acq196_AO_fs_create(struct device* dev)
 {
 	info("about to register fs");
@@ -1351,6 +1474,7 @@ int acq196_AO_fs_create(struct device* dev)
 	memset(AOG, 0, sizeof(struct Globs));
 
 	create_sawg();
+	lawg_init();
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_status);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_version);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_sawg_rate);

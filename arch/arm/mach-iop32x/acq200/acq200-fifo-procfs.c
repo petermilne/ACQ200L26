@@ -1251,6 +1251,18 @@ static ssize_t show_sample_size(
 static DEVICE_ATTR(sample_size, S_IRUGO, show_sample_size, 0);
 
 
+static ssize_t show_word_size(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%d\n", capdef_get_word_size());
+}
+
+static DEVICE_ATTR(word_size, S_IRUGO, show_word_size, 0);
+
+
+
 
 #ifndef WAV232
 static ssize_t store_bda(
@@ -1434,6 +1446,7 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ext_clk);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mas_clk);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sample_size);
+	DEVICE_CREATE_FILE(dev, &dev_attr_word_size);
 	DEVICE_CREATE_FILE(dev, &dev_attr_activate_event_on_arm);
 	DEVICE_CREATE_FILE(dev, &dev_attr_stub_live_copy_to_user);
 
