@@ -198,6 +198,26 @@ static ssize_t tblock_data_read(struct file *filp, char *buf,
 	}
 }
 
+static ssize_t tblock_data_write(struct file *filp, const char *buf,
+		size_t count, loff_t *offset)
+{
+	struct TBLOCK* tblock = (struct TBLOCK*)filp->private_data;
+	void *tblock_va = tblock->offset + va_buf(DG);
+	size_t headroom = tblock->length - *offset;
+
+	count = min(count, headroom);
+
+	if (count == 0){
+		return -EFBIG;
+	}
+	if (copy_from_user(tblock_va + *offset, buf, count)){
+		return -EFAULT;
+	}
+
+	*offset += count;
+	return count;
+}
+
 /*
  * StateListener
  */
@@ -358,6 +378,7 @@ static int acq200_tblockfs_fill_super (
 	static struct file_operations access_ops = {
 		.open = tblock_data_open,
 		.read = tblock_data_read,
+		.write = tblock_data_write,
 		.mmap = tblock_data_mmap,
 		.sendfile = tblock_data_sendfile
 	};
