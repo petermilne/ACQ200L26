@@ -137,6 +137,7 @@ struct Globs {
 	struct Sawg {
 		struct SawgBuffer* buffer;
 		struct AuxTimerClient atc;
+		void (*service_xawg)(struct Sawg* sawg);
 		spinlock_t lock;    
 		int update_in_progress; /** condition var prot by lock */
 		int please_stop;
@@ -161,6 +162,18 @@ struct Globs {
 	} sawg;
 };
 
+
+struct LfawgStatic {
+	struct list_head lfawg_tblocks;
+	struct SawgBuffer sb;
+	int cursor;
+	int limit;
+}
+	LFAWG;
+
+/* LFAWG uses cursors like this: */
+#define LFAWG_CURSOR (LFAWG.cursor)
+#define LFAWG_LEN    (LFAWG.limit)
 
 #define _SAWG_MAX_SAMPLES (16384)	/* 8s at 2kHz */
 #define SAWG_BUFFER_CURRENT_LEN(sb) ((void*)sb->last - (void*)sb->block)
@@ -504,55 +517,89 @@ static inline void update_gtsr(struct Sawg *sawg, u32 gtsr2, u32 gtsr1)
 
 #define IS_ONESHOT ((AOG->commit_word&COMMIT_ONESHOT) != 0)
 
+
+static void runLFawgDma(struct Sawg *sawg)
+{
+	if (getAOheadroom(sawg->stats.updates != 0) > SAWG_DMA_SAMPLES){
+
+		struct SawgBuffer *sb = sawg->buffer;
+		struct iop321_dma_desc *dmad = *sb->dmad;
+		unsigned headroom = LFAWG_LEN - LFAWG_CURSOR;
+		unsigned bc = min(headroom, SAWG_DMA_LEN);
+		unsigned status;
+	
+		if (bc < SAWG_DMA_LEN){
+			return;
+		}
+		if (DMA_DONE(dmac1, status)){
+			dmad->PDA = sb->pa + LFAWG_CURSOR;
+			dmad->BC = bc;
+			DMA_ARM_DIRECT(dmac1, dmad);
+			DMA_FIRE(dmac1);
+			/* house keeping in dead time */
+			LFAWG_CURSOR += bc;
+			++sawg->stats.writeups;
+		}else{
+			++sawg->stats.dma_busy;	
+		}
+	}	
+
+	
+	dbg(1, "99: cursor %d", LFAWG_CURSOR);		
+}
+
+static void service_lfawg(struct Sawg *sawg)
+{
+	u32 gtsr1 = *IOP321_GTSR;
+		
+	runLFawgDma(sawg);	
+
+	++sawg->stats.updates;
+	update_gtsr(sawg, *IOP321_GTSR, gtsr1);
+}
+
 static void service_fawg(struct Sawg *sawg)
 {
 	struct SawgBuffer *sb = sawg->buffer;
-
-	if (!sawg->please_stop){
-		u32 gtsr1 = *IOP321_GTSR;
-                int nwrite = getAOheadroom(sawg->stats.updates != 0);
-		int ic = sb->dmad_cursor;
-		unsigned stat;
+	u32 gtsr1 = *IOP321_GTSR;
+	int nwrite = getAOheadroom(sawg->stats.updates != 0);
 		
-		if (nwrite > SAWG_DMA_SAMPLES){
-			if (DMA_DONE(dmac1, stat)){
-				if (ic >= sb->dmad_count){
-					if (sawg->sync){
-						setSyncOn((sawg->sync));
-					}
-					if (IS_ONESHOT){
-						sawg->please_stop = 1;
-						goto done_writing;
-					}else{
-						ic = 0;		
-					}				
+	if (nwrite > SAWG_DMA_SAMPLES){
+
+		int ic = sb->dmad_cursor;
+	       	unsigned stat;
+
+		if (DMA_DONE(dmac1, stat)){
+			if (ic >= sb->dmad_count){
+				if (sawg->sync){
+					setSyncOn((sawg->sync));
 				}
-				DMA_ARM_DIRECT(dmac1, sb->dmad[ic]);
-				DMA_FIRE(dmac1);
-				if (sawg->sync && ic == 1){
-					setSyncOff(sawg->sync);		
-				}
-				sb->dmad_cursor = ic + 1;
-				++sawg->stats.writeups;
+				if (IS_ONESHOT){
+					sawg->please_stop = 1;
+					goto done_writing;
+				}else{
+					ic = 0;		
+				}				
+			}
+			DMA_ARM_DIRECT(dmac1, sb->dmad[ic]);
+			DMA_FIRE(dmac1);
+			if (sawg->sync && ic == 1){
+				setSyncOff(sawg->sync);		
+			}
+			sb->dmad_cursor = ic + 1;
+			++sawg->stats.writeups;
 				
-				if (nwrite > 60){
-					sawg->stats.zero_fifo_at = 
-						sawg->stats.writeups;
-				}
-			}else{
-				++sawg->stats.dma_busy;	
-			}				
-		}
+			if (nwrite > 60){
+				sawg->stats.zero_fifo_at = 
+					sawg->stats.writeups;
+			}
+		}else{
+			++sawg->stats.dma_busy;	
+		}				
+	}
 done_writing:
-		++sawg->stats.updates;
-		update_gtsr(sawg, *IOP321_GTSR, gtsr1);
-	}else{
-		acq196_fifcon_clr_all(ACQ196_FIFCON_DAC_ENABLE);
-		iop321_hookAuxTimer(&sawg->atc, 0);
-		sawg->timer_running = 0;		
-		AOG->commit_word = 0;
-		dbg(1, "closedown");
-	}	
+	++sawg->stats.updates;
+	update_gtsr(sawg, *IOP321_GTSR, gtsr1);
 }
 static void sawg_action(unsigned long clidata)
 /**
@@ -573,8 +620,15 @@ static void sawg_action(unsigned long clidata)
 	if (!service){
 		return;
 	}
-	
-	service_fawg(sawg);
+	if (!sawg->please_stop){
+		sawg->service_xawg(sawg);
+	}else{
+		acq196_fifcon_clr_all(ACQ196_FIFCON_DAC_ENABLE);
+		iop321_hookAuxTimer(&sawg->atc, 0);
+		sawg->timer_running = 0;		
+		AOG->commit_word = 0;
+		dbg(1, "closedown");
+	}
 	
 	spin_lock_irqsave(&sawg->lock, flags);
 	sawg->update_in_progress = 0;
@@ -595,7 +649,9 @@ static struct SawgBuffer* getInactiveSawgBuffer(void)
 		&AOG->sawg_buffers[1];
 }
 
-static void sawg_timer_arm(struct SawgBuffer *sb)
+static void xawg_timer_arm(
+	struct SawgBuffer *sb, 
+	void (*service_fun)(struct Sawg *sawg))
 {
 	struct Sawg* sawg = &AOG->sawg;
 	unsigned long flags;
@@ -604,6 +660,7 @@ static void sawg_timer_arm(struct SawgBuffer *sb)
          */
 	spin_lock_irqsave(&sawg->lock, flags);
 	sawg->buffer = sb;
+	sawg->service_xawg = service_fun;
 	if (!sawg->timer_running){
 		sawg->please_stop = 0;
 		sawg->fifo_va = DG->fpga.fifo.va;
@@ -614,6 +671,8 @@ static void sawg_timer_arm(struct SawgBuffer *sb)
 	}
 	spin_unlock_irqrestore(&sawg->lock, flags);
 }
+
+
 static void primeFawgDma(struct SawgBuffer *sb)
 {
 	int ic = 0;
@@ -638,6 +697,8 @@ static void primeFawgDma(struct SawgBuffer *sb)
 	
 	dbg(1, "99: cursor %d", sb->dmad_cursor);		
 }
+
+
 
 static void releaseDmad(struct SawgBuffer *sb)
 {	
@@ -718,24 +779,53 @@ static void prepareFawgDma(struct SawgBuffer *sb)
 	dbg(1, "99");
 }
 
-struct LawgStatic {
-	struct list_head lawg_tblocks;
-	struct SawgBuffer sb;
-}
-	LAWG;
-
-static void lawg_init(void)
+static void prepareLFawgDma(struct SawgBuffer *sb)
 {
-	INIT_LIST_HEAD(&LAWG.lawg_tblocks);
+	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
+	long j1;
+	unsigned status;
+
+	releaseDmad(sb);
+	sb->dmad = kmalloc(2*sizeof(struct iop321_dma_desc*), GFP_KERNEL);
+	if (!sb->dmad){
+		err("FAILED to allocate DMAD array");
+		return;	
+	}
+
+	dmad->NDA = 0;
+	dmad->DD_FIFSTAT = 0;
+	dmad->LAD  = DG->fpga.fifo.pa;
+	dmad->DC = DMA_DCR_MEM2MEM;
+
+	sb->dmad[0] = dmad;
+	sb->dmad_count = 1;
+
+	LFAWG_LEN = (sb->last - sb->cursor)*sizeof(u32);
+	LFAWG_CURSOR = 0;
+
+	runLFawgDma(&AOG->sawg);
+	j1 = jiffies;
+	while(!DMA_DONE(dmac1, status)){
+		if (jiffies - j1 > 10){
+			break;	
+		}	
+	}
 }
 
-static void lawg_release(void)
+
+static void lfawg_init(void)
+{
+	INIT_LIST_HEAD(&LFAWG.lfawg_tblocks);
+}
+
+static void lfawg_release(void)
 {
 	TBLE* tble;
 	TBLE *n;
 	
-	list_for_each_entry_safe(tble, n, &LAWG.lawg_tblocks, list){
+	list_for_each_entry_safe(tble, n, &LFAWG.lfawg_tblocks, list){
 		list_del(&tble->list);
+		atomic_dec(&tble->tblock->in_phase);
 		acq200_replaceFreeTblock(tble);
 	}
 }
@@ -752,9 +842,9 @@ static inline void chomp(char *str)
 		}
 	}
 }
-static struct SawgBuffer *lawg_load(char *def)
+static struct SawgBuffer *lfawg_load(char *def)
 {
-	static struct SawgBuffer *sb = &LAWG.sb;
+	static struct SawgBuffer *sb = &LFAWG.sb;
 
 	int cursor = 0;
 	int delta;
@@ -788,13 +878,14 @@ static struct SawgBuffer *lawg_load(char *def)
 					return 0;
 				}
 			}
-			list_add_tail(&tble->list, &LAWG.lawg_tblocks);
+			atomic_inc(&tble->tblock->in_phase);
+			list_add_tail(&tble->list, &LFAWG.lfawg_tblocks);
 		}
 	}
 	{
-		TBLE *first = list_entry(LAWG.lawg_tblocks.next, TBLE, list);
-		TBLE *last = list_entry(LAWG.lawg_tblocks.prev, TBLE, list);
-		int lawg_len = (current_block-first_block+1)*TBLOCK_LEN;
+		TBLE *first = list_entry(LFAWG.lfawg_tblocks.next, TBLE, list);
+		TBLE *last = list_entry(LFAWG.lfawg_tblocks.prev, TBLE, list);
+		int lfawg_len = (current_block-first_block+1)*TBLOCK_LEN;
 
 		if (first == 0){
 			err( "first is null"); return 0;
@@ -804,13 +895,13 @@ static struct SawgBuffer *lawg_load(char *def)
 		}
 		dbg(1, "first: %p id %d", first, first->tblock->iblock);
 		dbg(1, "last: %p id %d", last, last->tblock->iblock);
-		memset(&sb, 0, sizeof(sb));
+		memset(sb, 0, sizeof(sb));
 		sb->block = sb->cursor = (u32*)VA_TBLOCK(first->tblock);
 		sb->last = (u32*)(VA_TBLOCK(last->tblock)+TBLOCK_LEN);
-		dbg(1, "dma_map_single %d", lawg_len);
+		dbg(1, "dma_map_single %d", lfawg_len);
 		/* mapping leaks ... */
 		sb->pa = dma_map_single(DG->dev, sb->block,
-					lawg_len, PCI_DMA_TODEVICE);
+					lfawg_len, PCI_DMA_TODEVICE);
 
 		info("va:%p pa0x%08x length:%08x",
 		     sb->block, sb->pa, (sb->last-sb->block)*sizeof(u32));
@@ -886,7 +977,17 @@ static void sawg_arm(struct SawgBuffer *sb)
 	if (sb != 0){
 		AO_shot++;	
 		prepareFawgDma(sb);
-		sawg_timer_arm(sb);
+		xawg_timer_arm(sb, service_fawg);
+	}
+}
+
+static void lfawg_arm(struct SawgBuffer *sb)
+/* lfawg - load from TBLOCK def. ... lazy start ... */
+{
+	if (sb != 0){
+		AO_shot++;	
+		prepareLFawgDma(sb);
+		xawg_timer_arm(sb, service_lfawg);
 	}
 }
 
@@ -993,6 +1094,10 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 		dbg(1, "commit prev 0x%04x now 0x%04x", 
 			    AOG->commit_word, commit_word);
 
+		if ((commit_word&COMMIT_LFAWG) == 0 &&
+		    (AOG->commit_word&COMMIT_LFAWG) != 0){
+			lfawg_release();
+		}
 		if ((commit_word&COMMIT_XAWG) == 0){
 			acq196_syscon_dac_clr(ACQ196_SYSCON_ACQEN);
 		}
@@ -1029,7 +1134,7 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 				*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_2CHAN;
 			}
 			if ((commit_word&COMMIT_LFAWG) != 0){
-				sawg_arm(lawg_load(my_buf));
+				lfawg_arm(lfawg_load(my_buf));
 			}else{
 				sawg_arm(sawg_load());
 			}
@@ -1474,7 +1579,7 @@ int acq196_AO_fs_create(struct device* dev)
 	memset(AOG, 0, sizeof(struct Globs));
 
 	create_sawg();
-	lawg_init();
+	lfawg_init();
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_status);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_version);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_sawg_rate);
