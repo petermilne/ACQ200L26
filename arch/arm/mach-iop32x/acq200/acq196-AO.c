@@ -533,9 +533,13 @@ static void runLFawgDma(struct Sawg *sawg)
 		if (bc < SAWG_DMA_LEN){
 			if (IS_ONESHOT){
 				sawg->please_stop = 1;
+				return;
+			}else{
+				LFAWG_CURSOR = 0;
+				bc = SAWG_DMA_LEN;
 			}
-			return;
 		}
+
 		if (DMA_DONE(dmac1, status)){
 			dmad->PDA = LFAWG.sb.pa + LFAWG_CURSOR;
 			dmad->BC = bc;
