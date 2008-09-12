@@ -547,6 +547,7 @@ static ssize_t chx_read(
 static int chx_release(struct inode *inode, struct file *file)
 {
 	acq200_releaseDCI(file);
+	return 0;
 }
 
 static void prep_create_chx(
@@ -1341,7 +1342,7 @@ static int init_buffers(void)
 	return rc;
 }
 
-static void clear_buffers(void)
+static void prep_clear_buffers(void)
 {
 	clear_spec(&PFG.spec);
 }
@@ -1368,7 +1369,7 @@ static int __init acq200_prep_init( void )
 static void __exit
 acq200_prep_exit_module(void)
 {
-	clear_buffers();
+	prep_clear_buffers();
 	acq200_del_ext_phase_handler(&extPhase);
 	unregister_filesystem(&prepfs_type);
 }

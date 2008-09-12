@@ -1,5 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
+
 #include <linux/pci.h>
 #include <linux/time.h>
 #include <linux/init.h>
@@ -227,6 +228,42 @@ void acq200_empties_release_tblocks(void)
 	list_splice_init(&bb->empty_tblocks, &bb->free_tblocks);
 	spin_unlock_irqrestore(&bb->tb_list_lock, flags);	
 }
+
+void acq200_sort_free_tblocks(void)
+{
+#define MAXTB DG->bigbuf.tblocks.nblocks
+	LIST_HEAD(free_tmp);
+	struct list_head *free_tblocks = &DG->bigbuf.free_tblocks;
+	struct TblockListElement* tle;
+	struct TblockListElement* tmp;
+	int ib_search = 0;
+
+	if (acq200_tblock_debug > 3){
+		return;				/* REMOVEME */
+	}
+	list_splice_init(free_tblocks, &free_tmp);
+
+	while(!list_empty(&free_tmp)){
+		int search_before = ib_search;
+
+		if (ib_search >= MAXTB){
+			err("searching beyond the last tblock %d", MAXTB);
+			return;
+		}
+
+		list_for_each_entry_safe(tle, tmp, &free_tmp, list){
+			if (tle->tblock->iblock == ib_search){
+				list_move_tail(&tle->list, free_tblocks);
+				++ib_search;
+			}
+		}
+		
+		if (ib_search == search_before && ib_search < MAXTB){
+			err("Missing block %d", ib_search);
+		}		
+	}
+}
+
 
 void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 {
@@ -653,6 +690,7 @@ TBLE* acq200_reserveSpecificTblock(int iblock)
 		if (tble->tblock->iblock == iblock){
 			found = tble;
 			list_del(&tble->list);
+			break;
 		}
 	}
 	spin_unlock_irqrestore(&bb->tb_list_lock, flags);

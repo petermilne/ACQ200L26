@@ -1287,9 +1287,13 @@ extern unsigned acq200_getDI6(void);
 /* dio32 - actually instantiated by the RTM module */
 extern unsigned acq200_getDIO32(void);
 
+extern void acq200_release_phases(void);
+extern void acq200_sort_free_tblocks(void);
+extern int free_block_count(void);
 /* StateListener defs */
 #define SL_TO_STATE(s) ((s) >> 28)
 #define SL_FM_STATE(s) ((s) << 28)
 #define SL_TO_TCODE(s) ((s) & ~0xf0000000)
+
 
 #endif /* ACQ200_FIFO_H__ */

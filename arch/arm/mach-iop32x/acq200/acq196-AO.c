@@ -838,13 +838,29 @@ static void lfawg_release(void)
 {
 	TBLE* tble;
 	TBLE *n;
+	int in_phase;
+	int freed_todate = 0;
 	
 	dbg(1, "01");
+iterate:
 	list_for_each_entry_safe(tble, n, &LFAWG.lfawg_tblocks, list){
 		dbg(2, "tblock %d", tble->tblock->iblock);
-		list_del(&tble->list);
-		atomic_dec(&tble->tblock->in_phase);
+		list_del_init(&tble->list);		
+
+		in_phase = atomic_read(&tble->tblock->in_phase);
+		if (in_phase != 1){
+			err("releasing %d, but in_phase (%d) is not 1 ",
+			    tble->tblock->iblock, in_phase);
+		}else{
+			atomic_dec(&tble->tblock->in_phase);
+		}
 		acq200_replaceFreeTblock(tble);
+		freed_todate++;
+		if (freed_todate > 64){
+			err("INFINITE loop detected: drop out");
+			break;
+		}
+		goto iterate;
 	}
 	dbg(1, "99");
 }
@@ -1153,6 +1169,15 @@ static ssize_t commit_write(struct file *filp, const char *buf,
 				*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_2CHAN;
 			}
 			if ((commit_word&COMMIT_LFAWG) != 0){
+				switch(DMC_WO_getState()){
+				case ST_STOP:
+				case ST_ARM:
+					break;
+				default:
+					err("LFAWG commit state (%d) not "
+					    "STOP||ARM", DMC_WO_getState());
+					return -1;
+				}
 				lfawg_arm(lfawg_load(lfawg_scan(my_buf)));
 			}else{
 				sawg_arm(sawg_load());

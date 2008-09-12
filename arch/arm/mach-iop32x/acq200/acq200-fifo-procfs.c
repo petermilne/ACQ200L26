@@ -392,6 +392,7 @@ static ssize_t store_sample_read_start(
 static DEVICE_ATTR(sample_read_start, S_IRUGO|S_IWUGO,
 		   show_sample_read_start, store_sample_read_start);
 
+
 static ssize_t show_sample_read_length(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -1217,6 +1218,47 @@ static ssize_t show_simulate(
 
 static DEVICE_ATTR(simulate, S_IRUGO|S_IWUGO, show_simulate, store_simulate);
 
+static ssize_t store_free_tblocks(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	if (DMC_WO_getState() == ST_STOP){
+		int set_free;
+
+		if (sscanf(buf, "%d", &set_free) != 0 && set_free == 1){
+			acq200_release_phases();
+			acq200_empties_release_tblocks();
+			acq200_sort_free_tblocks();
+		}
+	}
+
+        return strlen(buf);
+}
+
+int free_block_count(void)
+{
+	struct TblockListElement* tle;
+	int iblock = 0;
+
+	list_for_each_entry(tle, &DG->bigbuf.free_tblocks, list){
+		++iblock;
+	}
+	return iblock;
+}
+static ssize_t show_free_tblocks(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+
+	return sprintf(buf,"%d\n", free_block_count());
+}
+
+static DEVICE_ATTR(free_tblocks, S_IRUGO|S_IWUGO, show_free_tblocks, store_free_tblocks);
+
+
+
 static ssize_t store_oneshot(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -1432,6 +1474,7 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_counter_update);
 #endif
 	DEVICE_CREATE_FILE(dev, &dev_attr_simulate);
+	DEVICE_CREATE_FILE(dev, &dev_attr_free_tblocks);
 	DEVICE_CREATE_FILE(dev, &dev_attr_oneshot);
 	DEVICE_CREATE_FILE(dev, &dev_attr_user_abort);
 	DEVICE_CREATE_FILE(dev, &dev_attr_cap_status);

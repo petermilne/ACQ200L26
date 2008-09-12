@@ -86,7 +86,7 @@ static int __init debug_iop_init(void)
 
 	debug_iop_base_info.pwrite =
 	debug_iop_base_info.pread = 
-	debug_iop_base_info.pcache = IOP321_VIRT_MEM_BASE;
+		debug_iop_base_info.pcache = (void*)IOP321_VIRT_MEM_BASE;
 	debug_iop_base_info.read_fmt = "0x%08x\n";
 	return 0;
 }

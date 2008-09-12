@@ -1624,7 +1624,7 @@ static struct Phase * onPIT_clear(
 
 
 
-static void release_phases(void)
+void acq200_release_phases(void)
 {
 	struct Phase *phase;
 
@@ -2056,7 +2056,7 @@ static int null_trigger_detect(void) {
 	return 0;
 }
 
-static void clear_buffers(void)
+void clear_buffers(void)
 {
 	void* getNextEmpty = DMC_WO->getNextEmpty;
 
@@ -2065,7 +2065,7 @@ static void clear_buffers(void)
 	DG->finished_with_engines = 0;
 	DG->fiferr = 0;
 
-	release_phases();
+	acq200_release_phases();
 	DMC_CLEAN(DMC_WO);
 	spin_lock_init(&DMC_WO->onTrigger.lock);
 	DMC_WO->trigger_detect = null_trigger_detect;
