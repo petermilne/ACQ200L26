@@ -86,9 +86,11 @@ static inline int cold_fifo_free_entries(void)
 }
 
 #ifdef ACQ216
-static inline void stop_capture(void)
+extern void acq216_stop_capture(void);
+
+static inline void stop_capture(void) 
 {
-	disable_fifo();
+	acq216_stop_capture();
 }
 #endif
 

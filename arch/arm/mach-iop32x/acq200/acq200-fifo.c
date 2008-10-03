@@ -1749,6 +1749,7 @@ static void preEnable(void)
 {
 	dbg(1, "ICR=%x", 0);
 
+	errbuf[0] = '\0';
 	run_pre_arm_hook();
 
 	DMC_WO_setState(ST_ARM);

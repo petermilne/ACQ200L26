@@ -82,6 +82,10 @@ module_param(esw_expected_modulus, int, 0400);
 int esw_actual_residue;
 module_param(esw_actual_residue, int, 0400);
 
+/* DCM [ext clk] monitoring valid HS only! */
+int dcm_monitor;
+module_param(dcm_monitor, int, 0664);
+
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
@@ -384,6 +388,7 @@ int acq200_lookup_pchan(int lchannel);
 
 
 
+
 static struct DevGlobs acq216_dg = {
 	.btype = BTYPE_ACQ216,
 	.hitide = 1,
@@ -423,6 +428,7 @@ static struct DevGlobs acq216_dg = {
 
 #include "acq200-fifo.c"
 
+
 static void enable_acq216_start(void)
 {
 	int rc;
@@ -453,6 +459,38 @@ static void enable_acq216_start(void)
 		onTrigger();
 	}
 }
+
+
+
+void acq216_stop_capture(void)
+{
+	if (dcm_monitor){
+		unsigned lock = NCHAN==12?
+ 			ACQ200_CLKCON_DCMx3_LOCK: ACQ200_CLKCON_DCMx4_LOCK;
+		unsigned clkfx = NCHAN==12?
+			ACQ200_CLKCON_DCMx3_CLKFX: ACQ200_CLKCON_DCMx4_CLKFX;
+		unsigned clkin = NCHAN==12?			
+			ACQ200_CLKCON_DCMx3_CLKIN: ACQ200_CLKCON_DCMx4_CLKIN;
+
+		unsigned clkcon = *ACQ200_CLKCON;
+
+		if ((clkcon&lock) != 0){
+			dbg(1, "LOCK: OK");
+		}else{
+			char emsg[80];
+			sprintf(emsg, 
+				"DCM LOCK ERROR 0x%08x IN:%s OUT:%s",
+				clkcon, 
+				(clkcon&clkin)==1? "OK": "FAIL",
+				(clkcon&clkfx)==1? "OK": "FAIL");
+			err("%s", emsg);
+			strcat(errbuf, emsg);
+			DMC_WO->error = errbuf;
+		}
+	}
+	disable_fifo();
+}
+
 
 
 int acq216_setAntiPhase(int enable)  
@@ -1177,6 +1215,7 @@ static void init_endstops_control_target(void)
 	DG->put_max_empties = numstops/2;
 	DG->empty_fill_threshold = numstops/2;
 }
+
 
 #ifdef ACQ216
 #warning stop_dead_dma_err_cb enabled.
