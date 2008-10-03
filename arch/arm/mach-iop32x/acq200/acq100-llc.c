@@ -32,6 +32,7 @@
 #define DMA_POLL_HOLDOFF     1
 #define FIFO_ONESAM          1
 #define DI_IN_1              1
+#define CYCLE_STEAL	     1
 
 /** @file acq100-llc.c acq1xxx low latency control kernel module.
  *  DMA should fire on HOT_NE, and it should be IMPOSSIBLE to get a 
@@ -151,6 +152,11 @@ module_param(acq100_mem2mem, int, 0664);
 int acq100_dropACQEN_on_exit;
 module_param(acq100_dropACQEN_on_exit, int, 0664);
 
+#if CYCLE_STEAL
+int pbi_cycle_steal = 0;
+module_param(pbi_cycle_steal, int, 0664);
+#endif
+
 /** increment BUILD and VERID each build */
 #define BUILD 1069
 #define VERID "$Revision: 1.24 $ build B1070"
@@ -195,6 +201,9 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #endif
 #if FIFO_ONESAM
 "FIFO_ONESAM "
+#endif
+#if CYCLE_STEAL
+"ACQ196-500 "
 #endif
 "\n";
 
@@ -522,6 +531,28 @@ DEFINE_DMA_CHANNEL(ao_dma, 1);
 
 #define TRADITIONAL 1
 
+#if CYCLE_STEAL
+static void dma_append_cycle_stealer(
+	struct DmaChannel* dma)
+{
+#define SLEN 16
+	struct iop321_dma_desc* stealer = acq200_dmad_alloc();
+	int bytes = max(4, pbi_cycle_steal);
+	static char buf[SLEN];
+	dma_addr_t p_buf = dma_map_single(
+					NULL, buf, SLEN, PCI_DMA_FROMDEVICE);
+
+	bytes = min(bytes, 16);
+	stealer->NDA	= 0;
+	stealer->PDA	= DG->fpga.regs.pa;
+	stealer->PUAD	= 0;
+	stealer->LAD	= p_buf;
+	stealer->BC	= bytes;
+	stealer->DC	= DMA_DCR_MEM2MEM;		/* TODO */
+	dma_append_chain(dma, stealer, "cycle stealer");
+}
+#endif
+
 static void initAIdma(void)
 /** initialise AI dma channel */
 {
@@ -592,6 +623,11 @@ static void initAIdma(void)
 			do_dmad->DC = DMA_DCR_PCI_MR;
 			dma_append_chain(&ai_dma, do_dmad, "DO");
 		}
+#if CYCLE_STEAL
+		if (pbi_cycle_steal){
+			dma_append_cycle_stealer(&ai_dma);
+		}
+#endif
 	}
 	DMA_DISABLE(ai_dma);
 }
@@ -638,7 +674,11 @@ static void initAOdma(void)
 		 * but setting the PDA is a lemon, so leave it
 		 */
 	}
-
+#if CYCLE_STEAL
+	if (pbi_cycle_steal){
+		dma_append_cycle_stealer(&ao_dma);
+	}
+#endif
 	DMA_DISABLE(ao_dma);	
 }
 
