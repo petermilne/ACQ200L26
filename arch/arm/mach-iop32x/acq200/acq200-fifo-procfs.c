@@ -695,16 +695,19 @@ static int _show_measured_sample_rate(
 	int process_us = calc_process_us();
 
 	if (process_us > 1000){
+		int decimals = 
+			process_us > 100000? 1000:
+			process_us > 10000? 100: 10;
 		unsigned long long tot_samples = ELAPSED_SAMPLES;
-		unsigned long long xx = tot_samples * 10;
+		unsigned long long xx = tot_samples * decimals;
 		unsigned srate;
 
 		do_div(xx, process_us);
 		srate = xx;
 
-		if (srate > 10){
+		if (srate > decimals){
 			return snprintf(buf, maxbuf, "%2d.%d MHz\n", 
-						srate/10, srate%10);
+						srate/decimals, srate%decimals);
 		}else{
 			process_us = calc_process_us();
 			if (process_us > 1000000){
@@ -1683,6 +1686,7 @@ static ssize_t store_int_clk(
 		default:
 			return strlen(buf);
 		}
+		/* fall thru */
 	case 1:
 		acq200_setIntClkHz(acq200_clk_hz);
 		break;
