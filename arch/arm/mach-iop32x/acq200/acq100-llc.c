@@ -535,18 +535,21 @@ DEFINE_DMA_CHANNEL(ao_dma, 1);
 static void dma_append_cycle_stealer(
 	struct DmaChannel* dma)
 {
+	/* handy to use a dma_desc as scratchpad -> is dma mapped */
+	static struct iop321_dma_desc* scratchpad;
 #define SLEN 16
 	struct iop321_dma_desc* stealer = acq200_dmad_alloc();
-	int bytes = max(4, pbi_cycle_steal);
-	static char buf[SLEN];
-	dma_addr_t p_buf = dma_map_single(
-					NULL, buf, SLEN, PCI_DMA_FROMDEVICE);
+	unsigned bytes = max(4, pbi_cycle_steal);
 
-	bytes = min(bytes, 16);
+	if (scratchpad == 0){
+		scratchpad = acq200_dmad_alloc();	
+	}
+
+	bytes = min(bytes, sizeof(struct iop321_dma_desc));
 	stealer->NDA	= 0;
 	stealer->PDA	= DG->fpga.regs.pa;
 	stealer->PUAD	= 0;
-	stealer->LAD	= p_buf;
+	stealer->LAD	= scratchpad->pa;
 	stealer->BC	= bytes;
 	stealer->DC	= DMA_DCR_MEM2MEM;		/* TODO */
 	dma_append_chain(dma, stealer, "cycle stealer");
