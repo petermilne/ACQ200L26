@@ -50,11 +50,12 @@
 	
 /*
  * HOTPOINT: 32 levels, 32K.
+ * NB BLOCKSIZE 4K
  */
 	
-#define HOTxB 11	/* overdrive by 1K */
-/* remember, we already moved one block */
-#define CHECK_2B 11
+#define HOTxB 8		/* overdrive by 8K */
+			/* remember, we already moved one block */
+#define CHECK_2B 3	/* 3 additional blocks */
 
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
