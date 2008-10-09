@@ -165,16 +165,9 @@ void acq200_reset_fifo(void)
 #define CLKDIV_OFFSET 1  /* fpga spec */
 #endif
 
-static void _setIntClkHz(int hz, long masterclk, u32 clksel)
+static void _setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
 {
 #define MAXDIV    0x0000fffe
-	u32 clkdiv;
-
-
-	if ( hz > masterclk/2 ) hz = masterclk/2;
-
-	clkdiv = (masterclk / hz) + CLKDIV_OFFSET;
-
 	if ( clkdiv > MAXDIV ) clkdiv = MAXDIV;
 	if ( clkdiv < 2 )      clkdiv = 2;
 
@@ -248,7 +241,9 @@ void acq200_setIntClkHz( int hz )
 			}
 		}
 	
-		_setIntClkHz(hz, intclk[imin].masterclk, intclk[imin].clksel);
+		_setIntClkHz(clkdiv, 
+			     intclk[imin].masterclk, intclk[imin].clksel,
+				hz);
 	}
 }
 
