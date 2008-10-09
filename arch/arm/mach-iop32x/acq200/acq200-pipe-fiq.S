@@ -236,8 +236,8 @@ ENTRY(acq200_pipe_fiq)
  */
 		ldr	fifcon, [fpga, #ACQ200_FIFCON]
 		ldr	sp, [dmac, #DMA_CSR]	
-		mov	sp, sp, lsl #8					@ does not interfere CCR
-		str	sp, [dmac, #DMA_CCR]			@ 0 => disable CCR
+		mov	sp, sp, lsl #8			@ does not interfere CCR
+		str	sp, [dmac, #DMA_CCR]		@ 0 => disable CCR
 		str	sp, [fpga, #ACQ200_ICR]         @ 0 => disable irq
 		tst	head_pa, #0xc0000000	        @ all PA have hi bits
 		strne	head_pa, [dmac, #DMA_NDAR]
