@@ -186,8 +186,8 @@ static void _setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
 	dbg( 1, "set:%7d Hz clkdiv 0x%08x act 0x%08x %d Hz MCLK: %ld Hz\n",
 	     hz, clkdiv, *ACQ200_CLKDAT, acq200_clk_hz, masterclk);
 }
-
-#define MASTERCLK_100 99999999  
+/*                    12345xxx */
+#define MASTERCLK_100 99999000  
 
 #define MASTERCLK MASTERCLK_100
 

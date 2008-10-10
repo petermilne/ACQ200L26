@@ -40,20 +40,20 @@
 	
 #include "acq200-pipek.h"
 
-#define ACQ200_FIFCON ACQ196_FIFSTAT
-#define ACQ200_SYSCON ACQ196_SYSCON
-#define ACQ200_FIFCON_MASK 0xf
 
 #if defined ACQ132
 
-#define ACQ132_FIFSTAT_HOTPOINT 0x0000001f
+#define ACQ200_FIFCON		ACQ196_FIFSTAT
+#define ACQ200_SYSCON		ACQ196_SYSCON
+#define ACQ200_FIFCON_MASK	0x0000000f
+#define ACQ132_FIFSTAT_HOTPOINT 0x0000000f
 	
 /*
- * HOTPOINT: 32 levels, 32K.
+ * HOTPOINT: 16 levels, 32K., 2 K per level
  * NB BLOCKSIZE 4K
  */
 	
-#define HOTxB 8		/* overdrive by 8K */
+#define HOTxB 	 6	/* overdrive by 8K */
 			/* remember, we already moved one block */
 #define CHECK_2B 3	/* 3 additional blocks */
 
@@ -70,11 +70,8 @@
 #define UPDATE_COLD_HISTO 0
 #define UPDATE_HOT_HISTO 1
 	
-#define HOT_HISTO_LSR 1	
-
 	.macro GET_HOT tmp, fifcon
 	and	\tmp, \fifcon, #ACQ132_FIFSTAT_HOTPOINT
-	mov	\tmp, \tmp, lsr #HOT_HISTO_LSR
 	.endm
 
 #define MACH_VER CHECK_2B
