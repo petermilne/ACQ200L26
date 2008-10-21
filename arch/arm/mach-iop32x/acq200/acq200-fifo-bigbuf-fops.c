@@ -438,10 +438,19 @@ ssize_t acq200_fifo_bigbuf_read_bbrp(
 	}else if ( bbrp->my_samples_reqlen == 0 ){
 		RETURN(0);
 	}else{
+		int extract_words = bbrp->my_samples_reqlen;
+
+		
+		if (DCI(file)->ssize > sizeof(short)){
+			/* extractor works in shorts */
+			extract_words *= DCI(file)->ssize;
+			extract_words /= sizeof(short);
+		}
+
 		cpwords = bbrp->extract(
 			        bbrp->tblock, 
 				(short*)buf, 
-				bbrp->my_samples_reqlen,
+				extract_words,
 				channel,
 				bbrp->block_off_sample, 
 				stride );
