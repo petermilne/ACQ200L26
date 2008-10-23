@@ -2787,7 +2787,7 @@ static int acq200_proc_coldpoint_histo(
 		&cold_fifo, &cold_fifo2, 
 #endif
 		&hot_fifo2,
-#ifdef ACQ196
+#if defined(ACQ196) || defined(ACQ132)
 		&ao_fifo
 #endif
 	};

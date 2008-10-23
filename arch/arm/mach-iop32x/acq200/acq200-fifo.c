@@ -3311,7 +3311,7 @@ static unsigned int acq200_fpga_fifo_live_poll(
 
 
 
-static int acq200_fpga_open (struct inode *inode, struct file *file)
+int acq200_fpga_open (struct inode *inode, struct file *file)
 {
 #ifdef WAV232
 	static struct file_operations fifo_write_buf_ops = {
@@ -3387,11 +3387,7 @@ static int acq200_fpga_open (struct inode *inode, struct file *file)
 		case FIFO_RW_LIVE_OFFSETS:
 			file->f_op = &fifo_live_offsets_ops;
 			break;
-#ifdef ACQ132
-		case ACQ132_SFPGA_LOAD:
-			file->f_op = &acq132_sfpga_load_ops;
-			break;
-#endif
+
 		default:
 			return 0;
 		}
@@ -3660,14 +3656,18 @@ static int acq200_tblock_release (
 	return 0;
 }
 
-
+#ifdef ACQ200_CUSTOM_FPGA_OPEN
+#define ACQ200_FPGA_OPEN acq200_custom_fpga_open
+#else
+#define ACQ200_FPGA_OPEN acq200_fpga_open
+#endif
 
 
 static int __devinit
 acqX00_fpga_driver_init(struct device *dev, int irq)
 {
 	static struct file_operations fpga_fops = {
-		.open = acq200_fpga_open,
+		.open = ACQ200_FPGA_OPEN,
 		.release = acq200_fpga_release
 	};
 	static struct file_operations tblock_fops = {

@@ -75,7 +75,7 @@
 #define FIFO_RW_LIVE_OFFSETS 21
 
 #define ACQ132_SFPGA_LOAD	22	/* device loads SFPGA */
-
+#define ACQ132_GATE_PULSE_LOAD  23	/* GATE PULSE definitions */
 /*
  * access to stored data:
  * +1  : ch1 etc

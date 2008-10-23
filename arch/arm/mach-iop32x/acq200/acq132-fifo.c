@@ -240,7 +240,9 @@ void acq200_setIntClkHz( int hz )
 				imin = isel;
 			}
 		}
-	
+
+		dbg(1, "set:%d clkdiv:%d actual:%d", hz, clkdiv, actual[0]);	
+
 		_setIntClkHz(clkdiv, 
 			     intclk[imin].masterclk, intclk[imin].clksel,
 				hz);
@@ -427,9 +429,90 @@ static struct file_operations acq132_sfpga_load_ops = {
 	.release = acq132_sfpga_load_release,
 	.write = acq132_sfpga_load_write
 };
+
+
+static int acq132_gate_pulse_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+#define GATE_TO	2	/* timeout, jiffies .. ensures minimal loading */
+
+static ssize_t acq132_gate_pulse_write(
+	struct file *file, const char *buf, size_t len, loff_t *offset
+	)
+{
+	static DECLARE_WAIT_QUEUE_HEAD(wq);
+
+	int isend;
+	u32 data;
+	
+	for (isend = 0; isend < len; isend += sizeof(data)){
+		int rc;
+
+		if (copy_from_user(&data, buf+isend, sizeof(data))){
+			return -EFAULT;
+		}
+		do {
+			rc = wait_event_interruptible_timeout(
+				wq, !pulse_fifo_full(), GATE_TO);
+		} while (rc == 0);
+
+		if (rc < 0){
+			return -ERESTARTSYS;
+		}
+		// rc > 0 .. we're good to write .. 
+
+		dbg(1, "write %d stat: 0x%08x", isend, *ACQ132_FIFSTAT);
+
+		*ACQ132_GATE_PULSE_FIFO = data;
+	}
+	*offset += isend;
+	return isend;
+}
+
+static ssize_t acq132_gate_pulse_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+
+static struct file_operations acq132_gate_pulse_ops = {
+	.open = acq132_gate_pulse_open,
+	.release = acq132_gate_pulse_release,
+	.write = acq132_gate_pulse_write
+};
+
+
+#define ACQ200_CUSTOM_FPGA_OPEN
 #include "acq200-fifo.c"
 
+int acq200_custom_fpga_open (struct inode *inode, struct file *file)
+{
+	int iminor = MINOR(file->f_dentry->d_inode->i_rdev);
+	int rc = 0;
 
+	switch(iminor){
+	case ACQ132_GATE_PULSE_LOAD:
+		file->f_op = &acq132_gate_pulse_ops;
+		break;
+	case ACQ132_SFPGA_LOAD:
+		file->f_op = &acq132_sfpga_load_ops;
+		break;
+	default:
+		return acq200_fpga_open(inode, file);
+	}
+
+	if ( file->f_op->open ){
+		rc = file->f_op->open( inode, file );
+	}
+
+	if ( rc == 0 ){
+		DG->open_count++;
+	}
+
+	return rc;
+}
 static void enable_acq132_start(void)
 {
 	int rc;

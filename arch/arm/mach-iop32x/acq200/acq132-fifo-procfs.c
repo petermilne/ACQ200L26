@@ -116,6 +116,7 @@ static ssize_t show_adc_range(
 static DEVICE_ATTR(ADC_RANGE, S_IRUGO|S_IWUGO, show_adc_range, store_adc_range);
 
 
+
 static struct OB_CLOCK_DEF {
 	int demand;
 	int actual;
@@ -403,6 +404,70 @@ static ssize_t show_channel_mapping_bin(
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
+static int sfpga_get_rev(void)
+{
+	u32 reg;
+	u32 rev;
+	u32 test;
+	int pass;
+
+	*ACQ132_SYSCON |= ACQ132_SYSCON_REV_RESET;
+	*ACQ132_SYSCON &= ~ACQ132_SYSCON_REV_RESET;
+
+	reg = *ACQ132_BDR;
+	dbg(1, "BDR read #%d value 0x%08x %s", 1, reg, 
+				reg==BDR_MAGIC? "GOOD": "BAD");
+
+	if (reg != BDR_MAGIC){
+		return - __LINE__;
+	}
+
+	*ACQ132_BDR = 0;
+	reg = *ACQ132_BDR;
+
+	dbg(1, "BDR read #%d value 0x%08x %s", 2, reg, 
+	    reg>=0x300? "HAS ADC comms": "NO ADC_COMMS");
+	if (reg == 0){
+		return 0;
+	}
+       
+	rev = reg;
+
+	/* now make a bus test ... simple crossed bit is OK */
+
+	reg = 0xaa55aa55;
+	*ACQ132_BDR = reg;
+
+
+	test = *ACQ132_BDR;
+	pass = test == reg;
+
+	dbg(1, "BDR read #%d value 0x%08x %s", 3, test, 
+	    pass? "PASS": "FAIL");       
+
+	if (!pass){
+		return - __LINE__;
+	}
+	reg = 0x55aa55aa;
+	*ACQ132_BDR = reg;
+	test = *ACQ132_BDR;
+	pass = test == reg;
+
+	dbg(1, "BDR read #%d value 0x%08x %s", 4, test, 
+	    pass? "PASS": "FAIL");       
+	
+	*ACQ132_SYSCON |= ACQ132_SYSCON_REV_RESET;
+	*ACQ132_SYSCON &= ~ACQ132_SYSCON_REV_RESET;
+
+	test = *ACQ132_BDR;
+	pass = test == BDR_MAGIC;
+
+	dbg(1, "BDR read #%d value 0x%08x %s", 5, test, 
+	    pass? "PASS": "FAIL");       
+	
+	return pass? rev: - __LINE__;	
+}
+
 static ssize_t show_fpga_state(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -411,18 +476,24 @@ static ssize_t show_fpga_state(
 	int len = 0;
 	u32 debug_old;
 	u32 t1, t2;
-	int s_ok, a_ok = 0;
+	int s_ok = 0, a_ok = 0;
 	u32 a_done = 0;
-	
-	
-	debug_old = *ACQ196_BDR;
-	*ACQ196_BDR = 0xdeadbeef;
-	t1 = *ACQ196_BDR;
-	*ACQ196_BDR = ~0xdeadbeef;
-	t2 = *ACQ196_BDR;
-	*ACQ196_BDR = debug_old;
+	int rev = sfpga_get_rev();
 
-	s_ok = t1 == 0xdeadbeef && t2 == ~t1 && *ACQ196_BDR == debug_old;
+	if (rev == 0){
+		debug_old = *ACQ196_BDR;
+		*ACQ196_BDR = 0xdeadbeef;
+		t1 = *ACQ196_BDR;
+		*ACQ196_BDR = ~0xdeadbeef;
+		t2 = *ACQ196_BDR;
+		*ACQ196_BDR = debug_old;
+
+		s_ok =	t1 == 0xdeadbeef && 
+			t2 == ~t1 && *ACQ196_BDR == debug_old;
+	}else if (rev > 0){
+		s_ok = 1;
+	}
+
 	if (s_ok){
 		a_done = ((*ACQ132_SFPGA_CONF) >> ACQ132_SFPGA_CONF_DONE_8) &
 				ACQ132_SFPGA_CONF_8MASK;

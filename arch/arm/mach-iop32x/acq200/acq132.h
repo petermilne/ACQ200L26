@@ -20,14 +20,37 @@
 #define __ACQ132_H__
 
 #include "acq196.h"
+#define ACQ132_BDR	ACQ196_BDR
+#define ACQ132_FIFSTAT  ACQ196_FIFSTAT
 #define ACQ132_SYSCON	ACQ196_SYSCON_ADC
 /* custom regs */
 #define ACQ132_SFPGA_CONF	FPGA_REG(0x10)
 #define ACQ132_ICS527		FPGA_REG(0x18)
 
+#define ACQ132_GATE_PULSE_FIFO  FPGA_REG(0xc0)
+#define ACQ132_ADC_A		FPGA_REG(0x100)
+#define ACQ132_ADC_B		FPGA_REG(0x200)
+#define ACQ132_ADC_C		FPGA_REG(0x300)
+#define ACQ132_ADC_D		FPGA_REG(0x400)
+
+/* Dev 0..3 */
+#define ACQ132_ADC_REGS(dev)		FPGA_REG((dev+1)*0x100)
+#define ACQ132_ADC_REG(dev, reg)	FPGA_REG((dev+1)*0x100 + (reg))
+
+#define ACQ132_ADC_TEST(dev)	ACQ132_ADC_REG(dev, 0x00)
+#define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x04)
+#define ACQ132_ADC_DECIM(dev)	ACQ132_ADC_REG(dev, 0x08)
+#define ACQ132_ADC_SHIFT(dev)	ACQ132_ADC_REG(dev, 0x0c)
+
+
+#define BDR_MAGIC	0xdeadbeef
 /* custom bits */
+#define ACQ132_SYSCON_REV_RESET 0x80000000
 #define ACQ132_SYSCON_RANGE_HI	0x00800000
 
+
+#define ACQ132_FIFSTAT_NE	0x00020000
+#define ACQ132_FIFSTAT_PULSEP	0x0001ff00
 
 
 #define ACQ132_SFPGA_CONF_PROG		31
@@ -55,6 +78,7 @@ static inline void acq132_set_adc_range(u32 channels)
 		*ACQ132_SYSCON &= ~ACQ132_SYSCON_RANGE_HI;
 	}
 }
+
 
 static inline u32 acq132_get_adc_range(void)
 {
@@ -125,6 +149,15 @@ static inline int sfpga_conf_done(void) {
 	return done;
 }
 
+static inline int pulse_fifo_full(void)
+{
+	u32 ptr = *ACQ132_FIFSTAT & ACQ132_FIFSTAT_PULSEP;
+
+	return !(ptr < ACQ132_FIFSTAT_PULSEP - 8);
+}
+
+
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
+
 #endif	/*  __ACQ132_H__ */
 

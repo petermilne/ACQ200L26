@@ -1296,4 +1296,6 @@ extern int free_block_count(void);
 #define SL_TO_TCODE(s) ((s) & ~0xf0000000)
 
 
+extern int acq200_fpga_open (struct inode *inode, struct file *file);
+extern int acq200_custom_fpga_open (struct inode *inode, struct file *file);
 #endif /* ACQ200_FIFO_H__ */
