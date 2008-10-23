@@ -1264,6 +1264,81 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 	*ACQ132_ICS527 = ics527;
 }
 
+
+static void global_set_adc_range(u32 channels)
+{
+        if (channels){
+		*ACQ132_SYSCON |= ACQ132_SYSCON_RANGE_HI;
+	}else{
+		*ACQ132_SYSCON &= ~ACQ132_SYSCON_RANGE_HI;
+	}
+}
+
+static void _acq132_set_adc_range(u32 channels)
+{
+	static const struct {
+		int dev;
+		u32 mask;
+	} LUT[] = {
+		[ 0] = {},
+		[ 1] = { BANK_D, ACQ132_ADC_RANGE_R1 },
+		[ 2] = { BANK_D, ACQ132_ADC_RANGE_R2 },
+		[ 3] = { BANK_D, ACQ132_ADC_RANGE_R3 },
+		[ 4] = { BANK_D, ACQ132_ADC_RANGE_R4 },
+		[ 5] = { BANK_C, ACQ132_ADC_RANGE_R1 },
+		[ 6] = { BANK_C, ACQ132_ADC_RANGE_R2 },
+		[ 7] = { BANK_C, ACQ132_ADC_RANGE_R3 },
+		[ 8] = { BANK_C, ACQ132_ADC_RANGE_R4 },
+		[ 9] = { BANK_B, ACQ132_ADC_RANGE_R1 },
+		[10] = { BANK_B, ACQ132_ADC_RANGE_R2 },
+		[11] = { BANK_B, ACQ132_ADC_RANGE_R3 },
+		[12] = { BANK_B, ACQ132_ADC_RANGE_R4 },
+		[13] = { BANK_A, ACQ132_ADC_RANGE_R1 },
+		[14] = { BANK_A, ACQ132_ADC_RANGE_R2 },
+		[15] = { BANK_A, ACQ132_ADC_RANGE_R3 },
+		[16] = { BANK_A, ACQ132_ADC_RANGE_R4 },
+		[17] = { BANK_D, ACQ132_ADC_RANGE_L1 },
+		[18] = { BANK_D, ACQ132_ADC_RANGE_L2 },
+		[19] = { BANK_D, ACQ132_ADC_RANGE_L3 },
+		[20] = { BANK_D, ACQ132_ADC_RANGE_L4 },
+		[21] = { BANK_C, ACQ132_ADC_RANGE_L1 },
+		[22] = { BANK_C, ACQ132_ADC_RANGE_L2 },
+		[23] = { BANK_C, ACQ132_ADC_RANGE_L3 },
+		[24] = { BANK_C, ACQ132_ADC_RANGE_L4 },
+		[25] = { BANK_B, ACQ132_ADC_RANGE_L1 },
+		[26] = { BANK_B, ACQ132_ADC_RANGE_L2 },
+		[27] = { BANK_B, ACQ132_ADC_RANGE_L3 },
+		[28] = { BANK_B, ACQ132_ADC_RANGE_L4 },
+		[29] = { BANK_A, ACQ132_ADC_RANGE_L1 },
+		[30] = { BANK_A, ACQ132_ADC_RANGE_L2 },
+		[31] = { BANK_A, ACQ132_ADC_RANGE_L3 },
+		[32] = { BANK_A, ACQ132_ADC_RANGE_L4 }
+	};
+
+	u32 cursor = 1;
+	u32 ch = 1;
+
+	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
+		int dev = LUT[ch].dev;
+		u32 mask = LUT[ch].mask;
+
+		if ((channels&cursor) != 0){
+			*ACQ132_ADC_RANGE(dev) |= mask;
+		}else{
+			*ACQ132_ADC_RANGE(dev) &= ~mask;
+		}
+	}
+}
+
+void acq132_set_adc_range(u32 channels)
+{
+	if (acq132_supports_channel_vrange_switch()){
+		_acq132_set_adc_range(channels);
+	}else{
+		global_set_adc_range(channels);
+	}
+}
+
 module_init(acq132_fifo_init);
 module_exit(acq132_fifo_exit_module);
 

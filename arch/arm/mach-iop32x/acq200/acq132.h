@@ -42,6 +42,10 @@
 #define ACQ132_ADC_DECIM(dev)	ACQ132_ADC_REG(dev, 0x08)
 #define ACQ132_ADC_SHIFT(dev)	ACQ132_ADC_REG(dev, 0x0c)
 
+#define BANK_A	0
+#define BANK_B  1
+#define BANK_C  2
+#define BANK_D  3
 
 #define BDR_MAGIC	0xdeadbeef
 /* custom bits */
@@ -69,15 +73,18 @@
 #define ACQ132_ICS527_S1S0	0x000000c0
 #define ACQ132_ICS527_CLKDIV	0x00000007
 
+#define ACQ132_ADC_RANGE_L4	0x00080000
+#define ACQ132_ADC_RANGE_L3	0x00040000
+#define ACQ132_ADC_RANGE_L2	0x00020000
+#define ACQ132_ADC_RANGE_L1	0x00010000
+
+#define ACQ132_ADC_RANGE_R4	0x00000008
+#define ACQ132_ADC_RANGE_R3	0x00000004
+#define ACQ132_ADC_RANGE_R2	0x00000002
+#define ACQ132_ADC_RANGE_R1	0x00000001
+
 /* @todo one bit, all bits. multiple settings todo */
-static inline void acq132_set_adc_range(u32 channels)
-{
-        if (channels){
-		*ACQ132_SYSCON |= ACQ132_SYSCON_RANGE_HI;
-	}else{
-		*ACQ132_SYSCON &= ~ACQ132_SYSCON_RANGE_HI;
-	}
-}
+void acq132_set_adc_range(u32 channels);
 
 
 static inline u32 acq132_get_adc_range(void)
@@ -156,6 +163,11 @@ static inline int pulse_fifo_full(void)
 	return !(ptr < ACQ132_FIFSTAT_PULSEP - 8);
 }
 
+extern int acq132_sfpga_get_rev(void);
+static inline int acq132_supports_channel_vrange_switch(void)
+{
+	return acq132_sfpga_get_rev() >= 0x300;
+}
 
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
 

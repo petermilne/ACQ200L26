@@ -468,6 +468,17 @@ static int sfpga_get_rev(void)
 	return pass? rev: - __LINE__;	
 }
 
+int acq132_sfpga_get_rev(void)
+{
+	static int rev;
+	static int rev_valid;
+
+	if (!rev_valid){
+		rev = sfpga_get_rev();
+		rev_valid = 1;
+	}
+	return rev;
+}
 static ssize_t show_fpga_state(
 	struct device * dev, 
 	struct device_attribute *attr,
