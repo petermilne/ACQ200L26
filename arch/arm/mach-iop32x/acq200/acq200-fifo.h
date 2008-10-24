@@ -778,6 +778,9 @@ struct CAPDEF {
 	struct Signal* counter_src;
 	int counter_update;
 #endif
+#if defined(ACQ132)
+	struct Signal* gate_src;
+#endif
 };
 
 

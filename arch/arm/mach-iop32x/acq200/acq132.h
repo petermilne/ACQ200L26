@@ -56,8 +56,20 @@
 #define BDR_MAGIC	0xdeadbeef
 /* custom bits */
 #define ACQ132_SYSCON_REV_RESET 0x80000000
-#define ACQ132_SYSCON_RANGE_HI	0x00800000
+#define ACQ132_SYSCON_GATE_EN	0x10000000
+#define ACQ132_SYSCON_GATE_HI	0x08000000
+#define ACQ132_SYSCON_GATE_DIO	0x07000000
+#define ACQ132_SYSCON_GATE_MASK 0x1f000000
+#define ACQ132_SYSCON_GATE_SHL	24
 
+#define ACQ132_SYSCON_GPG_MAS	0x00f00000
+#define ACQ132_SYSCON_GPG_MASD7 0x00800000
+#define ACQ132_SYSCON_GPG_MASD6 0x00400000
+#define ACQ132_SYSCON_GPG_MASD5 0x00200000
+#define ACQ132_SYSCON_GPG_MASD4 0x00100000
+
+/* obsoleted by rev 3 */
+#define ACQ132_SYSCON_RANGE_HI 0x00800000
 
 #define ACQ132_FIFSTAT_NE	0x00020000
 #define ACQ132_FIFSTAT_PULSEP	0x0001ff00
@@ -157,6 +169,8 @@ static inline void acq132_adc_set_shift(int dev, int shl, int shift)
 		field = SHIFT_P1; break;
 	case 2:
 		field = SHIFT_P2; break;
+	case 0:
+		field = SHIFT_0; break;
 	}
 
 	osam |= field << shl;

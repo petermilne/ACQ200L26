@@ -905,6 +905,24 @@ static int acq216_commitTcrSrc(struct Signal* signal)
 	return 0;
 }
 
+static int acq132_commitGateSrc(struct Signal* signal)
+{
+	u32 syscon = *ACQ132_SYSCON;
+
+	syscon &= ~ACQ132_SYSCON_GATE_MASK;
+	
+	if (signal->is_active){
+		syscon |= ACQ132_SYSCON_GATE_EN;
+		if (signal->rising){
+			syscon |= ACQ132_SYSCON_GATE_HI;	       
+		}
+		syscon |= signal->DIx << ACQ132_SYSCON_GATE_SHL;
+	}
+
+	*ACQ132_SYSCON = syscon;
+	return 0;
+}
+
 static struct CAPDEF* acq132_createCapdef(void)
 {
 	static struct CAPDEF _capdef = {
@@ -933,8 +951,8 @@ static struct CAPDEF* acq132_createCapdef(void)
 	
 	capdef->ao_trig = 
 		createSignal("ao_trig", 0, 5, 3, 0, 0, acq196_commitAOTrg);
-	capdef->ao_clk = createSignal(
-		"ao_clk", 0, 2, 0, 0, 0, acq196_commitAOClk);
+	capdef->ao_clk = 
+		createSignal("ao_clk", 0, 2, 0, 0, 0, acq196_commitAOClk);
 	capdef->ao_clk->has_internal_option = 1;
 
 	capdef->int_clk_src = createSignal(
@@ -950,10 +968,13 @@ static struct CAPDEF* acq132_createCapdef(void)
 		"sync_trig_mas", 3, 5, 3, 0, 0, acq196_commitMasSyncTrig);
 	capdef->sync_trig_mas->is_output = 1;
 
-	capdef->counter_src = createSignal("counter_src", 0, 6, 6,0, 1, 
-					   acq216_commitTcrSrc);
+	capdef->counter_src = 
+		createSignal("counter_src", 0, 6, 6,0, 1, acq216_commitTcrSrc);
 	/** @todo how to action? */
 	capdef->counter_src->has_internal_option = 1;
+
+	capdef->gate_src = 
+		createSignal("gate_src", 0, 7, 7, 0, 0, acq132_commitGateSrc);
 	return capdef;
 }
 
@@ -969,6 +990,7 @@ static void acq132_destroyCapdef(struct CAPDEF *capdef)
 	destroySignal(capdef->mas_clk);
 	destroySignal(capdef->sync_trig_src);
 	destroySignal(capdef->sync_trig_mas);
+	destroySignal(capdef->gate_src);
 	kfree(capdef);
 }
 static struct device_driver acq132_fpga_driver;

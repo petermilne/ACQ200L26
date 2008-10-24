@@ -255,65 +255,7 @@ static ssize_t store_AO_coding(
 static DEVICE_ATTR(
 	AO_coding, S_IRUGO|S_IWUGO, show_AO_coding, store_AO_coding);
 
-#ifdef ACQ196F
-static ssize_t show_FIRK(
-	struct device * dev, 
-	struct device_attribute *attr,
-	char * buf, int bank)
-{
-	u32 firk = *ACQ196_FIRK;
 
-        return sprintf(buf,"%d\n", (firk >> (bank*8)) & 0x7);
-}
-
-static ssize_t store_FIRK(
-	struct device * dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count, int bank)
-{
-	u32 kk;
-
-	if (sscanf(buf, "%d", &kk)){
-		u32 firk = *ACQ196_FIRK;
-
-		firk &= ~ (0x7 << (bank*8));
-		firk |= (kk&0x7) << (bank*8);
-
-		*ACQ196_FIRK = firk;
-	}
-	return strlen(buf);
-}
-
-#define DECL_FIRQ(bank)							\
-static ssize_t show_FIRK##bank(						\
-	struct device * dev,						\
-	struct device_attribute *attr,					\
-	char * buf) {							\
-	return show_FIRK(dev, attr, buf, bank);				\
-}									\
-static ssize_t store_FIRK##bank(					\
-	struct device* dev,						\
-	struct device_attribute *attr,					\
-	const char * buf, size_t count) {				\
-	return store_FIRK(dev, attr, buf, count, bank);			\
-}									\
-static DEVICE_ATTR(							\
-	FIRK##bank, S_IRUGO|S_IWUGO, show_FIRK##bank, store_FIRK##bank	\
-);
-
-#define DECL_FIRK_GROUP DECL_FIRQ(0); DECL_FIRQ(1); DECL_FIRQ(2)
-
-#define DEVICE_CREATE_FIRK(dev, bank) \
-        DEVICE_CREATE_FILE(dev, &dev_attr_FIRK##bank)
-
-#define DEVICE_CREATE_FIRK_GROUP(dev) do {	\
-	DEVICE_CREATE_FIRK(dev, 0);		\
-	DEVICE_CREATE_FIRK(dev, 1);		\
-	DEVICE_CREATE_FIRK(dev, 2);		\
-} while(0)
-
-DECL_FIRK_GROUP;
-#endif
 
 #define S_SOFT "soft"
 #define S_HARD "clocked"
@@ -440,7 +382,7 @@ static int store_osam(
 		if (!belongs(nacc, good_nacc, GOOD_NACC)){
 			err("bad nacc %d", nacc);		      
 		}else if (!belongs(shift, good_shift, GOOD_SHIFT)){
-			err("badd shift %d", shift);
+			err("bad shift %d", shift);
 		}else{
 			ACQ132_SET_OSAM_X_NACC(block, OSAMLR(lr), nacc, shift);
 			return strlen(buf);
@@ -578,6 +520,79 @@ static ssize_t store_scanlist(
 }
 static DEVICE_ATTR(scanlist, S_IRUGO|S_IWUGO, show_scanlist, store_scanlist);
 
+
+static ssize_t show_gpg_mas(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	u32 syscon = *ACQ132_SYSCON;
+
+	if ((syscon&ACQ132_SYSCON_GPG_MAS) == 0){
+		return sprintf(buf, "none\n");
+	}else{
+		return sprintf(buf, "%s%s%s%s\n",
+		       syscon&ACQ132_SYSCON_GPG_MASD7 ? "d7 ": "",
+		       syscon&ACQ132_SYSCON_GPG_MASD6 ? "d6 ": "",
+		       syscon&ACQ132_SYSCON_GPG_MASD5 ? "d5 ": "",
+		       syscon&ACQ132_SYSCON_GPG_MASD4 ? "d4 ": "" );
+	}
+}
+
+static ssize_t store_gpg_mas(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	u32 syscon = *ACQ132_SYSCON;
+	char w[4][8];
+	int nw;
+	int iw;
+
+	syscon &= ~ACQ132_SYSCON_GPG_MAS;
+
+	if ((nw = sscanf(buf, "%5s %5s %5s %5s", w[0], w[1], w[2], w[3])) == 0){
+		err("failed to scan command \"%s\"", buf);
+		return -EINVAL;
+	}
+	if (strcmp(w[0], "none") == 0){
+		*ACQ132_SYSCON = syscon;
+		return count;
+	}
+
+	for (iw = 0; iw != nw; ++iw){
+		if (strlen(w[iw]) == 2 && w[iw][0] == 'd'){
+			switch(w[iw][1]){
+			case '7':
+				syscon |= ACQ132_SYSCON_GPG_MASD7;
+				break;
+			case '6':
+				syscon |= ACQ132_SYSCON_GPG_MASD6;
+				break;
+			case '5':
+				syscon |= ACQ132_SYSCON_GPG_MASD5;
+				break;
+			case '4':
+				syscon |= ACQ132_SYSCON_GPG_MASD4;
+				break;
+			default:
+				err("dx must be in range 7654");
+				return -EINVAL;
+			}
+		}else{
+			err("invalid w[%d] \"%s\"", iw, w[iw]);
+			return -EINVAL;
+		}
+	}
+
+	*ACQ132_SYSCON = syscon;
+	return count;			
+}
+
+static DEVICE_ATTR(gpg_mas, S_IRUGO|S_IWUGO, show_gpg_mas, store_gpg_mas);
+
+
+
 static int sfpga_get_rev(void)
 {
 	u32 reg;
@@ -701,6 +716,7 @@ DEFINE_SIGNAL_ATTR(ao_clk);
 
 DEFINE_SIGNAL_ATTR(sync_trig_src);
 DEFINE_SIGNAL_ATTR(sync_trig_mas);
+DEFINE_SIGNAL_ATTR(gate_src);
 
 
 static void acq196_mk_dev_sysfs(struct device *dev)
@@ -717,14 +733,14 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ao_clk);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
-#ifdef ACQ196F
-	DEVICE_CREATE_FIRK_GROUP(dev);
-#endif
+	DEVICE_CREATE_FILE(dev, &dev_attr_gate_src);
 	DEVICE_CREATE_OSAM_GROUP(dev);
 	DEVICE_CREATE_FILE(dev, &dev_attr_scanlist);
+	DEVICE_CREATE_FILE(dev, &dev_attr_gpg_mas);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ADC_RANGE);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
+
 }
 
 #define MASK_D	0x000f000f
