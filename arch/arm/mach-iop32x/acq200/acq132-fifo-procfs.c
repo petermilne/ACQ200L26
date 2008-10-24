@@ -404,6 +404,180 @@ static ssize_t show_channel_mapping_bin(
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
+
+
+#define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
+
+static int belongs(int key, const int lut[], int nlut)
+{
+	int ikey;
+
+	for (ikey = 0; ikey < nlut; ++ikey){
+		if (key == lut[ikey]){
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int store_osam(
+	int block, 
+	int lr,
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf)
+{
+	static const int good_nacc[] = { 1, 2, 4, 8, 16 };
+#define GOOD_NACC (sizeof(good_nacc)/sizeof(int))
+	static const int good_shift[] = { -2, -1, 0, 1, 2 };
+#define GOOD_SHIFT (sizeof(good_shift)/sizeof(int))
+
+	int nacc;
+	int shift;
+
+	if (sscanf(buf, "nacc=%d shift=%d", &nacc, &shift) == 2 ||
+	    sscanf(buf, "%d %d", &nacc, &shift) == 2){
+		if (!belongs(nacc, good_nacc, GOOD_NACC)){
+			err("bad nacc %d", nacc);		      
+		}else if (!belongs(shift, good_shift, GOOD_SHIFT)){
+			err("badd shift %d", shift);
+		}else{
+			ACQ132_SET_OSAM_X_NACC(block, OSAMLR(lr), nacc, shift);
+			return strlen(buf);
+		}
+	}else{
+		err("failed to scan \"nacc=N shift=S\"");
+	}
+
+	return -EINVAL;
+}
+static ssize_t show_osam(
+	int block, int lr,
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	int nacc, shift;
+	unsigned nacc_shl;
+	unsigned shift_code;
+
+	u32 osam = *ACQ132_ADC_OSAM(block);
+	osam >>= OSAMLR(lr);
+
+	nacc_shl = (osam>>ACQ132_ADC_OSAM_R_NACC_SHL) & 0x00f;
+
+	switch(nacc_shl){
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+		nacc = 1 << nacc_shl;
+		break;
+	default:
+		return sprintf(buf, "illegal nacc field %d", nacc_shl);
+	}	
+
+	shift_code = (osam>>ACQ132_ADC_OSAM_R_SHIFT) & 0x0f;
+	switch(shift_code){
+	case SHIFT_M1:
+		shift = -1; break;
+	case SHIFT_M2:
+		shift = -2; break;
+	case SHIFT_0:
+		shift = 0; break;
+	case SHIFT_P1:
+		shift = 1; break;
+	case SHIFT_P2:
+		shift = 2; break;
+	default:
+		return sprintf(buf, "illegal shift field 0x%x", shift_code);
+	}
+
+	return sprintf(buf, "nacc=%d shift=%d\n", nacc, shift);
+}
+
+#define OSAM(BLK, LR)							\
+static int store_osam_##BLK##_##LR(					\
+	struct device * dev,						\
+	struct device_attribute *attr,					\
+	const char * buf, size_t count)					\
+{									\
+	return store_osam(BLK, *#LR, dev, attr, buf);			\
+}									\
+static ssize_t show_osam_##BLK##_##LR(					\
+	struct device * dev,						\
+	struct device_attribute *attr,					\
+	char * buf)							\
+{									\
+	return show_osam(BLK, *#LR, dev, attr, buf);			\
+}									\
+static DEVICE_ATTR(osam_##BLK##_##LR, S_IRUGO|S_IWUGO,			\
+		   show_osam_##BLK##_##LR, store_osam_##BLK##_##LR) 
+
+
+#define OSAM_PAIR(BLK) 	OSAM(BLK, L); OSAM(BLK, R)
+
+OSAM_PAIR(0);
+OSAM_PAIR(1);
+OSAM_PAIR(2);
+OSAM_PAIR(3);
+
+
+#define DEVICE_CREATE_OSAM_PAIR(dev, BLK)			\
+	DEVICE_CREATE_FILE(dev, &dev_attr_osam_##BLK##_L);	\
+	DEVICE_CREATE_FILE(dev, &dev_attr_osam_##BLK##_R);
+
+#define DEVICE_CREATE_OSAM_GROUP(dev) do {	\
+	DEVICE_CREATE_OSAM_PAIR(dev, 0);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, 1);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, 2);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, 3);	\
+	} while(0)
+
+
+#define TO_SX(c) ((c)-'A')
+#define FROM_SX(sx) (((sx)&0x3)+'A')
+#define IS_SX(c) ((c) >= 'A' && (c) <= 'D')
+
+static ssize_t show_scanlist(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	u32 scan = *ACQ132_SCAN;
+	return sprintf(buf, "%c%c%c%c\n",
+		       FROM_SX(scan>>6), FROM_SX(scan>>4),
+		       FROM_SX(scan>>2), FROM_SX(scan>>0));
+}
+
+static ssize_t store_scanlist(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	if (strlen(buf) >= 4){
+		if (IS_SX(buf[0]) && IS_SX(buf[1]) && 
+		    IS_SX(buf[2]) && IS_SX(buf[3])){
+			
+			u32 scan; 
+			scan = TO_SX(buf[0]);scan <<= 2;
+			scan = TO_SX(buf[1]);scan <<= 2;
+			scan = TO_SX(buf[2]);scan <<= 2;
+			scan = TO_SX(buf[3]);scan <<= 2;
+			*ACQ132_SCAN = scan;
+			return strlen(buf);
+		}else{
+			err("valid scan codes: A,B,C,D");
+		}		
+	}else{
+		err("please enter 4 char scan eg ABCD");		
+	}
+
+	return -EINVAL;
+}
+static DEVICE_ATTR(scanlist, S_IRUGO|S_IWUGO, show_scanlist, store_scanlist);
+
 static int sfpga_get_rev(void)
 {
 	u32 reg;
@@ -546,6 +720,8 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 #ifdef ACQ196F
 	DEVICE_CREATE_FIRK_GROUP(dev);
 #endif
+	DEVICE_CREATE_OSAM_GROUP(dev);
+	DEVICE_CREATE_FILE(dev, &dev_attr_scanlist);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ADC_RANGE);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
