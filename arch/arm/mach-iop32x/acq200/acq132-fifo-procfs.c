@@ -445,36 +445,36 @@ static int store_osam_##BLK##_##LR(					\
 	struct device_attribute *attr,					\
 	const char * buf, size_t count)					\
 {									\
-	return store_osam(BLK, *#LR, dev, attr, buf);			\
+	return store_osam(*#BLK-'A', *#LR, dev, attr, buf);		\
 }									\
 static ssize_t show_osam_##BLK##_##LR(					\
 	struct device * dev,						\
 	struct device_attribute *attr,					\
 	char * buf)							\
 {									\
-	return show_osam(BLK, *#LR, dev, attr, buf);			\
+	return show_osam(*#BLK-'A', *#LR, dev, attr, buf);		\
 }									\
-static DEVICE_ATTR(osam_##BLK##_##LR, S_IRUGO|S_IWUGO,			\
+static DEVICE_ATTR(oversample_##BLK##_##LR, S_IRUGO|S_IWUGO,			\
 		   show_osam_##BLK##_##LR, store_osam_##BLK##_##LR) 
 
 
 #define OSAM_PAIR(BLK) 	OSAM(BLK, L); OSAM(BLK, R)
 
-OSAM_PAIR(0);
-OSAM_PAIR(1);
-OSAM_PAIR(2);
-OSAM_PAIR(3);
+OSAM_PAIR(A);
+OSAM_PAIR(B);
+OSAM_PAIR(C);
+OSAM_PAIR(D);
 
 
-#define DEVICE_CREATE_OSAM_PAIR(dev, BLK)			\
-	DEVICE_CREATE_FILE(dev, &dev_attr_osam_##BLK##_L);	\
-	DEVICE_CREATE_FILE(dev, &dev_attr_osam_##BLK##_R);
+#define DEVICE_CREATE_OSAM_PAIR(dev, BLK)			 \
+	DEVICE_CREATE_FILE(dev, &dev_attr_oversample_##BLK##_L); \
+	DEVICE_CREATE_FILE(dev, &dev_attr_oversample_##BLK##_R);
 
 #define DEVICE_CREATE_OSAM_GROUP(dev) do {	\
-	DEVICE_CREATE_OSAM_PAIR(dev, 0);	\
-	DEVICE_CREATE_OSAM_PAIR(dev, 1);	\
-	DEVICE_CREATE_OSAM_PAIR(dev, 2);	\
-	DEVICE_CREATE_OSAM_PAIR(dev, 3);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, A);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, B);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, C);	\
+	DEVICE_CREATE_OSAM_PAIR(dev, D);	\
 	} while(0)
 
 
