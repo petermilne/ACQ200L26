@@ -38,9 +38,10 @@
 #define ACQ132_ADC_REG(dev, reg)	FPGA_REG((dev+1)*0x100 + (reg))
 
 #define ACQ132_ADC_TEST(dev)	ACQ132_ADC_REG(dev, 0x00)
-#define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x04)
-#define ACQ132_ADC_DECIM(dev)	ACQ132_ADC_REG(dev, 0x08)
-#define ACQ132_ADC_SHIFT(dev)	ACQ132_ADC_REG(dev, 0x0c)
+#define ACQ132_ADC_CTRL(dev)	ACQ132_ADC_REG(dev, 0x04)
+#define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x08)
+#define ACQ132_ADC_DECIM(dev)	ACQ132_ADC_REG(dev, 0x0c)
+#define ACQ132_ADC_SHIFT(dev)	ACQ132_ADC_REG(dev, 0x10)
 
 #define BANK_A	0
 #define BANK_B  1
@@ -73,6 +74,10 @@
 #define ACQ132_ICS527_S1S0	0x000000c0
 #define ACQ132_ICS527_CLKDIV	0x00000007
 
+#define ACQ132_ADC_CTRL_LMSHFT	20
+#define ACQ132_ADC_CTRL_RMSHFT  4
+#define ACQ132_ADC_CTRL_ACQEN	0x00010001
+
 #define ACQ132_ADC_RANGE_L4	0x00080000
 #define ACQ132_ADC_RANGE_L3	0x00040000
 #define ACQ132_ADC_RANGE_L2	0x00020000
@@ -87,10 +92,7 @@
 void acq132_set_adc_range(u32 channels);
 
 
-static inline u32 acq132_get_adc_range(void)
-{
-	return *ACQ132_SYSCON & ACQ132_SYSCON_RANGE_HI? 0xffffffff: 0;
-}
+u32 acq132_get_adc_range(void);
 
 
 static inline void sfpga_conf_clr_all(void) {
@@ -170,6 +172,6 @@ static inline int acq132_supports_channel_vrange_switch(void)
 }
 
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
-
+void acq132_set_channel_mask(u32 channel_mask);
 #endif	/*  __ACQ132_H__ */
 

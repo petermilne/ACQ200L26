@@ -556,6 +556,10 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 #define MASK_B  0x0f000f00
 #define MASK_A  0xf000f000
 
+#define MASK_1	0x1
+#define MASK_2	0x5
+#define MASK_4	0xf
+
 int count_bits(unsigned mask) {
 	int ibit;
 	int count = 0;
@@ -568,15 +572,69 @@ int count_bits(unsigned mask) {
 	return count;
 }
 
+static int isValidMask(unsigned left, unsigned right)
+{
+	if (left != right){
+		return 0;
+	}
+	switch(left){
+	case MASK_1:
+	case MASK_2:
+	case MASK_4:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/*
+Valid Channel Masks
+
+11111111111111111111111111111111
+11110000000000001111000000000000
+10100000000000001010000000000000
+00010000000000000001000000000000
+00001111000000000000111100000000
+00001010000000000000101000000000
+00000001000000000000000100000000
+00000000111100000000000011110000
+00000000101000000000000010100000
+00000000000100000000000000010000
+00000000000011110000000000001111
+00000000000010100000000000001010
+00000000000000010000000000000001
+
+... and of course any combo between columns 
+eg
+
+10100000000000001010000000000000
+00001010000000000000101000000000
+
+10101010000000001010101000000000
+*/
+
+
+
 void acq200_setChannelMask(unsigned mask)
 {
-	if (mask&MASK_D) mask |= MASK_D;
-	if (mask&MASK_C) mask |= MASK_C;
-	if (mask&MASK_B) mask |= MASK_B;
-	if (mask&MASK_A) mask |= MASK_A;
+	unsigned mm;
+
+	if ((mm = mask&MASK_D) != 0 && isValidMask(mm>>16, mm>>0)){
+		mask |= mm;
+	}
+	if ((mm = mask&MASK_C) != 0 && isValidMask(mm>>20, mm>>4)){
+		mask |= mm;
+	}       
+	if ((mm = mask&MASK_B) != 0 && isValidMask(mm>>24, mm>>8)){
+		mask |= mm;
+	}
+	if ((mm = mask&MASK_A) != 0 && isValidMask(mm>>28, mm>>12)){
+		mask |= mm;
+	}
 
 	CAPDEF_set_nchan(count_bits(mask));
 	CAPDEF->channel_mask = mask;
+	acq132_set_channel_mask(mask);
 }
 
 

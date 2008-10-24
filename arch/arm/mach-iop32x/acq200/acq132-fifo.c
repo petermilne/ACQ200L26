@@ -3,26 +3,26 @@
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of Version 2 of the GNU General Public License
-    as published by the Free Software Foundation;
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of Version 2 of the GNU General Public License
+ as published by the Free Software Foundation;
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
 #define DTACQ_MACH 2
 #define ACQ132
 #define ACQ_IS_INPUT 1
 
-#define MODEL_VERID \
-"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1012\n"
+#define MODEL_VERID							\
+	"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1012\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -90,11 +90,11 @@ static int enable_soft_trigger(void);
 static int enable_hard_trigger(void);
 /* return 1 on success, -1 on error */
 
-#define DBGSF(s)						\
-        if (acq132_trigger_debug)				\
-	dbg(1, "%4d S: 0x%08x FC: 0x%08x FX: 0x%08x %s",	\
-	__LINE__,						\
-        *SYSCON, *ACQ196_FIFCON, *FIFSTAT, s)
+#define DBGSF(s)							\
+        if (acq132_trigger_debug)					\
+		dbg(1, "%4d S: 0x%08x FC: 0x%08x FX: 0x%08x %s",	\
+		    __LINE__,						\
+		    *SYSCON, *ACQ196_FIFCON, *FIFSTAT, s)
 
 
 static int acq196_trigger_detect(void)
@@ -192,15 +192,15 @@ static void _setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
 #define MASTERCLK MASTERCLK_100
 
 
-	static struct IntClkConsts {
-		long masterclk;
-		u32  clksel;
-	} intclk[2] = {
-		{
-			.masterclk = MASTERCLK_100,
-			.clksel    = ACQ196_CLKCON_CS_66M
-		}
-	};
+static struct IntClkConsts {
+	long masterclk;
+	u32  clksel;
+} intclk[2] = {
+	{
+		.masterclk = MASTERCLK_100,
+		.clksel    = ACQ196_CLKCON_CS_66M
+	}
+};
 #define MAXSEL 1
 
 
@@ -245,7 +245,7 @@ void acq200_setIntClkHz( int hz )
 
 		_setIntClkHz(clkdiv, 
 			     intclk[imin].masterclk, intclk[imin].clksel,
-				hz);
+			     hz);
 	}
 }
 
@@ -277,11 +277,11 @@ static int fifo_read_init_action(void);
  * NB: 2 blocks for FIQ
  */
 
-#define GET_FIFO_NBLOCKS(nblocks, fifstat) \
-do { \
-        nblocks = ACQ196_FIFO_NBLOCKS(fifstat); \
-        nblocks = min(3, nblocks); \
-} while(0)
+#define GET_FIFO_NBLOCKS(nblocks, fifstat)		\
+	do {						\
+		nblocks = ACQ196_FIFO_NBLOCKS(fifstat); \
+		nblocks = min(3, nblocks);		\
+	} while(0)
 
 
 static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file);
@@ -337,15 +337,15 @@ static struct DevGlobs acq132_dg = {
 #define MYDG &acq132_dg
 
 /* Slave FPGA Load:
-The complete programming sequence is 
+   The complete programming sequence is 
 
-#1. set the Programming Mode to 1 wait for INIT to return high 
-#2 . then set UPDATE and  
-#2 start loading the data 16 bits at a time, and 
-	checking the BUSY bit before sending the next data 
-	checking that INIT does not go low during load. 
-#3 After load is complete check that DONE has gone high
-#4 clear Programming Mode.
+   #1. set the Programming Mode to 1 wait for INIT to return high 
+   #2 . then set UPDATE and  
+   #2 start loading the data 16 bits at a time, and 
+   checking the BUSY bit before sending the next data 
+   checking that INIT does not go low during load. 
+   #3 After load is complete check that DONE has gone high
+   #4 clear Programming Mode.
 
 */
 
@@ -357,7 +357,7 @@ The complete programming sequence is
 		}else{							\
 			schedule();					\
 		}							\
-}
+	}
 
 
 static int acq132_sfpga_load_open (struct inode *inode, struct file *file)
@@ -525,10 +525,10 @@ static void enable_acq132_start(void)
 
 	if (acq196_trigger_detect()){
 		err("WOAAH - triggered already, an not yet enabled not good\n"
-		      "FIFCON: 0x%08x\n"
-		      "FIFSTAT:0x%08x\n"
-		      "SYSCON: 0x%08x",
-		      *FIFCON, *FIFSTAT, *SYSCON);
+		    "FIFCON: 0x%08x\n"
+		    "FIFSTAT:0x%08x\n"
+		    "SYSCON: 0x%08x",
+		    *FIFCON, *FIFSTAT, *SYSCON);
 		finish_with_engines(-__LINE__);
 	}
 	DBGSF("set ACQEN");
@@ -536,10 +536,10 @@ static void enable_acq132_start(void)
 
 	if (acq196_trigger_detect()){
 		err("WOAAH - triggered already, not good\n"
-		      "FIFCON: 0x%08x\n"
-		      "FIFSTAT:0x%08x\n"
-		      "SYSCON: 0x%08x",
-		      *FIFCON, *FIFSTAT, *SYSCON);
+		    "FIFCON: 0x%08x\n"
+		    "FIFSTAT:0x%08x\n"
+		    "SYSCON: 0x%08x",
+		    *FIFCON, *FIFSTAT, *SYSCON);
 		finish_with_engines(-__LINE__);
 	}
 
@@ -550,13 +550,14 @@ static void enable_acq132_start(void)
 	signalCommit(CAPDEF->ev[1]);
 
 	DBGSF("FINAL:next enable FIFCON");
+	acq132_set_channel_mask(CAPDEF->channel_mask);
 	enable_fifo(CAPDEF->channel_mask);
 
 	preEnable();
 
 	DBGSF("now trigger");
 	dbg(3, "use hard trigger if enabled %s", 
-	      CAPDEF->trig->is_active? "HARD": "soft");
+	    CAPDEF->trig->is_active? "HARD": "soft");
 
 	if (CAPDEF->trig->is_active){
 		rc = enable_hard_trigger();
@@ -950,7 +951,7 @@ static struct CAPDEF* acq132_createCapdef(void)
 	capdef->sync_trig_mas->is_output = 1;
 
 	capdef->counter_src = createSignal("counter_src", 0, 6, 6,0, 1, 
-				       acq216_commitTcrSrc);
+					   acq216_commitTcrSrc);
 	/** @todo how to action? */
 	capdef->counter_src->has_internal_option = 1;
 	return capdef;
@@ -1091,7 +1092,7 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 				from, 
 				bsamples,
 				nsamples
-			);
+				);
 			from += bsamples*ROW_CHAN;
 		}
 		to += bsamples;
@@ -1274,53 +1275,92 @@ static void global_set_adc_range(u32 channels)
 	}
 }
 
+static const struct ADC_CHANNEL_LUT {
+	int dev;
+	int side;
+	u32 mask;
+} ADC_CHANNEL_LUT[] = {
+	[ 0] = {},
+	[ 1] = { BANK_D, 'R', ACQ132_ADC_RANGE_R1 },
+	[ 2] = { BANK_D, 'R', ACQ132_ADC_RANGE_R2 },
+	[ 3] = { BANK_D, 'R', ACQ132_ADC_RANGE_R3 },
+	[ 4] = { BANK_D, 'R', ACQ132_ADC_RANGE_R4 },
+	[ 5] = { BANK_C, 'R', ACQ132_ADC_RANGE_R1 },
+	[ 6] = { BANK_C, 'R', ACQ132_ADC_RANGE_R2 },
+	[ 7] = { BANK_C, 'R', ACQ132_ADC_RANGE_R3 },
+	[ 8] = { BANK_C, 'R', ACQ132_ADC_RANGE_R4 },
+	[ 9] = { BANK_B, 'R', ACQ132_ADC_RANGE_R1 },
+	[10] = { BANK_B, 'R', ACQ132_ADC_RANGE_R2 },
+	[11] = { BANK_B, 'R', ACQ132_ADC_RANGE_R3 },
+	[12] = { BANK_B, 'R', ACQ132_ADC_RANGE_R4 },
+	[13] = { BANK_A, 'R', ACQ132_ADC_RANGE_R1 },
+	[14] = { BANK_A, 'R', ACQ132_ADC_RANGE_R2 },
+	[15] = { BANK_A, 'R', ACQ132_ADC_RANGE_R3 },
+	[16] = { BANK_A, 'R', ACQ132_ADC_RANGE_R4 },
+	[17] = { BANK_D, 'L', ACQ132_ADC_RANGE_L1 },
+	[18] = { BANK_D, 'L', ACQ132_ADC_RANGE_L2 },
+	[19] = { BANK_D, 'L', ACQ132_ADC_RANGE_L3 },
+	[20] = { BANK_D, 'L', ACQ132_ADC_RANGE_L4 },
+	[21] = { BANK_C, 'L', ACQ132_ADC_RANGE_L1 },
+	[22] = { BANK_C, 'L', ACQ132_ADC_RANGE_L2 },
+	[23] = { BANK_C, 'L', ACQ132_ADC_RANGE_L3 },
+	[24] = { BANK_C, 'L', ACQ132_ADC_RANGE_L4 },
+	[25] = { BANK_B, 'L', ACQ132_ADC_RANGE_L1 },
+	[26] = { BANK_B, 'L', ACQ132_ADC_RANGE_L2 },
+	[27] = { BANK_B, 'L', ACQ132_ADC_RANGE_L3 },
+	[28] = { BANK_B, 'L', ACQ132_ADC_RANGE_L4 },
+	[29] = { BANK_A, 'L', ACQ132_ADC_RANGE_L1 },
+	[30] = { BANK_A, 'L', ACQ132_ADC_RANGE_L2 },
+	[31] = { BANK_A, 'L', ACQ132_ADC_RANGE_L3 },
+	[32] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4 }
+};
+
+void acq132_set_channel_mask(u32 channel_mask)
+{
+	u32 masks[4] = {};
+
+	u32 cursor = 1;
+	u32 ch = 1;
+	int dev;
+
+	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
+		int dev = ADC_CHANNEL_LUT[ch].dev;
+		u32 mask = 1 << ((ch-1)&0xf);
+		int shl = ADC_CHANNEL_LUT[ch].side == 'L'?
+			ACQ132_ADC_CTRL_LMSHFT:
+			ACQ132_ADC_CTRL_RMSHFT;
+
+		if ((channel_mask&cursor) != 0){
+			masks[dev] |= (mask << shl);
+		}else{
+			masks[dev] &= ~(mask << shl);
+		}
+
+		dbg(2, "ch %d %s mask %08x masks[%d] %08x",
+		    ch, (channel_mask&cursor)? "SET": "CLR",
+		    mask << shl, dev, masks[dev]);
+	}	
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		if (masks[dev] != 0){			
+			masks[dev] |= ACQ132_ADC_CTRL_ACQEN;
+		}
+		dbg(1, "dev %d CTRL = %08x", dev, masks[dev]);
+
+		*ACQ132_ADC_CTRL(dev) = masks[dev];
+	}
+}
+
+static u32 adc_range_def;
+
 static void _acq132_set_adc_range(u32 channels)
 {
-	static const struct {
-		int dev;
-		u32 mask;
-	} LUT[] = {
-		[ 0] = {},
-		[ 1] = { BANK_D, ACQ132_ADC_RANGE_R1 },
-		[ 2] = { BANK_D, ACQ132_ADC_RANGE_R2 },
-		[ 3] = { BANK_D, ACQ132_ADC_RANGE_R3 },
-		[ 4] = { BANK_D, ACQ132_ADC_RANGE_R4 },
-		[ 5] = { BANK_C, ACQ132_ADC_RANGE_R1 },
-		[ 6] = { BANK_C, ACQ132_ADC_RANGE_R2 },
-		[ 7] = { BANK_C, ACQ132_ADC_RANGE_R3 },
-		[ 8] = { BANK_C, ACQ132_ADC_RANGE_R4 },
-		[ 9] = { BANK_B, ACQ132_ADC_RANGE_R1 },
-		[10] = { BANK_B, ACQ132_ADC_RANGE_R2 },
-		[11] = { BANK_B, ACQ132_ADC_RANGE_R3 },
-		[12] = { BANK_B, ACQ132_ADC_RANGE_R4 },
-		[13] = { BANK_A, ACQ132_ADC_RANGE_R1 },
-		[14] = { BANK_A, ACQ132_ADC_RANGE_R2 },
-		[15] = { BANK_A, ACQ132_ADC_RANGE_R3 },
-		[16] = { BANK_A, ACQ132_ADC_RANGE_R4 },
-		[17] = { BANK_D, ACQ132_ADC_RANGE_L1 },
-		[18] = { BANK_D, ACQ132_ADC_RANGE_L2 },
-		[19] = { BANK_D, ACQ132_ADC_RANGE_L3 },
-		[20] = { BANK_D, ACQ132_ADC_RANGE_L4 },
-		[21] = { BANK_C, ACQ132_ADC_RANGE_L1 },
-		[22] = { BANK_C, ACQ132_ADC_RANGE_L2 },
-		[23] = { BANK_C, ACQ132_ADC_RANGE_L3 },
-		[24] = { BANK_C, ACQ132_ADC_RANGE_L4 },
-		[25] = { BANK_B, ACQ132_ADC_RANGE_L1 },
-		[26] = { BANK_B, ACQ132_ADC_RANGE_L2 },
-		[27] = { BANK_B, ACQ132_ADC_RANGE_L3 },
-		[28] = { BANK_B, ACQ132_ADC_RANGE_L4 },
-		[29] = { BANK_A, ACQ132_ADC_RANGE_L1 },
-		[30] = { BANK_A, ACQ132_ADC_RANGE_L2 },
-		[31] = { BANK_A, ACQ132_ADC_RANGE_L3 },
-		[32] = { BANK_A, ACQ132_ADC_RANGE_L4 }
-	};
-
 	u32 cursor = 1;
 	u32 ch = 1;
 
 	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
-		int dev = LUT[ch].dev;
-		u32 mask = LUT[ch].mask;
+		int dev = ADC_CHANNEL_LUT[ch].dev;
+		u32 mask = ADC_CHANNEL_LUT[ch].mask;
 
 		if ((channels&cursor) != 0){
 			*ACQ132_ADC_RANGE(dev) |= mask;
@@ -1328,6 +1368,8 @@ static void _acq132_set_adc_range(u32 channels)
 			*ACQ132_ADC_RANGE(dev) &= ~mask;
 		}
 	}
+
+	adc_range_def = channels;
 }
 
 void acq132_set_adc_range(u32 channels)
@@ -1339,6 +1381,24 @@ void acq132_set_adc_range(u32 channels)
 	}
 }
 
+static u32 global_get_adc_range(void)
+{
+	return *ACQ132_SYSCON & ACQ132_SYSCON_RANGE_HI? 0xffffffff: 0;
+}
+
+static u32 _acq132_get_adc_range(void)
+{
+	return adc_range_def;
+} 
+
+u32 acq132_get_adc_range(void)
+{
+	if (acq132_supports_channel_vrange_switch()){
+		return _acq132_get_adc_range();
+	}else{
+		return global_get_adc_range();
+	}	
+}
 module_init(acq132_fifo_init);
 module_exit(acq132_fifo_exit_module);
 
