@@ -1,0 +1,3 @@
+#!/bin/bash
+make modules 2>&1 | grep -v "exported twice"
+
