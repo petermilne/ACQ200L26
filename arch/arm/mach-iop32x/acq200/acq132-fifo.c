@@ -14,7 +14,7 @@
 
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
- Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
+ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                   */
 /* ------------------------------------------------------------------------- */
 
 #define DTACQ_MACH 2
@@ -938,6 +938,7 @@ static struct CAPDEF* acq132_createCapdef(void)
 	capdef_set_nchan(capdef, AICHAN_DEFAULT);
 	capdef_set_word_size(capdef, 2);
 
+	/* name, minDIx, maxDIx, DIx, rising, is_active, commit	*/
 	capdef->ev[0] = 
 		createSignal("event0", 0, 5, 3, 0, 0, acq196_commitEv0);
 	capdef->ev[1] = 
@@ -1347,7 +1348,7 @@ void acq132_set_channel_mask(u32 channel_mask)
 
 	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
 		int dev = ADC_CHANNEL_LUT[ch].dev;
-		u32 mask = 1 << ((ch-1)&0xf);
+		u32 mask = 1 << ((ch-1)&0x03);
 		int shl = ADC_CHANNEL_LUT[ch].side == 'L'?
 			ACQ132_ADC_CTRL_LMSHFT:
 			ACQ132_ADC_CTRL_RMSHFT;
