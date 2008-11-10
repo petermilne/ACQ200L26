@@ -742,7 +742,6 @@ static ssize_t show_measured_sample_rate(
 static DEVICE_ATTR(measured_sample_rate, S_IRUGO,
 			 show_measured_sample_rate, 0);
 
-void finish_with_engines(int ifinish); /* call when end detected */
 
 static ssize_t show_user_abort(
 	struct device * dev, 

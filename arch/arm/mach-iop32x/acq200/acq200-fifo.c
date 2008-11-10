@@ -158,7 +158,7 @@ module_param(es_debug, int, 0600);
 #define DMA_ERROR IOP321_CSR_ERR
 
 
-static char errbuf[80];
+static char errbuf[128];
 
 static void preEnable(void);   /* call immediately BEFORE trigger en */
 static void onEnable(void);    /* call immediately AFTER trigger     */
@@ -397,38 +397,67 @@ static void call_end_of_shot_hooks(void)
 }
 
 
-void finish_with_engines(int ifinish)
+
+
+static int _finish_with_engines(int ifinish)
+{
+	/* only the Genuine first caller gets here */
+
+	stop_capture();
+	call_end_of_shot_hooks();
+	schedule_dmc0_timeout(0);
+	if (DG->shot == 0 || ifinish < 0){
+		DMC_WO_setState(ST_STOP);
+	}else{
+/** ST_CAPDONE is an attempt to avoid end of shot status race. */
+		DMC_WO_setState(uses_ST_CAPDONE? ST_CAPDONE: ST_STOP);
+	}
+	iop321_stop_ppmu();
+
+
+	DG->stats.end_gtsr = *IOP321_GTSR;
+	DG->stats.end_jiffies = jiffies;
+	DG->stats.finish_time = CURRENT_TIME;
+
+	if (DG->global_irq_mask){
+		acq200_global_mask_op(DG->global_irq_mask, 0);
+	}	
+
+	/*
+	 * ensure eoc available for next time
+	 */
+	if (DG->bh_unmasks_eoc){
+		unmask_eoc();
+	}
+	wake_up_interruptible(&IPC->finished_waitq);
+	return 1;
+}
+
+static spinlock_t finish_lock = SPIN_LOCK_UNLOCKED;
+
+int finish_with_engines(int ifinish)
 {
 	if (!DG->finished_with_engines){
-		stop_capture();
-		call_end_of_shot_hooks();
-		schedule_dmc0_timeout(0);
-		if (DG->shot == 0 || ifinish < 0){
-			DMC_WO_setState(ST_STOP);
+		/* avoid race with multiple finishers */
+		unsigned long flags;
+		int pipped_at_the_post = 0;
+
+		spin_lock_irqsave(&finish_lock, flags);
+		if (likely(!DG->finished_with_engines)){
+			DG->finished_with_engines = ifinish;
 		}else{
-/** ST_CAPDONE is an attempt to avoid end of shot status race. */
-			DMC_WO_setState(uses_ST_CAPDONE? ST_CAPDONE: ST_STOP);
+			pipped_at_the_post = 1;
 		}
-		iop321_stop_ppmu();
+		spin_unlock_irqrestore(&finish_lock, flags);
 
-
-		DG->stats.end_gtsr = *IOP321_GTSR;
-		DG->stats.end_jiffies = jiffies;
-		DG->finished_with_engines = ifinish;
-		DG->stats.finish_time = CURRENT_TIME;
-
-		if (DG->global_irq_mask){
-			acq200_global_mask_op(DG->global_irq_mask, 0);
-		}	
-
-		/*
-                 * ensure eoc available for next time
-		 */
-		if (DG->bh_unmasks_eoc){
-			unmask_eoc();
+		if (!pipped_at_the_post){
+			return _finish_with_engines(ifinish);
+		}else{
+			dbg(1, "pipped_at_the post!");
 		}
-		wake_up_interruptible(&IPC->finished_waitq);
 	}
+
+	return 0;
 }	
 
 #ifndef CHECK_FIFSTAT
@@ -1429,15 +1458,18 @@ static int pci_abort(void)
 }
 
 
-
+static void report_FIFERR(struct DMC_WORK_ORDER *wo)
+{
+	sprintf(errbuf, "FIFERR detected at %d 0x%08x", 
+		DG->finished_with_engines, DG->fiferr);
+	wo->error = errbuf;
+}
 
 void acq200_dmc0(struct DMC_WORK_ORDER *wo)
 /* Data Movement Controller */
 {
-	if (DG->fiferr){
-		sprintf(errbuf, "FIFERR detected 0x%08x", DG->fiferr);
-		wo->error = errbuf;
-		finish_with_engines(-__LINE__);
+	if (DG->fiferr && !wo->error && finish_with_engines(-__LINE__)){
+		report_FIFERR(wo);
 	}else{
 		if (DMC_WO->triggered == 0 && DMC_WO->trigger_detect()){
 			onTrigger();
@@ -2177,12 +2209,9 @@ static int _oneshot_wait_for_done(void)
 			return 0;
 		}
 			
-		if ( DG->fiferr ){
-			if (!wo->error){
-				sprintf( errbuf, "fiferr 0x%08x", DG->fiferr);
-				wo->error = errbuf;
-			}
-			finish_with_engines(-__LINE__);
+		if (DG->fiferr && !DMC_WO->error && 
+				finish_with_engines(-__LINE__)){
+			report_FIFERR(wo);
 		}
 
 		if (DMC_WO->triggered && (iloop&(MAXTRY/16 - 1))==0){

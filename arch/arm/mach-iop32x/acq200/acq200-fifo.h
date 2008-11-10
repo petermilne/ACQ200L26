@@ -1248,7 +1248,8 @@ ssize_t acq200_fifo_bigbuf_xxX_read (
 #define CDOG_REFRESH 1
 
 int acq200_cdog(int mode);
-void finish_with_engines(int ifinish); /* call when end detected */
+int finish_with_engines(int ifinish); 
+/* call when end detected. returns 1 if we got there first */
 
 
 struct DataConsumerBuffer * acq200_createDCB(void);

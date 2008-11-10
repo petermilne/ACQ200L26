@@ -464,6 +464,8 @@ static void enable_acq216_start(void)
 
 void acq216_stop_capture(void)
 {
+	disable_fifo();
+
 	if (dcm_monitor){
 		unsigned lock = NCHAN==12?
  			ACQ200_CLKCON_DCMx3_LOCK: ACQ200_CLKCON_DCMx4_LOCK;
@@ -488,7 +490,6 @@ void acq216_stop_capture(void)
 			DMC_WO->error = errbuf;
 		}
 	}
-	disable_fifo();
 }
 
 
