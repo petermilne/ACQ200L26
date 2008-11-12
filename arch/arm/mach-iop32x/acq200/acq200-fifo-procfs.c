@@ -3667,7 +3667,9 @@ void create_proc_entries(void)
 #define CPRE( name, func ) \
         create_proc_read_entry( name, 0, proc_acq200, func, 0 )
 	CPRE("dump_ES",    acq200_proc_dumpES);
+#ifndef ACQ132
 	CPRE("dump_regs",  acq200_proc_dumpregs);
+#endif
 	CPRE("dump_fiq",   acq200_proc_dumpfiq);
 	CPRE("stat_dg",    acq200_proc_stat_dg);
 	CPRE("stat_block", acq200_proc_block_stats);

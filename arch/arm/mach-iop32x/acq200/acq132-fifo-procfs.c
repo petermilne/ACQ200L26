@@ -19,6 +19,7 @@
 
 #define DTACQ_MACH 1
 #define ACQ132
+#include <linux/seq_file.h>
 
 #include "acq200-fifo-top.h"
 
@@ -27,6 +28,8 @@
 #include "acq132.h"
 
 #include "iop321-auxtimer.h"
+
+#include "linux/ctype.h"
 
 /*
  * forward local defs 
@@ -40,14 +43,11 @@ static ssize_t set_daq_enable(
 	struct device_driver * driver, const char * buf, size_t count);
 
 
-static int acq200_proc_dumpregs(
-	char *buf, char **start, off_t offset, int len,
-	int* eof, void* data );
-
 static void acq196_mk_dev_sysfs(struct device *dev);
+static void acq132_create_proc_entries(struct proc_dir_entry* root);
 
 #define DEVICE_MK_DEV_SYSFS(dev) acq196_mk_dev_sysfs(dev)
-#define DEVICE_CREATE_PROC_ENTRIES(root) 
+#define DEVICE_CREATE_PROC_ENTRIES(root) acq132_create_proc_entries(root)
 
 
 
@@ -369,22 +369,22 @@ static int store_osam(
 	struct device_attribute *attr,
 	const char * buf)
 {
-	static const int good_nacc[] = { 1, 2, 4, 8, 16 };
-#define GOOD_NACC (sizeof(good_nacc)/sizeof(int))
 	static const int good_shift[] = { -2, -1, 0, 1, 2 };
 #define GOOD_SHIFT (sizeof(good_shift)/sizeof(int))
 
 	int nacc;
 	int shift;
+	int decimate = strstr(buf, "decimate") != 0;
 
 	if (sscanf(buf, "nacc=%d shift=%d", &nacc, &shift) == 2 ||
 	    sscanf(buf, "%d %d", &nacc, &shift) == 2){
-		if (!belongs(nacc, good_nacc, GOOD_NACC)){
+		if (!IN_RANGE(nacc, 1, 16)){
 			err("bad nacc %d", nacc);		      
 		}else if (!belongs(shift, good_shift, GOOD_SHIFT)){
 			err("bad shift %d", shift);
 		}else{
-			ACQ132_SET_OSAM_X_NACC(block, OSAMLR(lr), nacc, shift);
+			ACQ132_SET_OSAM_X_NACC(
+				block, OSAMLR(lr), nacc, shift, decimate);
 			return strlen(buf);
 		}
 	}else{
@@ -407,18 +407,7 @@ static ssize_t show_osam(
 	osam >>= OSAMLR(lr);
 
 	nacc_shl = (osam>>ACQ132_ADC_OSAM_R_NACC_SHL) & 0x00f;
-
-	switch(nacc_shl){
-	case 0:
-	case 1:
-	case 2:
-	case 3:
-	case 4:
-		nacc = 1 << nacc_shl;
-		break;
-	default:
-		return sprintf(buf, "illegal nacc field %d", nacc_shl);
-	}	
+	nacc = 1 << nacc_shl;
 
 	shift_code = (osam>>ACQ132_ADC_OSAM_R_SHIFT) & 0x0f;
 	switch(shift_code){
@@ -436,7 +425,8 @@ static ssize_t show_osam(
 		return sprintf(buf, "illegal shift field 0x%x", shift_code);
 	}
 
-	return sprintf(buf, "nacc=%d shift=%d\n", nacc, shift);
+	return sprintf(buf, "nacc=%d shift=%d %s\n", nacc, shift, 
+		       osam&ACQ132_ADC_OSAM_R_ACCEN? "accumulate": "decimate");
 }
 
 #define OSAM(BLK, LR)							\
@@ -487,36 +477,52 @@ static ssize_t show_scanlist(
 	struct device_attribute *attr,
 	char * buf)
 {
-	u32 scan = *ACQ132_SCAN;
-	return sprintf(buf, "%c%c%c%c\n",
-		       FROM_SX(scan>>6), FROM_SX(scan>>4),
-		       FROM_SX(scan>>2), FROM_SX(scan>>0));
+	u32 scan_def = *ACQ132_SCAN_LIST_DEF;
+	int nscan = *ACQ132_SCAN_LIST_LEN;
+	int iscan;
+
+	for (iscan = 0; iscan < nscan; ++iscan){
+		buf[iscan] = FROM_SX(scan_def >> (iscan*2));
+	}
+
+	buf[iscan++] = '\n';
+	buf[iscan++] = '\0';
+	return strlen(buf);
 }
+
 
 static ssize_t store_scanlist(
 	struct device * dev, 
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	if (strlen(buf) >= 4){
-		if (IS_SX(buf[0]) && IS_SX(buf[1]) && 
-		    IS_SX(buf[2]) && IS_SX(buf[3])){
-			
-			u32 scan; 
-			scan = TO_SX(buf[0]);scan <<= 2;
-			scan = TO_SX(buf[1]);scan <<= 2;
-			scan = TO_SX(buf[2]);scan <<= 2;
-			scan = TO_SX(buf[3]);scan <<= 2;
-			*ACQ132_SCAN = scan;
-			return strlen(buf);
-		}else{
-			err("valid scan codes: A,B,C,D");
-		}		
-	}else{
-		err("please enter 4 char scan eg ABCD");		
-	}
+	int iscan;
+	int maxscan = min((int)strlen(buf), ACQ132_SCAN_MAX);
+	u32 scan_def = 0;
+	int ok = 0;
 
-	return -EINVAL;
+	while(isspace(buf[maxscan-1])){
+		--maxscan;
+	}
+	for (iscan = 0; iscan < maxscan; ++iscan){
+		if (IS_SX(buf[iscan])){
+			scan_def <<= 2;			
+       			scan_def |= TO_SX(buf[iscan]);
+			ok = 1;
+		}else{
+			err("\"%s\" char %d valid scan codes: A,B,C,D",
+			    buf, iscan);
+			ok = 0;
+			break;
+		}		
+	}
+	if (ok){
+		*ACQ132_SCAN_LIST_DEF = scan_def;
+		*ACQ132_SCAN_LIST_LEN = iscan;
+		return strlen(buf);
+	}else{
+		return -EINVAL;
+	}
 }
 static DEVICE_ATTR(scanlist, S_IRUGO|S_IWUGO, show_scanlist, store_scanlist);
 
@@ -854,18 +860,73 @@ static ssize_t set_daq_enable(
 	return strlen(buf);
 }
 
+#define SPACER_ENTRY	  { "\n", 0 }
+#define REGS_LUT_ENTRY(n) { #n, n }
+
+#define ADC_REGS_ENTRY(dev)			\
+	REGS_LUT_ENTRY(ACQ132_ADC_TEST(dev)),	\
+	REGS_LUT_ENTRY(ACQ132_ADC_CTRL(dev)),	\
+	REGS_LUT_ENTRY(ACQ132_ADC_RANGE(dev)),	\
+	REGS_LUT_ENTRY(ACQ132_ADC_OSAM(dev)),   \
+	SPACER_ENTRY
+
+static struct REGS_LUT {
+	const char *name;
+	volatile u32* preg;
+}
+	regs_lut[] = {
+		REGS_LUT_ENTRY(ACQ132_BDR),
+		REGS_LUT_ENTRY(ACQ196_FIFCON),
+		REGS_LUT_ENTRY(ACQ132_FIFSTAT),
+		REGS_LUT_ENTRY(ACQ132_SFPGA_CONF),
+		REGS_LUT_ENTRY(ACQ132_ICS527),
+		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
+		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_LEN),
+		SPACER_ENTRY,
+		ADC_REGS_ENTRY(BANK_A),
+		ADC_REGS_ENTRY(BANK_B),
+		ADC_REGS_ENTRY(BANK_C),
+		ADC_REGS_ENTRY(BANK_D),
+
+		REGS_LUT_ENTRY(ACQ196_CLKCON),
+		REGS_LUT_ENTRY(ACQ200_CLKDAT),
+		REGS_LUT_ENTRY(ACQ200_DIOCON),
+		REGS_LUT_ENTRY(ACQ196_OFFSET_DACS),
+		REGS_LUT_ENTRY(ACQ196_WAVLIMIT),
+		REGS_LUT_ENTRY(ACQ196_TCR_IMMEDIATE),
+		REGS_LUT_ENTRY(ACQ196_TCR_LATCH)
+	};
+
+#define REGS_LUT_ENTRIES (sizeof(regs_lut)/sizeof (struct REGS_LUT))
+
+
 int acq200_dumpregs_diag(char* buf, int len)
+/** @todo still needed elsewhere, unfortunately */
 {
 	char *bp = buf;
 #define APPEND(reg) \
         bp += snprintf(bp, len - (bp-buf), "%20s:[%02x] 0x%08X\n", \
                    #reg, ((unsigned)reg- (unsigned)ACQ200_FPGA), *reg)
-	
-	APPEND(ACQ196_BDR);
+
+
+#define APPEND_ADC(dev)				\
+	APPEND(ACQ132_ADC_TEST(dev));		\
+	APPEND(ACQ132_ADC_CTRL(dev));		\
+	APPEND(ACQ132_ADC_RANGE(dev));		\
+	APPEND(ACQ132_ADC_OSAM(dev))		\
+
+
+	APPEND(ACQ132_BDR);
 	APPEND(ACQ196_FIFCON);
-	APPEND(ACQ196_FIFSTAT);
-	APPEND(ACQ196_SYSCON_ADC);
-	APPEND(ACQ196_SYSCON_DAC);
+	APPEND(ACQ132_FIFSTAT);
+	APPEND(ACQ132_SFPGA_CONF);
+	APPEND(ACQ132_ICS527);
+	APPEND(ACQ132_SCAN_LIST_DEF);
+	APPEND(ACQ132_SCAN_LIST_LEN);
+	APPEND_ADC(BANK_A);
+	APPEND_ADC(BANK_B);
+	APPEND_ADC(BANK_C);
+	APPEND_ADC(BANK_D);
 
 	APPEND(ACQ196_CLKCON);
 	APPEND(ACQ200_CLKDAT);
@@ -879,10 +940,75 @@ int acq200_dumpregs_diag(char* buf, int len)
 }
 
 
-
-static int acq200_proc_dumpregs(
-	char *buf, char **start, off_t offset, int len,
-                int* eof, void* data )
+static void *dump_regs_seq_start(struct seq_file *s, loff_t *pos)
 {
-	return acq200_dumpregs_diag(buf, len);
+	if (*pos < REGS_LUT_ENTRIES){
+		return regs_lut + *pos;
+	}else{
+		return NULL;
+	}
+}
+
+static void *dump_regs_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	(*pos)++;
+
+	if (*pos < REGS_LUT_ENTRIES){
+		return regs_lut + *pos;
+	}else{
+		return NULL;
+	}
+}
+
+static int dump_regs_seq_show(struct seq_file *s, void *v)
+{
+	const struct REGS_LUT *plut = (struct REGS_LUT*)v;
+
+	const char* name = plut->name;
+	volatile u32 *reg = plut->preg;
+	
+
+	if (reg == 0){
+		seq_printf(s, "%s", name);
+	}else{
+		unsigned offset = ((unsigned)reg - (unsigned)ACQ200_FPGA);
+		seq_printf(s, "%20s:[%03x] 0x%08X\n", name, offset, *reg);
+	}
+	return 0;
+}	
+
+static void dump_regs_seq_stop(struct seq_file* s, void *v)
+{
+
+}
+
+static int dump_regs_proc_open(struct inode *inode, struct file *file)
+{
+	static struct seq_operations seq_ops = {
+		.start = dump_regs_seq_start,
+		.next = dump_regs_seq_next,
+		.stop = dump_regs_seq_stop,
+		.show = dump_regs_seq_show
+	};
+	return seq_open(file, &seq_ops);
+}
+
+static struct file_operations dump_regs_proc_fops = {
+	.owner = THIS_MODULE,
+	.open = dump_regs_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release	
+};
+
+static void acq132_create_proc_entries(struct proc_dir_entry* root)
+{
+
+	
+        struct proc_dir_entry *dump_regs_entry =
+		create_proc_entry("dump_regs", S_IRUGO, root);
+
+	if (dump_regs_entry){
+	        dump_regs_entry->proc_fops = &dump_regs_proc_fops;
+	}
 }
