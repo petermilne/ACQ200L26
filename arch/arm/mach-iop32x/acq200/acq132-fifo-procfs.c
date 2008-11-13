@@ -400,15 +400,11 @@ static ssize_t show_osam(
 	char * buf)
 {
 	int nacc, shift;
-	unsigned nacc_shl;
 	unsigned shift_code;
 
-	u32 osam = *ACQ132_ADC_OSAM(block);
-	osam >>= OSAMLR(lr);
+	const u32 osam = *ACQ132_ADC_OSAM(block) >> OSAMLR(lr);
 
-	nacc_shl = (osam>>ACQ132_ADC_OSAM_R_NACC_SHL) & 0x00f;
-	nacc = 1 << nacc_shl;
-
+	nacc = (osam>>ACQ132_ADC_OSAM_R_NACC) & 0x0f;
 	shift_code = (osam>>ACQ132_ADC_OSAM_R_SHIFT) & 0x0f;
 	switch(shift_code){
 	case SHIFT_M1:
@@ -426,7 +422,8 @@ static ssize_t show_osam(
 	}
 
 	return sprintf(buf, "nacc=%d shift=%d %s\n", nacc, shift, 
-		       osam&ACQ132_ADC_OSAM_R_ACCEN? "accumulate": "decimate");
+		       osam&(1<<ACQ132_ADC_OSAM_R_ACCEN)? 
+				"accumulate": "decimate");
 }
 
 #define OSAM(BLK, LR)							\

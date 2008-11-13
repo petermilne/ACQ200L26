@@ -86,8 +86,8 @@
 #define ACQ132_SFPGA_CONF_8MASK		0xff
 
 
-#define ACQ132_ICS527_FDW	0x003f0000
-#define ACQ132_ICS527_RDW	0x00003f00
+#define ACQ132_ICS527_FDW	0x007f0000
+#define ACQ132_ICS527_RDW	0x00007f00
 #define ACQ132_ICS527_S1S0	0x000000c0
 #define ACQ132_ICS527_CLKDIV	0x00000007  
 /* the divider is actually in the A_FPGA, 
@@ -120,10 +120,10 @@
 #define ACQ132_ADC_RANGE_R2	0x00000002
 #define ACQ132_ADC_RANGE_R1	0x00000001
 
-#define ACQ132_ADC_OSAM_L_NACC_SHL	28
+#define ACQ132_ADC_OSAM_L_NACC		28
 #define ACQ132_ADC_OSAM_L_SHIFT		24
 #define ACQ132_ADC_OSAM_L_ACCEN		16
-#define ACQ132_ADC_OSAM_R_NACC_SHL	12
+#define ACQ132_ADC_OSAM_R_NACC		12
 #define ACQ132_ADC_OSAM_R_SHIFT		 8
 #define ACQ132_ADC_OSAM_R_ACCEN		 0
 
@@ -175,7 +175,7 @@ static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
 
 #define ACQ132_SET_OSAM_X_NACC(dev, lr, nacc, shift, decimate) do {	\
 	u32 osam = *ACQ132_ADC_OSAM(dev);				\
-	osam = acq132_adc_set_osam(osam, ACQ132_ADC_OSAM_R_NACC_SHL+lr, nacc); \
+	osam = acq132_adc_set_osam(osam, ACQ132_ADC_OSAM_R_NACC+lr, nacc); \
 	osam = acq132_adc_set_shift(osam, ACQ132_ADC_OSAM_R_SHIFT+lr, shift); \
 	if (decimate){							\
 		osam &= ~ 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);		\
@@ -183,7 +183,9 @@ static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
 		osam |= 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);		\
 	}								\
 	*ACQ132_ADC_OSAM(dev) = osam;					\
-} while(0)								\
+	dbg(1, "%p set 0x%08x reads 0x%08x ",				\
+	    ACQ132_ADC_OSAM(dev), osam, *ACQ132_ADC_OSAM(dev));		\
+} while(0)
 
 
 /* @todo one bit, all bits. multiple settings todo */
