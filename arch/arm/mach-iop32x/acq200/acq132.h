@@ -136,7 +136,7 @@ static inline u32 acq132_adc_set_osam(u32 osam, int shl, int nacc)
 	nacc = max(1, nacc);
 	nacc = min(nacc, 16);
 
-	field = (nacc&0xf)-1;
+	field = (nacc-1)&0x0f;
 
 	osam |= field << shl;
 
