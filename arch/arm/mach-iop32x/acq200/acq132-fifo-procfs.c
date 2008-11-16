@@ -500,14 +500,14 @@ static ssize_t store_scanlist(
 	int maxscan = min((int)strlen(buf), ACQ132_SCAN_MAX);
 	u32 scan_def = 0;
 	int ok = 0;
+	int place = 0;
 
 	while(isspace(buf[maxscan-1])){
 		--maxscan;
 	}
-	for (iscan = 0; iscan < maxscan; ++iscan){
+	for (iscan = 0, place = 0; iscan < maxscan; ++iscan, ++place){
 		if (IS_SX(buf[iscan])){
-			scan_def <<= 2;			
-       			scan_def |= TO_SX(buf[iscan]);
+       			scan_def |= TO_SX(buf[iscan]) << 2*place;
 			ok = 1;
 		}else{
 			err("\"%s\" char %d valid scan codes: A,B,C,D",
