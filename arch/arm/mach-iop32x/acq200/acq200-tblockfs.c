@@ -31,6 +31,7 @@
 #include <linux/timex.h>
 #include <linux/mm.h>
 #include <linux/moduleparam.h>
+#include <linux/poll.h>
 
 #include <asm/hardware.h>
 #include <asm/io.h>
@@ -309,6 +310,19 @@ static int state_release(struct inode *inode, struct file *filp)
 	kfree(filp->private_data);
 	return 0;
 }
+
+static unsigned int state_poll(
+	struct file *file, struct poll_table_struct *poll_table)
+{
+	if (u32rb_is_empty(&SL(file)->rb)){
+		poll_wait(file, &SL(file)->waitq, poll_table);
+	}
+	if (!u32rb_is_empty(&SL(file)->rb)){
+		return POLLIN | POLLRDNORM;
+	}else{
+		return 0;
+	}
+}
 static int tblock_data_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct TBLOCK* tblock = (struct TBLOCK*)filp->private_data;
@@ -386,7 +400,8 @@ static int acq200_tblockfs_fill_super (
 	static struct file_operations state_ops = {
 		.open = state_open,
 		.read = state_read,
-		.release = state_release
+		.release = state_release,
+		.poll = state_poll
 	};
 	static struct tree_descr front = {
 		NULL, NULL, 0
