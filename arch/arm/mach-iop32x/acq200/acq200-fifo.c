@@ -922,17 +922,24 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 			dbg(1, "phase_end d:%d l:%d", 
 			    phase->demand_len, phase_len(phase));
 
-			if (bda_fin){
-				wo->finished_code = 1;
-				dbg( 1,"BDA_FIN - shut down and wake caller");
-				finish_with_engines(__LINE__);
-				break;
-			}else if (wo->now != 0 && !phase_end(wo->now)){
+			if (!bda_fin && wo->now != 0 && !phase_end(wo->now)){
 				share_last_tblock(wo->now, phase);
 			}else{
+				/* clients want to know about LAST tblock,
+				 * full or not.. */
+#ifndef WAV232	
+				_dmc_handle_tb_clients(
+					TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
+#endif
 				wo->finished_code = 1;
-				dbg( 1,"all done - shut down and wake caller");
-				finish_with_engines(__LINE__);
+				if (bda_fin){
+					dbg( 1,"BDA_FIN - shut down and wake caller");
+					finish_with_engines(__LINE__);
+				}else{
+					dbg( 1,"all done - shut down and wake caller");
+					finish_with_engines(__LINE__);
+				}
+
 				break;
 			}
 		}
