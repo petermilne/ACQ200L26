@@ -476,18 +476,19 @@ void acq216_stop_capture(void)
 
 		unsigned clkcon = *ACQ200_CLKCON;
 
-		if ((clkcon&lock) != 0){
-			dbg(1, "LOCK: OK");
-		}else{
+		if ((clkcon&lock) == 0 || (clkcon&clkfx) != 0){
 			char emsg[80];
 			sprintf(emsg, 
-				"DCM LOCK ERROR 0x%08x IN:%s OUT:%s",
+				"DCM LOCK ERROR 0x%08x LOCK:%s IN:%s OUT:%s",
 				clkcon, 
+				(clkcon&lock) ==1? "OK": "FAIL",
 				(clkcon&clkin)==1? "OK": "FAIL",
 				(clkcon&clkfx)==1? "OK": "FAIL");
 			err("%s", emsg);
 			strcat(errbuf, emsg);
 			DMC_WO->error = errbuf;
+		}else{
+			dbg(1, "LOCK: OK");
 		}
 	}
 }
