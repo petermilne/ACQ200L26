@@ -69,7 +69,8 @@
 char* verid = VERID;
 module_param(verid, charp, 0444);
 
-
+int schedule_policy = DMA_CHANNEL_POLL_EZ;
+module_param(schedule_policy, int, 0644);
 
 /* FOUND emprically - this appears to be a Linux limit */
 #define MAX_ALLOC 32768    
@@ -269,7 +270,9 @@ int acq200_post_dmac_request(
 		u32 status;
 /* let me poll it ... */
 		while(((status = *IOP321_DMA1_CSR)&IOP321_CSR_CAF) != 0){
-			;
+			if (channel&DMA_CHANNEL_POLL_EZ){
+				schedule();
+			}
 		}
 		timeout = (status&IOP321_CSR_ERR) != 0;
 	}else{
@@ -626,25 +629,51 @@ static DEVICE_ATTR(dmac_state,S_IRUGO,show_dmac_state,0);
  */
 
 static struct OneShot {
+	int channel;
 	unsigned laddr, remaddr, bc;
 	int result;
 	int ident;
+	unsigned throttle;
 } oneshot;
 
+
+static void run_oneshot_throttle(struct OneShot* ot, int incoming)
+{
+	unsigned offset;
+	unsigned block_len;
+	int rc;
+
+	for (offset = 0; 
+	     (block_len = min(ot->throttle, ot->bc - offset)) > 0; 
+	     offset += block_len){		
+		rc = acq200_post_dmac_request(
+			ot->channel|schedule_policy,
+			ot->laddr+offset, 0,
+			ot->remaddr+offset, 
+			block_len,
+			incoming);
+	}
+}
 static ssize_t run_oneshot(
 	struct device * dev, 
 	struct device_attribute *attr,
 	const char * buf, 
 	size_t count, int channel, int incoming)
 {
-	if (sscanf(buf, "%x %x %x", 
-		   &oneshot.laddr, &oneshot.remaddr, &oneshot.bc) == 3){
+	int nargs = sscanf(buf, "%x %x %x %d", 
+			   &oneshot.laddr, &oneshot.remaddr, &oneshot.bc, 
+			   &oneshot.throttle);
+	oneshot.channel = channel;
+	if (nargs == 3){
 		oneshot.ident++;
 		oneshot.result = acq200_post_dmac_request(
 			channel, 
 			oneshot.laddr, 0, oneshot.remaddr, 
 			oneshot.bc, incoming);
+	}else if (nargs == 4){
+		run_oneshot_throttle(&oneshot, incoming);
 	}
+
 	return strlen(buf);
 }
 

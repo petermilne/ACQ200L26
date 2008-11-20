@@ -102,6 +102,7 @@ struct DmaChannelSync {
 #define DMA_CHANNEL_MEM2MEM 0x80
 #define DMA_CHANNEL_POLL    0x40
 #define DMA_CHANNEL_NOBLOCK 0x100
+#define DMA_CHANNEL_POLL_EZ 0x200	/* poll with schedule() */
 
 #define DMA_DCR_MEM2MEM 0x00000040  /* @@todo belongs <asm/arch/iop321-dma.h> */
 
