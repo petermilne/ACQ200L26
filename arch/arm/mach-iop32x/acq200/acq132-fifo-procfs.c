@@ -43,10 +43,10 @@ static ssize_t set_daq_enable(
 	struct device_driver * driver, const char * buf, size_t count);
 
 
-static void acq196_mk_dev_sysfs(struct device *dev);
+static void acq132_mk_dev_sysfs(struct device *dev);
 static void acq132_create_proc_entries(struct proc_dir_entry* root);
 
-#define DEVICE_MK_DEV_SYSFS(dev) acq196_mk_dev_sysfs(dev)
+#define DEVICE_MK_DEV_SYSFS(dev) acq132_mk_dev_sysfs(dev)
 #define DEVICE_CREATE_PROC_ENTRIES(root) acq132_create_proc_entries(root)
 
 
@@ -478,7 +478,7 @@ static ssize_t show_scanlist(
 	char * buf)
 {
 	u32 scan_def = *ACQ132_SCAN_LIST_DEF;
-	int nscan = *ACQ132_SCAN_LIST_LEN;
+	int nscan = *ACQ132_SCAN_LIST_LEN + 1;
 	int iscan;
 
 	for (iscan = 0; iscan < nscan; ++iscan){
@@ -518,7 +518,7 @@ static ssize_t store_scanlist(
 	}
 	if (ok){
 		*ACQ132_SCAN_LIST_DEF = scan_def;
-		*ACQ132_SCAN_LIST_LEN = iscan;
+		*ACQ132_SCAN_LIST_LEN = iscan - 1;
 		return strlen(buf);
 	}else{
 		return -EINVAL;
@@ -708,8 +708,9 @@ static ssize_t show_fpga_state(
 			err("A_FPGA not OK: %08x", *ACQ132_SFPGA_CONF);
 		}
 	}
-	len = sprintf(buf, "%s S_FPGA=%s A_FPGA=%02x\n",
-		      s_ok && a_ok? "GOOD": "ERR", s_ok? "OK": "ERR", a_done);
+	len = sprintf(buf, "%s S_FPGA=%s A_FPGA=%02x rev:%08x\n",
+		      s_ok && a_ok? "GOOD": "ERR", s_ok? "OK": "ERR", a_done,
+			rev);
 	return len;
 }
 
@@ -725,7 +726,40 @@ DEFINE_SIGNAL_ATTR(sync_trig_mas);
 DEFINE_SIGNAL_ATTR(gate_src);
 
 
-static void acq196_mk_dev_sysfs(struct device *dev)
+static ssize_t show_RGM(
+	struct device * dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	static const char* modes[] = {
+		[0] = "OFF",
+		[1] = "GATE",
+	};
+	int mode = acq132_getRGM() != 0;
+
+	return sprintf(buf, "%d %s\n", mode, modes[mode]);		
+}
+
+static ssize_t store_RGM(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned tlen = 0;
+	unsigned mode;
+
+	if (sscanf(buf, "%u", &mode) > 0){
+		acq132_setRGM(mode != 0);
+		return count;
+	}else{
+		return -EPERM;
+	}
+}
+
+static DEVICE_ATTR(RepeatingGateMode, S_IRUGO|S_IWUGO, show_RGM, store_RGM);
+
+
+static void acq132_mk_dev_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
 	DEVICE_CREATE_FILE(dev, &dev_attr_FAWG_div);
@@ -878,6 +912,7 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ132_BDR),
 		REGS_LUT_ENTRY(ACQ196_FIFCON),
 		REGS_LUT_ENTRY(ACQ132_FIFSTAT),
+		REGS_LUT_ENTRY(ACQ132_SYSCON),
 		REGS_LUT_ENTRY(ACQ132_SFPGA_CONF),
 		REGS_LUT_ENTRY(ACQ132_ICS527),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
@@ -887,7 +922,6 @@ static struct REGS_LUT {
 		ADC_REGS_ENTRY(BANK_B),
 		ADC_REGS_ENTRY(BANK_C),
 		ADC_REGS_ENTRY(BANK_D),
-
 		REGS_LUT_ENTRY(ACQ196_CLKCON),
 		REGS_LUT_ENTRY(ACQ200_CLKDAT),
 		REGS_LUT_ENTRY(ACQ200_DIOCON),

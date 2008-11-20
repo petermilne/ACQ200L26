@@ -75,6 +75,7 @@ module_param(fifo_reset_nsec, int, 0600);
 
 #define DTACQ_MACH_DRIVER_INIT(dev)
 #define DTACQ_MACH_DRIVER_REMOVE(dev)
+#define DTACQ_MACH_ON_SET_MODE(mode)
 
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 

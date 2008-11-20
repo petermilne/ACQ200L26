@@ -1717,6 +1717,7 @@ static void init_phases(void)
 		DMC_WO->pre = &null_phase;
 		DMC_WO->post = &phases[0];
 	}
+	DTACQ_MACH_ON_SET_MODE(CAPDEF);
 	DMC_WO->now = &phases[0];
 
 

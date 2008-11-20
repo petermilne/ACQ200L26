@@ -79,9 +79,11 @@ module_param(acq132_trigger_debug, int, 0664);
 #define ACQ_INTEN ACQ100_ICR_HOTEN
 #define DAC_INTEN ACQ100_ICR_DACEN
 
+static void acq132_mach_on_set_mode(struct CAPDEF* capdef);
 
 #define DTACQ_MACH_DRIVER_INIT(dev)
 #define DTACQ_MACH_DRIVER_REMOVE(dev)
+#define DTACQ_MACH_ON_SET_MODE(capdef) acq132_mach_on_set_mode(capdef)
 
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
@@ -107,7 +109,7 @@ static unsigned check_fifstat(
 /* returns 1 if trigger handled */
 /** @todo this needs refactoring with the ACQ216 version ! */
 {
-	int adc_ev = fifstat&ACQ196_FIFSTAT_ADC_EVX;
+	int adc_ev = fifstat&ACQ132_FIFSTAT_ADC_EV;
 
 	dbg(3, "F%08x %s %s", fifstat,
 	    adc_ev? "TR":"tr", wo->looking_for_pit? "LOOKING":"-");
@@ -121,16 +123,13 @@ static unsigned check_fifstat(
 			onEvent(wo, fifstat, offset);	/* (1) */
 		}
 
-		*FIFSTAT = ACQ196_FIFSTAT_ADC_EVX;	/* (2) */
+		*FIFSTAT = ACQ196_FIFSTAT_ADC_EV;	/* (2) */
 
 		if (wo->looking_for_pit){
 			dbg(2, "EVENT %08x at 0x%08x", fifstat, *offset);
 			wo->looking_for_pit = 0;
-			if (fifstat&ACQ196_FIFSTAT_ADC_EV0){
+			if (fifstat&ACQ132_FIFSTAT_ADC_EV){
 				DG->stats.event0_count++;
-			}
-			if (fifstat&ACQ196_FIFSTAT_ADC_EV1){
-				DG->stats.event1_count++;
 			}
 			return fifstat|DMC_EVENT_MARKER;
 		}
@@ -152,6 +151,8 @@ static unsigned check_fifstat(
 
 void acq200_reset_fifo(void)
 {
+	acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, ACQ132_ADC_CTRL_FIFORES);
+	acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET, ACQ132_ADC_CTRL_FIFORES);
 	acq196_fifcon_init_all(0);
 	acq196_fifcon_set_all(ACQ196_FIFCON_RESET_ALL);
 	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL);
@@ -290,9 +291,51 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 	);
 
 
+static int __rgm;
+
+int acq132_getRGM(void)
+{
+	return __rgm;
+}
+
+void acq32_setRGM(int enable)
+{
+	__rgm = enable != 0;
+}
 
 
+static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
+{
+	switch(capdef->mode){
+	case M_TRIGGERED_CONTINUOUS:
 
+		dbg(1, "M_TRIGGERED_CONTINUOUS");
+
+		deactivateSignal(capdef->gate_src);
+		activateSignal(capdef->ev[0]);
+		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
+			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);	
+		break;
+	default:	
+		dbg(1, "mode %d %s", capdef->mode, acq132_getRGM()?"RGM":"");
+
+		deactivateSignal(capdef->ev[0]);
+		if (acq132_getRGM()){
+			activateSignal(capdef->gate_src);
+			acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET,
+				ACQ132_ADC_CTRL_PREPOST);
+
+			acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET,
+				ACQ132_ADC_CTRL_SIGEN);	
+		}else{
+			deactivateSignal(capdef->gate_src);
+			acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET,
+				ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);
+
+		}
+		break;
+	}
+}
 
 
 static struct DevGlobs acq132_dg = {
@@ -547,7 +590,7 @@ static void enable_acq132_start(void)
 
 	DBGSF("set events");
 	signalCommit(CAPDEF->ev[0]);
-	signalCommit(CAPDEF->ev[1]);
+
 
 	DBGSF("FINAL:next enable FIFCON");
 	acq132_set_channel_mask(CAPDEF->channel_mask);
@@ -757,7 +800,6 @@ static void init_pbi(struct device *dev)
 	DG->fpga.fifo.va = (void*)(ACQ200_FPGA+ACQ196_FIFO_OFFSET);
 }
 
-
 static int _acq196_commitEvX(
 	struct Signal* signal, 
 	volatile u32* reg,
@@ -778,17 +820,6 @@ static int _acq196_commitEvX(
 	return 0;
 }
 
-
-static int acq196_commitEv0(struct Signal* signal)
-{
-	return _acq196_commitEvX(
-		signal, ACQ196_SYSCON_ADC, ACQ196_SYSCON_EV0_SHIFT);
-}
-static int acq196_commitEv1(struct Signal* signal)
-{
-	return _acq196_commitEvX(
-		signal, ACQ196_SYSCON_ADC, ACQ196_SYSCON_EV1_SHIFT);
-}
 static int acq196_commitTrg(struct Signal* signal)
 {
 	return _acq196_commitEvX(
@@ -939,10 +970,8 @@ static struct CAPDEF* acq132_createCapdef(void)
 	capdef_set_word_size(capdef, 2);
 
 	/* name, minDIx, maxDIx, DIx, rising, is_active, commit	*/
-	capdef->ev[0] = 
-		createSignal("event0", 0, 5, 3, 0, 0, acq196_commitEv0);
 	capdef->ev[1] = 
-		createSignal("event1", 0, 5, 3, 1, 0, acq196_commitEv1);
+		createSignal("event1", 0, 5, 3, 1, 0, 0);
 	capdef->trig  = 
 		createSignal("trig", 0, 5, 3, 0, 0, acq196_commitTrg);
 	
@@ -976,6 +1005,10 @@ static struct CAPDEF* acq132_createCapdef(void)
 
 	capdef->gate_src = 
 		createSignal("gate_src", 0, 7, 7, 0, 0, acq132_commitGateSrc);
+	/* warning: it's the same thing ... */
+	capdef->ev[0] = 
+		createSignal("event0", 0, 7, 3, 0, 0, acq132_commitGateSrc);
+
 	return capdef;
 }
 
@@ -1364,13 +1397,18 @@ void acq132_set_channel_mask(u32 channel_mask)
 		    mask << shl, dev, masks[dev]);
 	}	
 
+	acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET, 
+			   ACQ132_ADC_CTRL_CMASK|ACQ132_ADC_CTRL_ACQEN);
+
 	for (dev = BANK_A; dev <= BANK_D; ++dev){
 		if (masks[dev] != 0){			
-			masks[dev] |= ACQ132_ADC_CTRL_ACQEN;
-		}
-		dbg(1, "dev %d CTRL = %08x", dev, masks[dev]);
+			u32 rv = *ACQ132_ADC_CTRL(dev);
 
-		*ACQ132_ADC_CTRL(dev) = masks[dev];
+			dbg(1, "dev %d CTRL = %08x", dev, masks[dev]);
+			
+			rv |=  masks[dev] | ACQ132_ADC_CTRL_ACQEN;
+			*ACQ132_ADC_CTRL(dev) = rv;
+		}
 	}
 }
 

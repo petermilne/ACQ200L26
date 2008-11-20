@@ -41,12 +41,13 @@
 #define ACQ132_ADC_REGS(dev)		FPGA_REG((dev+1)*0x100)
 #define ACQ132_ADC_REG(dev, reg)	FPGA_REG((dev+1)*0x100 + (reg))
 
-#define ACQ132_ADC_TEST(dev)	ACQ132_ADC_REG(dev, 0x00)
-#define ACQ132_ADC_CTRL(dev)	ACQ132_ADC_REG(dev, 0x04)
-#define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x08)
-#define ACQ132_ADC_SHIFT(dev)	ACQ132_ADC_REG(dev, 0x10)
+#define ACQ132_ADC_CTRL_OFFSET	0x04
 
+#define ACQ132_ADC_TEST(dev)	ACQ132_ADC_REG(dev, 0x00)
+#define ACQ132_ADC_CTRL(dev)	ACQ132_ADC_REG(dev, ACQ132_ADC_CTRL_OFFSET)
+#define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x08)
 #define ACQ132_ADC_OSAM(dev)	ACQ132_ADC_REG(dev, 0x0c)
+#define ACQ132_ADC_FIFSTA(dev)	ACQ132_ADC_REG(dev, 0x10)
 
 #define BANK_A	0
 #define BANK_B  1
@@ -71,8 +72,12 @@
 /* obsoleted by rev 3 */
 #define ACQ132_SYSCON_RANGE_HI 0x00800000
 
-#define ACQ132_FIFSTAT_NE	0x00020000
-#define ACQ132_FIFSTAT_PULSEP	0x0001ff00
+
+#define ACQ132_FIFSTAT_ADC_EV	0x00400000	/* Event or Gate (RGM) */
+#define ACQ132_FIFSTAT_ADC_TRG  0x00200000	/* ADC system has triggered */
+ 
+#define ACQ132_FIFSTAT_GPG_NE	0x00020000
+#define ACQ132_FIFSTAT_GPG_PTR	0x0001ff00
 
 
 #define ACQ132_SFPGA_CONF_PROG		31
@@ -106,9 +111,20 @@
 
 #define ACQ132_SCAN_MAX	16	/* max elements in list */
 
+/* CTRL_CHMASK - shifts */
 #define ACQ132_ADC_CTRL_LMSHFT	20
 #define ACQ132_ADC_CTRL_RMSHFT  4
+
+#define ACQ132_ADC_CTRL_CMASK	0x00f000f0
+
+#define ACQ132_ADC_CTRL_FIFORES 0x00080008
+#define ACQ132_ADC_CTRL_PREPOST 0x00040004
+#define ACQ132_ADC_CTRL_SIGEN	0x00020002    /* EventSig (Timestamp) Enable) */
 #define ACQ132_ADC_CTRL_ACQEN	0x00010001
+
+
+
+
 
 #define ACQ132_ADC_RANGE_L4	0x00080000
 #define ACQ132_ADC_RANGE_L3	0x00040000
@@ -195,6 +211,29 @@ void acq132_set_adc_range(u32 channels);
 u32 acq132_get_adc_range(void);
 
 
+static inline void acq132_adc_set_all(int reg, u32 bits)
+{
+	int dev;
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		u32 rv = *ACQ132_ADC_REG(dev, reg);
+		rv |= bits;
+
+		*ACQ132_ADC_REG(dev, reg) = rv;
+	}
+}
+
+static inline void acq132_adc_clr_all(int reg, u32 bits)
+{
+	int dev;
+	u32 nbits = ~bits;
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		u32 rv = *ACQ132_ADC_REG(dev, reg);
+		rv &= nbits;
+		*ACQ132_ADC_REG(dev, reg) = rv;
+	}
+}
+
 static inline void sfpga_conf_clr_all(void) {
 	dbg(2, "01");
 	*ACQ132_SFPGA_CONF = 0;
@@ -260,9 +299,9 @@ static inline int sfpga_conf_done(void) {
 
 static inline int pulse_fifo_full(void)
 {
-	u32 ptr = *ACQ132_FIFSTAT & ACQ132_FIFSTAT_PULSEP;
+	u32 ptr = *ACQ132_FIFSTAT & ACQ132_FIFSTAT_GPG_PTR;
 
-	return !(ptr < ACQ132_FIFSTAT_PULSEP - 8);
+	return !(ptr < ACQ132_FIFSTAT_GPG_PTR - 8);
 }
 
 extern int acq132_sfpga_get_rev(void);
@@ -273,5 +312,10 @@ static inline int acq132_supports_channel_vrange_switch(void)
 
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
 void acq132_set_channel_mask(u32 channel_mask);
+
+
+int acq132_getRGM(void);
+void acq32_setRGM(int enable);
+
 #endif	/*  __ACQ132_H__ */
 
