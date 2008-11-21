@@ -16,19 +16,6 @@
         (COLD_FIFO_ENTRIES-COLD_FIFO_FULL_BLOCKS(fifcon)-1)
 
 
-static inline void disable_acq(void)
-{
-#ifdef ACQ216
-	*ACQ200_SYSCON &= ~(ACQ200_SYSCON_DAQEN|ACQ200_SYSCON_LOOPBACK);
-#endif
-}
-
-static inline void enable_acq(void)
-{
-#ifdef ACQ216
-	*ACQ200_SYSCON |= ACQ200_SYSCON_DAQEN;
-#endif
-}
 
 static inline void disable_fifo(void)
 {

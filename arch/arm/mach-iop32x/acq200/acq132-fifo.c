@@ -92,6 +92,36 @@ static int enable_soft_trigger(void);
 static int enable_hard_trigger(void);
 /* return 1 on success, -1 on error */
 
+void disable_acq(void) 
+{
+	int dev;
+	u32 ctrl;
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		ctrl = *ACQ132_ADC_CTRL(dev);
+		ctrl &= ~ACQ132_ADC_CTRL_ACQEN;
+		*ACQ132_ADC_CTRL(dev) = ctrl;
+	}
+	dbg(DISABLE_ACQ_DEBUG, "");
+	acq196_syscon_clr_all(ACQ196_SYSCON_ACQEN);
+}
+void enable_acq(void)
+{
+	int dev;
+	u32 ctrl;
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		ctrl = *ACQ132_ADC_CTRL(dev);
+		if (ctrl&ACQ132_ADC_CTRL_CMASK){
+			ctrl |= ACQ132_ADC_CTRL_ACQEN;
+		}
+		*ACQ132_ADC_CTRL(dev) = ctrl;
+	}
+	dbg(DISABLE_ACQ_DEBUG, "");
+	acq196_syscon_set_all(ACQ196_SYSCON_ACQEN);
+}
+
+
 #define DBGSF(s)							\
         if (acq132_trigger_debug)					\
 		dbg(1, "%4d S: 0x%08x FC: 0x%08x FX: 0x%08x %s",	\
@@ -123,14 +153,12 @@ static unsigned check_fifstat(
 			onEvent(wo, fifstat, offset);	/* (1) */
 		}
 
-		*FIFSTAT = ACQ196_FIFSTAT_ADC_EV;	/* (2) */
+		*FIFSTAT = ACQ132_FIFSTAT_ADC_EV;	/* (2) */
 
 		if (wo->looking_for_pit){
 			dbg(2, "EVENT %08x at 0x%08x", fifstat, *offset);
 			wo->looking_for_pit = 0;
-			if (fifstat&ACQ132_FIFSTAT_ADC_EV){
-				DG->stats.event0_count++;
-			}
+			DG->stats.event0_count++;
 			return fifstat|DMC_EVENT_MARKER;
 		}
 	}else{

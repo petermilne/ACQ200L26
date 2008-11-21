@@ -755,5 +755,16 @@ static void wav232_destroyCapdef(struct CAPDEF *capdef)
 #include "acq200-fifo-pcidev.c"
 
 
+void disable_acq(void)
+{
+
+}
+
+void enable_acq(void)
+{
+
+}
+
+
 EXPORT_SYMBOL_GPL(acq200_setIntClkHz);
 EXPORT_SYMBOL_GPL(acq200_setChannelMask);

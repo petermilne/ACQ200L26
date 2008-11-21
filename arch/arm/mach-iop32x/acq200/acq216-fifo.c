@@ -1663,3 +1663,14 @@ static void poll_dma_done(void)
 		poll_dma_done_maxpolls++;
 	}
 }
+
+void disable_acq(void)
+{
+	*ACQ200_SYSCON &= ~(ACQ200_SYSCON_DAQEN|ACQ200_SYSCON_LOOPBACK);
+}
+
+void enable_acq(void)
+{
+	*ACQ200_SYSCON |= ACQ200_SYSCON_DAQEN;
+}
+

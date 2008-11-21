@@ -3982,6 +3982,8 @@ unsigned acq200_getDI6(void) {
 	return *ACQ200_DIOCON&0x0ff;
 }
 
+EXPORT_SYMBOL_GPL(enable_acq);
+EXPORT_SYMBOL_GPL(disable_acq);
 EXPORT_SYMBOL_GPL(acq200_check_entire_es);
 EXPORT_SYMBOL_GPL(acq200_getDI6);
 EXPORT_SYMBOL_GPL(acq200_setDO6_bit);

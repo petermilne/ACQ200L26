@@ -1302,4 +1302,7 @@ extern int free_block_count(void);
 
 extern int acq200_fpga_open (struct inode *inode, struct file *file);
 extern int acq200_custom_fpga_open (struct inode *inode, struct file *file);
+
+extern void disable_acq(void);
+extern void enable_acq(void);
 #endif /* ACQ200_FIFO_H__ */

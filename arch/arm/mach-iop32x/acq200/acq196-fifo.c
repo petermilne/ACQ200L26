@@ -94,6 +94,18 @@ static int acq196_trigger_detect(void)
 	return (*SYSCON & ACQ196_SYSCON_TRIGGERED) != 0;
 }
 
+void disable_acq(void) 
+{
+	dbg(DISABLE_ACQ_DEBUG, "");
+	acq196_syscon_clr_all(ACQ196_SYSCON_ACQEN);
+}
+void enable_acq(void)
+{
+	dbg(DISABLE_ACQ_DEBUG, "");
+	acq196_syscon_set_all(ACQ196_SYSCON_ACQEN);
+}
+
+
 #define NOLOOK_FOR_PIT	-1
 
 static unsigned check_fifstat(

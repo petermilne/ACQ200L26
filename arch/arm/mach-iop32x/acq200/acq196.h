@@ -329,16 +329,8 @@ static inline u32 acq196_syscon_dac_clr(u32 flags){
 extern int disable_acq_debug;
 #define DISABLE_ACQ_DEBUG (!disable_acq_debug)
 
-static inline void disable_acq(void) 
-{
-	dbg(DISABLE_ACQ_DEBUG, "");
-	acq196_syscon_clr_all(ACQ196_SYSCON_ACQEN);
-}
-static inline void enable_acq(void)
-{
-	dbg(DISABLE_ACQ_DEBUG, "");
-	acq196_syscon_set_all(ACQ196_SYSCON_ACQEN);
-}
+extern void disable_acq(void);
+extern void enable_acq(void);
 
 static inline void soft_trig_all(void)
 {
