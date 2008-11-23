@@ -387,13 +387,13 @@ static int gather_block(
 	struct TblockListElement* tle, 
 	int nblock)
 {
-	DBG(1, "01 Phase %p nblock %d", phase, nblock);
+	DBG(1, "01 Phase \"%s\" %p nblock %d", phase->name, phase, nblock);
 
 	if (nblock == 0){
 		tle->phase_sample_start = 0;
 
 		if (TBLOCK_INDEX(phase->start_off) != tle->tblock->iblock){
-			DBG(1, "TBLOCK_INDEX(phase->start_off) %d != %d",
+			DBG(1, "98 TBLOCK_INDEX(phase->start_off) %d != %d",
 			    TBLOCK_INDEX(phase->start_off), 
 			    tle->tblock->iblock);
 			return 0;
@@ -401,7 +401,7 @@ static int gather_block(
 		
 		tle->tblock_sample_start = 
 			TBLOCK_OFFSET(phase->start_off)/sample_size();
-		DBG(1, "tbss set %d because phase->start_off is %d",
+		DBG(1, "02 tbss set %d because phase->start_off is %d",
 			tle->tblock_sample_start, phase->start_off);
 	}else{
 		TBLE* prev = TBLE_LIST_ENTRY(tle->list.prev);
@@ -416,12 +416,13 @@ static int gather_block(
 		min(phase_num_samples(phase)- tle->phase_sample_start,
 		    getTblockMaxSam() - tle->tblock_sample_start);
 
-	DBG(1, "sample_count %d = min( %d, %d )",
+	DBG(1, "97 sample_count %d = min( %d, %d )",
 	    tle->sample_count,
 	    phase_num_samples(phase)- tle->phase_sample_start,
 	    getTblockMaxSam() - tle->tblock_sample_start);
 
-	DBG(1, "p:%p nb:%2d %s", phase, nblock, tle2string(tle));
+	DBG(1, "99 \"%s\" p:%p nb:%2d %s", phase->name,		
+			phase, nblock, tle2string(tle));
 
 	return tle->sample_count;
 }
@@ -437,7 +438,10 @@ void acq200_phase_gather_tblocks(struct Phase* phase)
 	int ngather;
 
 	list_for_each_entry(tle, &phase->tblocks, list){
-		DBG(1, "entry [%2d] %s", tle->tblock->iblock, tle2string(tle));
+		DBG(1, "phase \"%s\" entry [%2d] %s", 
+			phase->name,
+			tle->tblock->iblock, tle2string(tle));
+
 		ngather = gather_block(phase, tle, nb);
 		if (ngather){
 			phase->actual_samples += ngather;

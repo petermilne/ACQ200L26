@@ -478,7 +478,7 @@ static ssize_t show_scanlist(
 	char * buf)
 {
 	u32 scan_def = *ACQ132_SCAN_LIST_DEF;
-	int nscan = *ACQ132_SCAN_LIST_LEN + 1;
+	int nscan = acq132_getScanlistLen();
 	int iscan;
 
 	for (iscan = 0; iscan < nscan; ++iscan){
@@ -518,7 +518,7 @@ static ssize_t store_scanlist(
 	}
 	if (ok){
 		*ACQ132_SCAN_LIST_DEF = scan_def;
-		*ACQ132_SCAN_LIST_LEN = iscan - 1;
+		acq132_setScanlistLen(iscan);
 		return strlen(buf);
 	}else{
 		return -EINVAL;

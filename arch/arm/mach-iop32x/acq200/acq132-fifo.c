@@ -53,6 +53,16 @@ module_param(int_clk_calcmode, int, 0664);
 int stub_transform;
 module_param(stub_transform, int, 0664);
 
+int stub_event_adjust = -1;
+module_param(stub_event_adjust, int, 0600);
+
+/* event_adjust_delta_blocks = 1; // the one true value that works */
+int event_adjust_delta_blocks = 1;
+module_param(event_adjust_delta_blocks, int, 0600);
+
+int mark_event_data = 0;
+module_param(mark_event_data, int, 0600);
+
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
@@ -91,6 +101,26 @@ static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 static int enable_soft_trigger(void);
 static int enable_hard_trigger(void);
 /* return 1 on success, -1 on error */
+
+
+/*
+ * acq132 data is presented as 8-sample rows, in ROW_SAM blocks
+ *
+ * for block in BLOCKS
+ *	for row in { A B C D }
+ *		for ROW_SAM
+ *			acq132_transform_row(to+ROW_OFF(row), from)
+ *			update from
+ *		update to
+ *
+ */
+#define ROW_SAM		128
+#define ROW_CHAN	8
+#define ROW_WORDS	(ROW_SAM*ROW_CHAN)
+#define ROW_BLOCK_OFF   (ROW_SAM*BLOCKSAM)	 // words in row-block
+
+
+
 
 void disable_acq(void) 
 {
@@ -553,6 +583,20 @@ static struct file_operations acq132_gate_pulse_ops = {
 	.release = acq132_gate_pulse_release,
 	.write = acq132_gate_pulse_write
 };
+
+static void acq132_event_adjust(
+	struct Phase *phase, unsigned isearch, 
+	unsigned* first, unsigned* last);
+
+#undef DTACQ_MACH_EVENT_ADJUST						
+#define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last)		\
+	dbg(1, "DTACQ_MACH_EVENT_ADJUST: isearch 0x%08x modulo 1024 %d %s %d", \
+		isearch, (isearch/sizeof(short))%ROW_WORDS,		\
+	    stub_event_adjust >0? "STUB": "adjust",			\
+		stub_event_adjust);					\
+	if (stub_event_adjust <= 0){					\
+	        acq132_event_adjust(phase, isearch, first, last);	\
+	}
 
 
 #define ACQ200_CUSTOM_FPGA_OPEN
@@ -1063,25 +1107,7 @@ extern int init_arbiter(void);
 
 
 
-/*
- * acq132 data is presented as 8-sample rows, in ROW_SAM blocks
- *
- * for block in BLOCKS
- *	for row in { A B C D }
- *		for ROW_SAM
- *			acq132_transform_row(to+ROW_OFF(row), from)
- *			update from
- *		update to
- *
- */
-#define ROW_SAM		128
-#define ROW_CHAN	8
-#define ROW_WORDS	(ROW_SAM*ROW_CHAN)
-#define ROW_BLOCK_OFF   (ROW_SAM*BLOCKSAM)	 // words in row-block
-
 #define DEBUGGING
-
-
 #ifdef DEBUGGING
 short* to1;
 short* to2;
@@ -1359,6 +1385,25 @@ static void global_set_adc_range(u32 channels)
 	}
 }
 
+static void acq132_setDefaultScanlist(u32 masks[])
+{
+	int dev;
+	u32 scanlist = 0;
+	int scanlen = 0;
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		if (masks[dev] != 0){			
+			scanlist <<= 2;
+			scanlist |= (dev-BANK_A);
+			++scanlen;
+		}
+	}
+
+	*ACQ132_SCAN_LIST_DEF = scanlist;
+	acq132_setScanlistLen(scanlen);
+}
+
+
 static const struct ADC_CHANNEL_LUT {
 	int dev;
 	int side;
@@ -1438,6 +1483,9 @@ void acq132_set_channel_mask(u32 channel_mask)
 			*ACQ132_ADC_CTRL(dev) = rv;
 		}
 	}
+
+	/* set scanlist ... users may override afterwards ... */
+	acq132_setDefaultScanlist(masks);	      
 }
 
 static u32 adc_range_def;
@@ -1488,6 +1536,43 @@ u32 acq132_get_adc_range(void)
 		return global_get_adc_range();
 	}	
 }
+
+
+static void acq132_event_adjust(
+	struct Phase *phase, unsigned isearch, 
+	unsigned* first, unsigned* last)
+/* acq132 data is in N blocks.
+ * so the ES is N* bigger than detected... move out last to 
+ * represent this
+ */
+{
+	int nblocks = acq132_getScanlistLen();
+	int eslen = *last - *first;
+	int newlast = *last + eslen/2 * (2*nblocks + event_adjust_delta_blocks);
+
+	if (mark_event_data){
+		memset(BB_PTR(*first-sample_size()), 0xfe, 8*sizeof(short));
+		memset(BB_PTR(*last), 0xde, 8*sizeof(short));
+	}
+	dbg(1, "nblocks:%d first,last: 0x%08x,0x%08x => 0x%08x,0x%08x",
+	    nblocks, *first, *last, *first, newlast);
+
+	*last = newlast;
+
+	if (stub_event_adjust < 0){
+/* here be empirical black magic. TODO: find theory that fits facts */
+/* also, this is probably only valid in 32 ch case.. */
+		int modulo = (isearch/sizeof(short))%ROW_WORDS;
+		int deltasam = 3*modulo/8 - 3;
+
+		*first += deltasam * sample_size();
+		*last += deltasam * sample_size();;
+
+		dbg(1, "deltasam %d => 0x%08x,0x%08x", deltasam, *first, *last);
+	}	
+}
+
+
 module_init(acq132_fifo_init);
 module_exit(acq132_fifo_exit_module);
 

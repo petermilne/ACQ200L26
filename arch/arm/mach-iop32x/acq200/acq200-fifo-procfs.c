@@ -2008,6 +2008,7 @@ static ssize_t store_finalize_phases(
 	unsigned start_sample = 0;
 	struct Phase* phase;
 
+	dbg(1, "list1");
 	list_for_each_entry(phase, &DMC_WO->phases, list){
 #if 0
 		dbg(1, "phase_len %d required %d %s",
@@ -2022,6 +2023,7 @@ static ssize_t store_finalize_phases(
 #endif
 	}	
 
+	dbg(1, "list2");
 	list_for_each_entry(phase, &DMC_WO->phases, list){
 
 		dbg(1, "phase \"%s\" %p start %d len %d",
@@ -2032,8 +2034,9 @@ static ssize_t store_finalize_phases(
 			phase->start_sample = start_sample;
 			start_sample += phase->actual_samples;
 
-			dbg(1, "phase %p start %d actual %d",
-			    phase, phase->start_sample, phase->actual_samples);
+			dbg(1, "phase \"%s\" %p start %d actual %d",
+			    phase->name, phase, 
+			    phase->start_sample, phase->actual_samples);
 		}
 	}
 
