@@ -117,8 +117,8 @@ static int enable_hard_trigger(void);
 #define ROW_SAM		128
 #define ROW_CHAN	8
 #define ROW_WORDS	(ROW_SAM*ROW_CHAN)
-#define ROW_BLOCK_OFF   (ROW_SAM*BLOCKSAM)	 // words in row-block
-
+#define ROW_SIZE	(ROW_WORDS*sizeof(short))
+#define ROW_LONGS	(ROW_SIZE/USS)
 
 
 
@@ -217,14 +217,14 @@ void acq200_reset_fifo(void)
 	*FIFSTAT = *FIFSTAT;
 }
 
-#define GMC_ROOLS_OK     /* error in hw spec - clkdiv out by one */
+//#define GMC_ROOLS_OK     /* error in hw spec - clkdiv out by one */
 #ifdef GMC_ROOLS_OK
 #define CLKDIV_OFFSET 0  /* observed by GMC */
 #else
 #define CLKDIV_OFFSET 1  /* fpga spec */
 #endif
 
-static void _setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
+static void __setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
 {
 #define MAXDIV    0x0000fffe
 	if ( clkdiv > MAXDIV ) clkdiv = MAXDIV;
@@ -263,7 +263,7 @@ static struct IntClkConsts {
 #define MAXSEL 1
 
 
-void acq200_setIntClkHz( int hz )
+static void _setIntClkHz( int hz )
 {
 	int actual[2];
 	int isel;
@@ -273,41 +273,119 @@ void acq200_setIntClkHz( int hz )
 	int delta;
 	int maxsel = MAXSEL;
 
-	if ( hz == 0 ){
-		signalCommit(CAPDEF->ext_clk);
-	}else{
-		if ( hz < 1 ){
-			hz = 1;
-		}else if ( hz > MASTERCLK/2 ){
-			hz = MASTERCLK/2;
-		}
 
-		for (isel = 0; isel != maxsel; ++isel){
-			clkdiv = intclk[isel].masterclk/hz + 1;
-			actual[isel] = intclk[isel].masterclk/(clkdiv-1);
+	if ( hz < 1 ){
+		hz = 1;
+	}else if ( hz > MASTERCLK/2 ){
+		hz = MASTERCLK/2;
+	}
+
+	for (isel = 0; isel != maxsel; ++isel){
+		clkdiv = intclk[isel].masterclk/hz + 1;
+		actual[isel] = intclk[isel].masterclk/(clkdiv-1);
 /*
  * bias to nearest clk BELOW
  */
-			if (actual[isel] > hz){
-				clkdiv += 1;
-				actual[isel] = 
-					intclk[isel].masterclk/(clkdiv-1);
-			}
-			delta = abs(hz - actual[isel]);
-			if (delta < deltamin ){
-				deltamin = delta;
-				imin = isel;
-			}
+		if (actual[isel] > hz){
+			clkdiv += 1;
+			actual[isel] = 
+				intclk[isel].masterclk/(clkdiv-1);
 		}
-
-		dbg(1, "set:%d clkdiv:%d actual:%d", hz, clkdiv, actual[0]);	
-
-		_setIntClkHz(clkdiv, 
-			     intclk[imin].masterclk, intclk[imin].clksel,
-			     hz);
+		delta = abs(hz - actual[isel]);
+		if (delta < deltamin ){
+			deltamin = delta;
+			imin = isel;
+		}
 	}
+
+	dbg(1, "set:%d clkdiv:%d actual:%d", hz, clkdiv, actual[0]);	
+
+	__setIntClkHz(clkdiv, 
+		      intclk[imin].masterclk, intclk[imin].clksel,
+		      hz);
 }
 
+static void acq132_setAllDecimate(int dec)
+{
+#define DECIM	1
+	int block;
+
+	if (dec < 1) dec = 1;
+	if (dec > 16) dec = 16;
+
+	dbg(1, "setting decimation to %d", dec);
+
+	for (block = 0; block <= 3; ++block){
+		ACQ132_SET_OSAM_X_NACC(block, OSAMLR('L'), dec, -2, DECIM);
+		ACQ132_SET_OSAM_X_NACC(block, OSAMLR('R'), dec, -2, DECIM);
+	}
+}	
+#define BEST_ICSINPUT_KHZ 20000
+
+// ./ob_calc_527 --fin 20000  32000
+static int _set_ob_clock(int khz)
+/* set ICS527 clock */
+{
+	static char* envp[] = {
+		"HOME=/",
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+		0
+	};
+
+	static char fout_def[20];
+	static char fin_def[20];
+	static char *argv[6];
+	int ii;
+	int decim = khz < 4000? 4: 1;	/* ics min f = 4MHz */
+
+	sprintf(fin_def, "%d", acq200_clk_hz/1000);
+
+	acq132_setAllDecimate(decim);		
+	khz *= decim;
+
+	sprintf(fout_def, "%d", khz);
+
+        ii = 0;
+        argv[ii++] = "/usr/local/bin/ob_calc_527";
+	argv[ii++] = "--fin";
+	argv[ii++] = fin_def;	
+        argv[ii++] = fout_def;
+        argv[ii] = 0;
+
+	dbg( 1, "call_usermodehelper %s %s %s %s\n", 
+	     argv[0], argv[1], argv[2], argv[3] );
+
+	ii = call_usermodehelper(argv [0], argv, envp, 0);
+
+	if (ii == 0){
+		acq200_clk_hz = ob_clock_def.actual/decim;
+		dbg(1, "success: acq200_clk_hz = %d", acq200_clk_hz);
+	}else{
+	        err("call done returned %d", ii );
+	}
+	return ii;
+}
+
+
+static int set_ob_clock(int hz)
+/* returns 0 = OK */
+{	
+	if (hz < 1000000){
+		return -1;
+	}
+	_setIntClkHz(BEST_ICSINPUT_KHZ);
+	return _set_ob_clock(hz/1000);
+}
+void acq200_setIntClkHz( int hz )
+{
+	if ( hz == 0 ){
+		signalCommit(CAPDEF->ext_clk);
+	}else if (DG->use_ob_clock && set_ob_clock(hz) == 0){
+		;
+	}else{
+		_setIntClkHz(hz);
+	}
+}
 static int fifo_read_init_action(void);
 
 
@@ -356,7 +434,7 @@ int acq132_getRGM(void)
 	return __rgm;
 }
 
-void acq32_setRGM(int enable)
+void acq132_setRGM(int enable)
 {
 	__rgm = enable != 0;
 }
@@ -1538,6 +1616,38 @@ u32 acq132_get_adc_range(void)
 }
 
 
+static void check_first_row(unsigned* first, unsigned* last)
+{
+	unsigned *searchp = (unsigned*)va_buf(DG);
+	int ifirst = *first / USS;
+	int nblocks = acq132_getScanlistLen();
+	int block;
+
+	if (TBLOCK_OFFSET(*first) > ROW_SIZE){
+		if (IS_EVENT_MAGIC(searchp[ifirst - ROW_SIZE/USS])){
+			err("previous MAGIC at 0x%08x", ifirst - ROW_LONGS);
+		}else{
+			dbg(1, "no previous MAGIC (good)");
+		}
+	}else{
+		dbg(1, "too close to tblock start, can't look back");
+	}
+
+	for (block = 1; block < nblocks; ++block){
+		if (TBLOCK_OFFSET(*first) + block*ROW_SIZE < TBLOCK_LEN){
+			if (IS_EVENT_MAGIC(searchp[ifirst + block*ROW_LONGS])){
+				dbg(1, "got a magic going forward %d [Good]", 
+				    block);
+			}else{
+				err( "no MAGIC going forward %d", block);
+			}
+		}else{
+				dbg(1, "too close to tblock end, can't look");
+		}
+	}	
+}
+
+
 static void acq132_event_adjust(
 	struct Phase *phase, unsigned isearch, 
 	unsigned* first, unsigned* last)
@@ -1548,7 +1658,13 @@ static void acq132_event_adjust(
 {
 	int nblocks = acq132_getScanlistLen();
 	int eslen = *last - *first;
-	int newlast = *last + eslen/2 * (2*nblocks + event_adjust_delta_blocks);
+	int newlast = *last + eslen * (nblocks-1 + event_adjust_delta_blocks);
+
+	
+	dbg(1, "eslen %d nblocks %d event_adjust_delta_blocks %d",
+	    eslen, nblocks, event_adjust_delta_blocks);
+
+	check_first_row(first, last);
 
 	if (mark_event_data){
 		memset(BB_PTR(*first-sample_size()), 0xfe, 8*sizeof(short));
@@ -1557,9 +1673,12 @@ static void acq132_event_adjust(
 	dbg(1, "nblocks:%d first,last: 0x%08x,0x%08x => 0x%08x,0x%08x",
 	    nblocks, *first, *last, *first, newlast);
 
-	*last = newlast;
-
 	if (stub_event_adjust < 0){
+		dbg(1, "updating last");
+		*last = newlast;
+	}
+
+	if (stub_event_adjust < -1){
 /* here be empirical black magic. TODO: find theory that fits facts */
 /* also, this is probably only valid in 32 ch case.. */
 		int modulo = (isearch/sizeof(short))%ROW_WORDS;

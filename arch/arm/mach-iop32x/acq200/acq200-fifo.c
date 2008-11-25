@@ -2498,11 +2498,12 @@ static struct PhaseDiagBuf {
 
 
 static unsigned ES_DIAG_BUFFER[PAGE_SIZE/sizeof(unsigned)];
+#define DIAG_BASE min(ES_LONGS, SAMPLE_LONGS)
 
 int acq200_getES_DIAG(void* buf, int max_buf)
 {  
 	if (pdb.found){
-		int ndiag = 3*ES_LONGS*sizeof(long);
+		int ndiag = 3*DIAG_BASE*sizeof(long);
 		assert(ndiag <= sizeof(ES_DIAG_BUFFER));
 
 		max_buf = min(max_buf, ndiag);    
@@ -2600,7 +2601,7 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 /*
  * identify event start, and fast forward to it
  */
-	for (isL = istart; isL < max_search; isL += SAMPLE_LONGS){
+	for (isL = istart; isL < max_search; isL += ES_LONGS){
 
 		dbg((INTERESTING? 1: 2),
 			"%4d:off %08x max %08x d:%08x %s",
@@ -2628,8 +2629,8 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 				}
 			}
 			{
-				unsigned ileft = max(isL-ES_LONGS, 0U);
-				int ndiag = 3*ES_LONGS*sizeof(long);
+				unsigned ileft = max(isL-DIAG_BASE, 0U);
+				int ndiag = 3*DIAG_BASE*sizeof(long);
 				assert(ndiag <= sizeof(ES_DIAG_BUFFER));
 			
 				memcpy(ES_DIAG_BUFFER, searchp+ileft, ndiag);

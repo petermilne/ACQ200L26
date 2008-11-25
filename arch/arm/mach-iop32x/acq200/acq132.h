@@ -203,6 +203,7 @@ static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
 	    ACQ132_ADC_OSAM(dev), osam, *ACQ132_ADC_OSAM(dev));		\
 } while(0)
 
+#define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
 
 /* @todo one bit, all bits. multiple settings todo */
 void acq132_set_adc_range(u32 channels);
@@ -324,7 +325,17 @@ void acq132_set_channel_mask(u32 channel_mask);
 
 
 int acq132_getRGM(void);
-void acq32_setRGM(int enable);
+void acq132_setRGM(int enable);
 
+struct OB_CLOCK_DEF {
+	int demand;
+	int actual;
+	int FDW;
+	int RDW;
+	int R;
+	int Sx;
+};
+
+extern struct OB_CLOCK_DEF ob_clock_def;
 #endif	/*  __ACQ132_H__ */
 

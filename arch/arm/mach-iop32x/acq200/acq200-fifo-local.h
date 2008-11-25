@@ -102,7 +102,7 @@ extern int acq200_lookup_pchan(int lchannel);
 #define EVENT_MAGIC      0xaa55aa55
 #define EVENT_MAGIC_MASK 0x00000000
 
-#define ES_SIZE  (64*sizeof(short))
+#define ES_SIZE  (8*sizeof(short))
 #define EVENT_MAGIC_EXEMPT(ipair) ((ipair&1) == 1)
 #else
 /* ACQ196 event appears to be 0xaa55fBxx B {123} */

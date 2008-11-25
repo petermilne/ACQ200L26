@@ -116,15 +116,8 @@ static ssize_t show_adc_range(
 static DEVICE_ATTR(ADC_RANGE, S_IRUGO|S_IWUGO, show_adc_range, store_adc_range);
 
 
+struct OB_CLOCK_DEF ob_clock_def;
 
-static struct OB_CLOCK_DEF {
-	int demand;
-	int actual;
-	int FDW;
-	int RDW;
-	int R;
-	int Sx;
-} ob_clock_def;
 
 static ssize_t store_ob_clock(
 	struct device *dev,
@@ -348,7 +341,7 @@ static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
 
 
-#define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
+
 
 static int belongs(int key, const int lut[], int nlut)
 {
@@ -749,7 +742,7 @@ static ssize_t store_RGM(
 	unsigned mode;
 
 	if (sscanf(buf, "%u", &mode) > 0){
-		acq132_setRGM(mode != 0);
+		acq132_setRGM(mode);
 		return count;
 	}else{
 		return -EPERM;
@@ -780,7 +773,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ADC_RANGE);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
-
+	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
 }
 
 #define MASK_D	0x000f000f
