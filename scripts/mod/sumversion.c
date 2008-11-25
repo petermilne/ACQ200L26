@@ -9,6 +9,8 @@
 #include <string.h>
 #include "modpost.h"
 
+#define PATH_MAX	4096
+
 /*
  * Stolen form Cryptographic API.
  *

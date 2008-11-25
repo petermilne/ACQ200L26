@@ -217,7 +217,7 @@ void acq200_reset_fifo(void)
 	*FIFSTAT = *FIFSTAT;
 }
 
-//#define GMC_ROOLS_OK     /* error in hw spec - clkdiv out by one */
+#define GMC_ROOLS_OK     /* error in hw spec - clkdiv out by one */
 #ifdef GMC_ROOLS_OK
 #define CLKDIV_OFFSET 0  /* observed by GMC */
 #else
@@ -282,14 +282,14 @@ static void _setIntClkHz( int hz )
 
 	for (isel = 0; isel != maxsel; ++isel){
 		clkdiv = intclk[isel].masterclk/hz + 1;
-		actual[isel] = intclk[isel].masterclk/(clkdiv-1);
+		actual[isel] = intclk[isel].masterclk/(clkdiv-CLKDIV_OFFSET);
 /*
  * bias to nearest clk BELOW
  */
 		if (actual[isel] > hz){
 			clkdiv += 1;
 			actual[isel] = 
-				intclk[isel].masterclk/(clkdiv-1);
+				intclk[isel].masterclk/(clkdiv-CLKDIV_OFFSET);
 		}
 		delta = abs(hz - actual[isel]);
 		if (delta < deltamin ){
@@ -320,7 +320,7 @@ static void acq132_setAllDecimate(int dec)
 		ACQ132_SET_OSAM_X_NACC(block, OSAMLR('R'), dec, -2, DECIM);
 	}
 }	
-#define BEST_ICSINPUT_KHZ 20000
+#define BEST_ICSINPUT_HZ 20000000
 
 // ./ob_calc_527 --fin 20000  32000
 static int _set_ob_clock(int khz)
@@ -358,7 +358,7 @@ static int _set_ob_clock(int khz)
 	ii = call_usermodehelper(argv [0], argv, envp, 0);
 
 	if (ii == 0){
-		acq200_clk_hz = ob_clock_def.actual/decim;
+		acq200_clk_hz = ob_clock_def.actual/decim * 1000;
 		dbg(1, "success: acq200_clk_hz = %d", acq200_clk_hz);
 	}else{
 	        err("call done returned %d", ii );
@@ -373,7 +373,7 @@ static int set_ob_clock(int hz)
 	if (hz < 1000000){
 		return -1;
 	}
-	_setIntClkHz(BEST_ICSINPUT_KHZ);
+	_setIntClkHz(BEST_ICSINPUT_HZ);
 	return _set_ob_clock(hz/1000);
 }
 void acq200_setIntClkHz( int hz )
