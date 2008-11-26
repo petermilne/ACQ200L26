@@ -55,7 +55,8 @@
 int rtm_debug;
 module_param(rtm_debug, int, 0664);
 
-
+int pulse_top_usec;
+module_param(pulse_top_usec, int, 0600);
 
 
 char acq100_rtm_driver_string[] = "D-TACQ RTM driver";
@@ -71,6 +72,7 @@ extern void acq200_setDO6_bit(int ibit, int value);
 
 #define SET_SYNC_ON  acq200_setDO6_bit(SYNC, 1)
 #define SET_SYNC_OFF acq200_setDO6_bit(SYNC, 0)
+
 
 static ssize_t store_dio(
 	struct device * dev, 
@@ -90,11 +92,13 @@ static ssize_t store_dio(
 		case DIO_MASK_OUTPUT_PP:
 			DIO_SET_OUTPUT0(ibit); set_outputs();
 			DIO_SET_OUTPUT1(ibit); set_outputs();
+			udelay(pulse_top_usec);
 			DIO_SET_OUTPUT0(ibit);
 			break;
 		case DIO_MASK_OUTPUT_NP:
 			DIO_SET_OUTPUT1(ibit); set_outputs();
 			DIO_SET_OUTPUT0(ibit); set_outputs();
+			udelay(pulse_top_usec);
 			DIO_SET_OUTPUT1(ibit);
 			break;
 		case DIO_MASK_INPUT:
