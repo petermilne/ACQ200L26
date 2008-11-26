@@ -668,6 +668,8 @@ struct Signal {
 	int _minDIx, _maxDIx;
 	int has_internal_option;
 	int is_output;
+	const char *key_hi;
+	const char *key_lo;
 
 	int (*commit)(struct Signal* signal);
 };
@@ -686,6 +688,12 @@ struct Signal* createSignal(
  * name, minDIx, maxDIx, DIx, rising, is_active, commit
  */
 
+struct Signal* createLevelSignal(
+	const char* name, 
+	int minDIx, int maxDIx,
+	int DIx, int rising, int is_active,
+	int (*commit)(struct Signal* signal)
+);
 
 void destroySignal(struct Signal* signal);
 #define SIGNAL_SZ (sizeof(struct Signal))
@@ -1305,4 +1313,6 @@ extern int acq200_custom_fpga_open (struct inode *inode, struct file *file);
 
 extern void disable_acq(void);
 extern void enable_acq(void);
+
+#define NOLOOK_FOR_PIT	-1
 #endif /* ACQ200_FIFO_H__ */

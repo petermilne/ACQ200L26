@@ -45,7 +45,7 @@
 #include "acq196-offset.h"
 
 #define INT_CLK_CALC_ROUNDING 0x80
-
+#define BEST_ICSINPUT_HZ 20000000
 
 int int_clk_calcmode;
 module_param(int_clk_calcmode, int, 0664);
@@ -68,6 +68,12 @@ module_param(acq132_transform_debug, int, 0664);
 
 int acq132_trigger_debug = 0;
 module_param(acq132_trigger_debug, int, 0664);
+
+int obclock_input_rate = BEST_ICSINPUT_HZ;
+module_param(obclock_input_rate, int, 0600);
+
+int rgm_with_es = 1;
+module_param(rgm_with_es, int, 0600);
 
 #define TBG if (acq132_transform_debug) dbg
 
@@ -174,7 +180,9 @@ static unsigned check_fifstat(
 	dbg(3, "F%08x %s %s", fifstat,
 	    adc_ev? "TR":"tr", wo->looking_for_pit? "LOOKING":"-");
 
-	if (adc_ev){
+	if (wo->looking_for_pit == NOLOOK_FOR_PIT){
+		return 0;
+	}else if (adc_ev){
 		/* avoid race condition by allowing onEvent to possibly
                  * clear down the event enable (1) BEFORE ACK event (2)
                  */
@@ -320,7 +328,7 @@ static void acq132_setAllDecimate(int dec)
 		ACQ132_SET_OSAM_X_NACC(block, OSAMLR('R'), dec, -2, DECIM);
 	}
 }	
-#define BEST_ICSINPUT_HZ 20000000
+
 
 // ./ob_calc_527 --fin 20000  32000
 static int _set_ob_clock(int khz)
@@ -373,7 +381,7 @@ static int set_ob_clock(int hz)
 	if (hz < 1000000){
 		return -1;
 	}
-	_setIntClkHz(BEST_ICSINPUT_HZ);
+	_setIntClkHz(obclock_input_rate);
 	return _set_ob_clock(hz/1000);
 }
 void acq200_setIntClkHz( int hz )
@@ -457,12 +465,15 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 
 		deactivateSignal(capdef->ev[0]);
 		if (acq132_getRGM()){
+			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
 			activateSignal(capdef->gate_src);
 			acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET,
-				ACQ132_ADC_CTRL_PREPOST);
+				ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);
 
-			acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET,
-				ACQ132_ADC_CTRL_SIGEN);	
+			if (rgm_with_es){
+				acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET,
+					ACQ132_ADC_CTRL_SIGEN);	
+			}
 		}else{
 			deactivateSignal(capdef->gate_src);
 			acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET,
@@ -484,7 +495,8 @@ static struct DevGlobs acq132_dg = {
 	.bigbuf.tblocks.blocklen = TBLOCK_LEN,
 	.bigbuf.tblocks.blt = blt_memcpy,
 	.enable_from_eoc_isr = 1,
-	.bh_unmasks_eoc = 0,
+	.bh_unmasks_eoc = 0,		   /* TODO: appears to have no effect */
+	.use_ob_clock = 1,
 	.is_oneshot = 1,
 	.use_fiq = 1,
 	.pit_store.max_pits = 2000,
@@ -966,6 +978,8 @@ static int _acq196_commitEvX(
 		syscon |= ((rising | acq196_lineCode(signal->DIx)) << shift);
 	}	
 
+	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
+
 	*reg = syscon;	
 	return 0;
 }
@@ -1100,6 +1114,7 @@ static int acq132_commitGateSrc(struct Signal* signal)
 		syscon |= signal->DIx << ACQ132_SYSCON_GATE_SHL;
 	}
 
+	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
 	*ACQ132_SYSCON = syscon;
 	return 0;
 }
@@ -1153,11 +1168,11 @@ static struct CAPDEF* acq132_createCapdef(void)
 	/** @todo how to action? */
 	capdef->counter_src->has_internal_option = 1;
 
-	capdef->gate_src = 
-		createSignal("gate_src", 0, 7, 7, 0, 0, acq132_commitGateSrc);
+	capdef->gate_src = createLevelSignal(
+		"gate_src", 0, 7, 7, 0, 0, acq132_commitGateSrc);
 	/* warning: it's the same thing ... */
-	capdef->ev[0] = 
-		createSignal("event0", 0, 7, 3, 0, 0, acq132_commitGateSrc);
+	capdef->ev[0] = createSignal(
+		"event0", 0, 7, 3, 0, 0, acq132_commitGateSrc);
 
 	return capdef;
 }

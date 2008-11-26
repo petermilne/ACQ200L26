@@ -89,7 +89,8 @@ static ssize_t show_signal(
 /* frig DIx for case of phys bits already set (ob_clk_src) gimme C++ */
 			       signal->DIx <= 16? signal->DIx: 16,
 			       signal->is_output? "":
-			               signal->rising? "rising": "falling",
+			               signal->rising? 
+						signal->key_hi: signal->key_lo,
 			       signal->is_active? "ACTIVE":"inactive");
 	}
 }
@@ -143,11 +144,11 @@ static ssize_t store_signal(
 		  OKL((signal->is_output == 1 && io == 'O') || 
 		      (signal->is_output == 0 && io == 'I')   ) ){
 
-		if ((nc == 3 || OKL(strcmp(edge, "falling") == 0)) &&
+		if ((nc == 3 || OKL(strcmp(edge, signal->key_lo) == 0)) &&
 		     OKL(setSignal(signal, xx, 0) == 0)                ){
 			activateSignal(signal);
 			OKOK;
-		}else if (OKL(strcmp(edge, "rising") == 0)  &&
+		}else if (OKL(strcmp(edge, signal->key_hi) == 0)  &&
   		    OKL(setSignal(signal, xx, 1) == 0)   ){
 			activateSignal(signal);
 			OKOK;
@@ -1012,6 +1013,11 @@ static inline int DIO_IS_INPUTH(unsigned cc, int ib)
 
 /** @@todo this is a hack to circumvent duff dio readback */
 static u32 control_mirror;
+static inline void acq200_setDiocon(u32 diocon)
+{
+	*ACQ200_DIOCON = control_mirror = diocon;
+}
+
 
 static char last_store[32];
 
@@ -1057,8 +1063,7 @@ static ssize_t store_dio_bit(
 			}
 			strncpy(last_store, buf, sizeof(last_store)-1);
 		write_reg:
-			*ACQ200_DIOCON = control;
-			control_mirror = control;
+			acq200_setDiocon(control);
 		}
 	}
 
@@ -1098,7 +1103,7 @@ static ssize_t store_dio(
 			control = DIO_SET_INPUT(control, ibit);
 		}
 	}
-	*ACQ200_DIOCON = control_mirror = control;
+	acq200_setDiocon(control);
         return strlen(buf);
 }
 
@@ -1183,14 +1188,14 @@ static ssize_t poll_dio(
 	unsigned control = *ACQ200_DIOCON;
 
 	for (ibit = 0; ibit != MAXDIOBIT; ++ibit){
-		if (DIO_IS_OUTPUT(control, ibit)){
+		if (DIO_IS_INPUTH(toggling, ibit)){
+			/* priority: even if output, it could be toggling */
+			buf[ibit] = DIO_MASK_INPUT_TOGGLE;
+		}else if (DIO_IS_OUTPUT(control, ibit)){
 			buf[ibit] = DIO_IS_OUTPUT1(control, ibit)?
 				DIO_MASK_OUTPUT1: DIO_MASK_OUTPUT0;
 		}else{
-			buf[ibit] = 
-				DIO_IS_INPUTH(toggling, ibit)?
-				DIO_MASK_INPUT_TOGGLE:
-			        DIO_IS_INPUTH(control, ibit)?
+			buf[ibit] = DIO_IS_INPUTH(control, ibit)?
 				DIO_MASK_INPUT1: DIO_MASK_INPUT0;
 		} 
 	}

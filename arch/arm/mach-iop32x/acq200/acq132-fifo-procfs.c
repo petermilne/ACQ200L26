@@ -542,15 +542,21 @@ static ssize_t store_gpg_mas(
 	struct device * dev, 
 	struct device_attribute *attr,
 	const char * buf, size_t count)
+/* set mas bit to be output as well. NB - doesn't set input if omitted! */
 {
+	
+	unsigned diocon = *ACQ200_DIOCON;
 	u32 syscon = *ACQ132_SYSCON;
-	char w[4][8];
+	char w[4][16] = {};
 	int nw;
 	int iw;
+	int ibit;
+	int init_high = 0;
 
 	syscon &= ~ACQ132_SYSCON_GPG_MAS;
 
-	if ((nw = sscanf(buf, "%5s %5s %5s %5s", w[0], w[1], w[2], w[3])) == 0){
+	if ((nw = sscanf(buf, "%15s %15s %15s %15s", 
+			 w[0], w[1], w[2], w[3])) == 0){
 		err("failed to scan command \"%s\"", buf);
 		return -EINVAL;
 	}
@@ -560,23 +566,28 @@ static ssize_t store_gpg_mas(
 	}
 
 	for (iw = 0; iw != nw; ++iw){
-		if (strlen(w[iw]) == 2 && w[iw][0] == 'd'){
-			switch(w[iw][1]){
-			case '7':
-				syscon |= ACQ132_SYSCON_GPG_MASD7;
-				break;
-			case '6':
-				syscon |= ACQ132_SYSCON_GPG_MASD6;
-				break;
-			case '5':
-				syscon |= ACQ132_SYSCON_GPG_MASD5;
-				break;
-			case '4':
-				syscon |= ACQ132_SYSCON_GPG_MASD4;
-				break;
+		if (sscanf(w[iw], "d%1d,%1d", &ibit, &init_high) >= 1){
+			switch(ibit){
 			default:
 				err("dx must be in range 7654");
 				return -EINVAL;
+			case 7:
+				syscon |= ACQ132_SYSCON_GPG_MASD7;
+				break;
+			case 6:
+				syscon |= ACQ132_SYSCON_GPG_MASD6;
+				break;
+			case 5:
+				syscon |= ACQ132_SYSCON_GPG_MASD5;
+				break;
+			case 4:
+				syscon |= ACQ132_SYSCON_GPG_MASD4;
+				break;
+			}
+			if (init_high){
+				diocon = DIO_SET_OUTPUT1(diocon, ibit);
+			}else{
+				diocon = DIO_SET_OUTPUT0(diocon, ibit);
 			}
 		}else{
 			err("invalid w[%d] \"%s\"", iw, w[iw]);
@@ -584,6 +595,7 @@ static ssize_t store_gpg_mas(
 		}
 	}
 
+	acq200_setDiocon(diocon);
 	*ACQ132_SYSCON = syscon;
 	return count;			
 }
@@ -738,7 +750,6 @@ static ssize_t store_RGM(
 	struct device_attribute *attr,
 	const char *buf, size_t count)
 {
-	unsigned tlen = 0;
 	unsigned mode;
 
 	if (sscanf(buf, "%u", &mode) > 0){

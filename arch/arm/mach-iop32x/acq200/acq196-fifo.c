@@ -106,7 +106,7 @@ void enable_acq(void)
 }
 
 
-#define NOLOOK_FOR_PIT	-1
+
 
 static unsigned check_fifstat(
 	struct DMC_WORK_ORDER *wo, u32 fifstat, u32* offset)

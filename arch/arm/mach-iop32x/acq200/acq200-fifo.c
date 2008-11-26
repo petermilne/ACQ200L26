@@ -3896,7 +3896,9 @@ struct Signal* createSignal(
 {
 	static struct Signal def_signal = {
 		.is_active = 0,
-		.commit = def_commit
+		.commit = def_commit,
+		.key_lo = "falling",
+		.key_hi = "rising"
 	};
 	struct Signal* signal = kzalloc(SIGNAL_SZ, GFP_KERNEL);
 	memcpy(signal, &def_signal, SIGNAL_SZ);
@@ -3909,6 +3911,20 @@ struct Signal* createSignal(
 	if (commit){
 		signal->commit = commit;
 	}
+	return signal;
+}
+
+struct Signal* createLevelSignal(
+	const char* name, 
+	int minDIx, int maxDIx,
+	int DIx, int rising, int is_active,
+	int (*commit)(struct Signal* signal)
+)
+{
+	struct Signal *signal =  createSignal(
+		name, minDIx, maxDIx, DIx, rising, is_active, commit);
+	signal->key_lo = "low";
+	signal->key_hi = "high";
 	return signal;
 }
 
