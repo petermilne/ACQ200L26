@@ -72,6 +72,10 @@ module_param(acq132_trigger_debug, int, 0664);
 int obclock_input_rate = BEST_ICSINPUT_HZ;
 module_param(obclock_input_rate, int, 0600);
 
+int intclock_actual_rate;
+module_param(intclock_actual_rate, int, 0444);
+
+
 int rgm_with_es = 1;
 module_param(rgm_with_es, int, 0600);
 
@@ -252,6 +256,8 @@ static void __setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
 
 	dbg( 1, "set:%7d Hz clkdiv 0x%08x act 0x%08x %d Hz MCLK: %ld Hz\n",
 	     hz, clkdiv, *ACQ200_CLKDAT, acq200_clk_hz, masterclk);
+
+	intclock_actual_rate = acq200_clk_hz;
 }
 /*                    12345xxx */
 #define MASTERCLK_100 99999000  
@@ -363,13 +369,15 @@ static int _set_ob_clock(int khz)
 	dbg( 1, "call_usermodehelper %s %s %s %s\n", 
 	     argv[0], argv[1], argv[2], argv[3] );
 
+	acq200_clk_hz = ob_clock_def.actual/decim * 1000;
+
 	ii = call_usermodehelper(argv [0], argv, envp, 0);
 
 	if (ii == 0){
-		acq200_clk_hz = ob_clock_def.actual/decim * 1000;
 		dbg(1, "success: acq200_clk_hz = %d", acq200_clk_hz);
 	}else{
 	        err("call done returned %d", ii );
+		acq200_clk_hz = -1;
 	}
 	return ii;
 }

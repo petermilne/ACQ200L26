@@ -340,7 +340,7 @@ void acq200_setIntClkHz(int hz)
 	if ( hz == 0 ){
 		_setExtClk();
 	}else if (DG->use_ob_clock && set_ob_clock(hz) == 0){
-		;
+		acq200_clk_hz = hz;	/* @@TODO */
 	}else{
 		___setIntClkHz(hz);
 	}

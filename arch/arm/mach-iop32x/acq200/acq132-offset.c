@@ -91,7 +91,7 @@ static const int MAP[NDACSBLOCK+1][NDACSCHIP+1] = {
 };
 
 
-static	int plut[] = {
+static	const int __plut[] = {
 /* index: memory order 1:32 
  * value: nameplate order 1:32 
  */
@@ -112,14 +112,28 @@ static	int plut[] = {
 	[29] = 15, [30] = 31,
 	[31] = 16, [32] = 32
 };
+#define __PLUT_ELEMS (sizeof(__plut)/sizeof(int))
+
+static const int *plut = __plut;
+static int nlut = __PLUT_ELEMS;
 
 
+void acq200_setChannelLut(const int *lut, int _nlut)
+{
+	if (lut){
+		plut = lut;
+		nlut = _nlut;
+	}else{
+		plut = __plut;
+		nlut = __PLUT_ELEMS;
+	}
+}
 int acq200_lookup_pchan(int lchannel)
 /** lchannel in = 1:32 nameplate order return 0:32 memory order */
 {
 	int index = 1;
 
-	for (; index <= 32; ++index){
+	for (; index <= nlut; ++index){
 		if (plut[index] == lchannel){
 			return index -1;
 		}
@@ -472,3 +486,4 @@ void acq196_offset_fs_remove(void)
 }
 
 EXPORT_SYMBOL_GPL(acq200_lookup_pchan);
+EXPORT_SYMBOL_GPL(acq200_setChannelLut);

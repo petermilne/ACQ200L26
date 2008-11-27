@@ -1677,22 +1677,23 @@ static ssize_t store_int_clk(
 	struct device_driver * driver, const char * buf, size_t count)
 {
 	char unit;
+	int clk_hz;
 
-	switch (sscanf(buf, "%d%c", &acq200_clk_hz, &unit)){
+	switch (sscanf(buf, "%d%c", &clk_hz, &unit)){
 	case 2:
 		switch(unit){
 		case 'k':
-			acq200_clk_hz *= 1000;
+			clk_hz *= 1000;
 			break;
 		case 'M':
-			acq200_clk_hz *= 1000000;
+			clk_hz *= 1000000;
 			break;
 		default:
 			return strlen(buf);
 		}
 		/* fall thru */
 	case 1:
-		acq200_setIntClkHz(acq200_clk_hz);
+		acq200_setIntClkHz(clk_hz);
 		break;
 	default:
 		break;
