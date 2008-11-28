@@ -21,6 +21,7 @@
 
 #include "acq196.h"
 #define ACQ132_BDR	ACQ196_BDR
+#define ACQ132_FIFCON	ACQ196_FIFCON
 #define ACQ132_FIFSTAT  ACQ196_FIFSTAT
 #define ACQ132_SYSCON	ACQ196_SYSCON_ADC
 /* custom regs */
@@ -55,7 +56,12 @@
 #define BANK_D  3
 
 #define BDR_MAGIC	0xdeadbeef
+
+
 /* custom bits */
+
+#define ACQ132_FIFCON_GPG_RESET	0x00000100
+
 #define ACQ132_SYSCON_REV_RESET 0x80000000
 #define ACQ132_SYSCON_GATE_EN	0x10000000
 #define ACQ132_SYSCON_GATE_HI	0x08000000
@@ -337,5 +343,17 @@ struct OB_CLOCK_DEF {
 };
 
 extern struct OB_CLOCK_DEF ob_clock_def;
+
+#include <asm/delay.h>
+
+static inline void reset_gpg(void)
+{
+	u32 fifcon = *ACQ132_FIFCON;
+	*ACQ132_FIFCON = fifcon |= ACQ132_FIFCON_GPG_RESET;
+	udelay(5);
+	*ACQ132_FIFCON = fifcon &= ~ACQ132_FIFCON_GPG_RESET;
+	udelay(5);
+}
+
 #endif	/*  __ACQ132_H__ */
 

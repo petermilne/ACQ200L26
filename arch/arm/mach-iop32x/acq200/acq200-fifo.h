@@ -1140,9 +1140,9 @@ struct Hookup {
 	struct list_head list;	
 };
 
-#define DEFHOOKUP(name, hook, data)			\
-	struct Hookup name = {				\
-		.the_hook = hook, .clidata = clidata,	\
+#define DEFHOOKUP(name, hook, clidata)			\
+	struct Hookup name##_hookup = {			\
+		.the_hook = hook, .clidata = clidata	\
 	}
 		
 

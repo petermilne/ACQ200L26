@@ -79,6 +79,21 @@ module_param(intclock_actual_rate, int, 0444);
 int rgm_with_es = 1;
 module_param(rgm_with_es, int, 0600);
 
+int gpg_busy;
+module_param(gpg_busy, int, 0444);
+
+int es_stash_full;
+module_param(es_stash_full, int, 0600);
+
+int es_tblock;
+module_param(es_tblock, int, 0444);
+
+#define GPG_RESET_ON_OPEN	0x1
+#define GPG_RESET_ON_CLOSE	0x2
+#define GPG_RESET_ON_STOP	0x4
+int use_gpg_reset;
+module_param(use_gpg_reset, int, 0600);
+
 #define TBG if (acq132_transform_debug) dbg
 
 #define AICHAN_DEFAULT 32
@@ -108,6 +123,8 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef);
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
+static TBLE* es_tble;
+
 static int enable_soft_trigger(void);
 static int enable_hard_trigger(void);
 /* return 1 on success, -1 on error */
@@ -124,12 +141,17 @@ static int enable_hard_trigger(void);
  *		update to
  *
  */
+
+#define MAX_ROWS	4
+
 #define ROW_SAM		128
 #define ROW_CHAN	8
 #define ROW_WORDS	(ROW_SAM*ROW_CHAN)
 #define ROW_SIZE	(ROW_WORDS*sizeof(short))
 #define ROW_LONGS	(ROW_SIZE/USS)
 
+#define ROW_CHAN_SZ	(ROW_CHAN*sizeof(short))
+#define ROW_CHAN_LONGS  (ROW_CHAN_SZ/sizeof(unsigned))
 
 
 void disable_acq(void) 
@@ -319,6 +341,8 @@ static void _setIntClkHz( int hz )
 		      hz);
 }
 
+static int acq132_decim;
+
 static void acq132_setAllDecimate(int dec)
 {
 #define DECIM	1
@@ -326,6 +350,8 @@ static void acq132_setAllDecimate(int dec)
 
 	if (dec < 1) dec = 1;
 	if (dec > 16) dec = 16;
+
+	acq132_decim = dec;
 
 	dbg(1, "setting decimation to %d", dec);
 
@@ -369,13 +395,9 @@ static int _set_ob_clock(int khz)
 	dbg( 1, "call_usermodehelper %s %s %s %s\n", 
 	     argv[0], argv[1], argv[2], argv[3] );
 
-	acq200_clk_hz = ob_clock_def.actual/decim * 1000;
-
 	ii = call_usermodehelper(argv [0], argv, envp, 0);
 
-	if (ii == 0){
-		dbg(1, "success: acq200_clk_hz = %d", acq200_clk_hz);
-	}else{
+	if (ii != 0){
 	        err("call done returned %d", ii );
 		acq200_clk_hz = -1;
 	}
@@ -630,8 +652,41 @@ static struct file_operations acq132_sfpga_load_ops = {
 };
 
 
+
+
+static spinlock_t gpg_lock = SPIN_LOCK_UNLOCKED;
+static pid_t gpg_owner;
+
+
+static void gpg_onEndShot(void* notused)
+{
+	if (gpg_owner){
+		if (use_gpg_reset&GPG_RESET_ON_STOP){
+			reset_gpg();	
+		}
+		kill_proc(gpg_owner, SIGHUP, 1);			
+	}
+}
+
+static struct Hookup gpg_end_of_shot_hook = {
+	.the_hook = gpg_onEndShot
+};
 static int acq132_gate_pulse_open(struct inode *inode, struct file *file)
 {
+	spin_lock(&gpg_lock);
+	if (gpg_busy || DMC_WO_getState() != ST_STOP){
+		spin_unlock(&gpg_lock);
+		return -EBUSY;
+	}else{
+		gpg_busy = 1;
+		gpg_owner = current->pid;
+		acq200_add_end_of_shot_hook(&gpg_end_of_shot_hook);
+		if (use_gpg_reset&GPG_RESET_ON_OPEN){
+			reset_gpg();
+		}
+	}
+
+	spin_unlock(&gpg_lock);	
 	return 0;
 }
 
@@ -672,6 +727,14 @@ static ssize_t acq132_gate_pulse_write(
 
 static ssize_t acq132_gate_pulse_release(struct inode *inode, struct file *file)
 {
+	spin_lock(&gpg_lock);
+	gpg_busy = 0;
+	gpg_owner = 0;
+	acq200_del_end_of_shot_hook(&gpg_end_of_shot_hook);
+	if (use_gpg_reset&GPG_RESET_ON_CLOSE){
+		reset_gpg();
+	}
+	spin_unlock(&gpg_lock);
 	return 0;
 }
 
@@ -1216,6 +1279,7 @@ short* from1;
 short* from2;
 #endif
 
+
 void acq132_transform_row(
 	short *to, short *from, int nsamples, int channel_sam)
 /* read a block of data from to and farm 8 channels to from */
@@ -1313,6 +1377,169 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 	TBG(1, "99");
 }
 
+/* It makes sense to build the ES detect and remove into the transform 
+ * because the DQAD is already in cache. ie the cost of search is small
+ */
+
+#define ES_MAGIC_WORD 0xaa55
+
+static unsigned *es_cursor;
+
+int remove_es(int sam, int row, unsigned short* ch)
+{
+	dbg(1, "sam:%6d row:%d %04x %04x %04x %04x %04x %04x %04x %04x",
+	    sam, row, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
+
+	if (es_cursor){	
+		if (es_stash_full){
+			memcpy(es_cursor, ch, ROW_CHAN_SZ);
+			es_cursor += ROW_CHAN_LONGS;
+		}else{
+			unsigned ts = ch[5] << 16 | ch[7];
+			if (ts != *es_cursor){
+				*++es_cursor = ts;
+			}
+		}
+	}
+	return 1;
+}
+
+static void transformer_es_onStart(void *unused)
+/* @TODO wants to be onPreArm (but not implemented) */
+{
+	if (!es_tble){
+		es_tble = acq200_reserveFreeTblock();
+		if (es_tble == 0){
+			err("failed to reserve ES TBLOCK");
+		}else{
+			es_tblock = es_tble->tblock->iblock;
+			info("reserved ES TBLOCK %d", es_tblock);
+		}
+	}
+
+	if (es_tble){
+		es_cursor = (unsigned*)BB_PTR(es_tble->tblock->offset);
+		memset(es_cursor, 0, TBLOCK_LEN);
+	}
+}
+
+int acq132_transform_row_es(
+	int row,
+	short *to, short *from, int nsamples, int channel_sam)
+/* read a block of data from to and farm 8 channels to from */
+{
+	union {
+		unsigned long long ull[ROW_CHAN/4];
+		unsigned short ch[ROW_CHAN];
+	} buf;
+	unsigned long long *full = (unsigned long long *)from;
+	int sam;
+	int tosam = 0;
+	int chx;
+
+	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
+	    to, from, nsamples, channel_sam);
+
+	if (stub_transform){
+		TBG(3, "stub");
+		return nsamples;
+
+	}
+	for (sam = nsamples; sam != 0; --sam){
+		buf.ull[0] = *full++;
+		buf.ull[1] = *full++;
+
+		if (buf.ch[0] == ES_MAGIC_WORD &&
+			    buf.ch[1] == ES_MAGIC_WORD &&
+			    buf.ch[2] == ES_MAGIC_WORD &&
+			    buf.ch[3] == ES_MAGIC_WORD &&
+			    remove_es(nsamples-sam, row, buf.ch)){
+				continue;
+		}
+#ifdef DEBUGGING
+		if ((short*)full < from1 || (short*)full > from2){
+			err("from outrun at  %p %p %p sam:%d",
+			    from1, full, from2, sam);
+			return nsamples;
+		}
+#endif
+
+		for (chx = 0; chx < ROW_CHAN; ++chx){
+
+#ifdef DEBUGGING
+			short *pto = to + chx*channel_sam + tosam;
+			if (pto < to1 || pto > to2){
+				err("buffer outrun at %p %p %p chx:%d sam:%d",
+				    to1, pto, to2, chx, tosam);
+				return nsamples;
+			}
+#endif
+			to[chx*channel_sam + tosam] = buf.ch[chx];
+		}	
+		++tosam;		
+	}
+
+	TBG(3, "99");	
+	return tosam;
+}
+static void acq132_transform_es(short *to, short *from, int nwords, int stride)
+{
+	const int nsamples = nwords/stride;	
+	const int rows = stride/ROW_CHAN;
+	const int block_words = rows * ROW_CHAN * ROW_SAM;
+	int blocks = nwords/block_words;
+	int nw = nwords;
+	int block;
+#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
+	int row_off[MAX_ROWS];
+	int row;
+
+	if (rows > MAX_ROWS){
+		err("rows %d > MAX_ROWS", rows);
+		return;
+	}
+	for (row = 0; row < rows; ++row){
+		row_off[row] = ROW_OFF(row);
+	}
+
+	if (blocks * block_words < nwords){
+		++blocks;
+	}
+
+	TBG(1, "blocks:%d", blocks);
+	TBG(1, "nsamples:%d", nsamples);
+
+#ifdef DEBUGGING
+	to1 = to;
+	to2 = to+nwords;
+	TBG(1, "to   %p to %p", to1, to2);
+	from1 = from;
+	from2 = from+nwords;
+	TBG(1, "from %p to %p", from1, from2);
+#endif
+
+	for (block = 0; block < blocks; ++block, nw -= block_words){
+		const int bsamples = min(nw, block_words)/rows/ROW_CHAN;
+
+		TBG(2, "block:%d to:%p from:%p bsamples %d", 
+		    block, to, from, bsamples);
+
+		for (row = 0; row < rows; ++row){
+			row_off[row] += acq132_transform_row_es(
+				row,
+				to + row_off[row], 
+				from, 
+				bsamples,
+				nsamples
+				);
+			from += bsamples*ROW_CHAN;
+		}
+		TBG(2, "block:%d to:%p from:%p", block, to, from);
+	}
+
+	TBG(1, "99");
+}
+
 static void acq132_set_defaults(void)
 {
 /* ICS527 - make "null modem" 4 /4 - works for 1..2MHz clocks */
@@ -1325,11 +1552,21 @@ static 	struct Transformer transformer = {
 	.transform = acq132_transform
 };
 
+static struct Transformer transformer_es = {
+	.name = "acq132es",
+	.transform = acq132_transform_es
+};
+
+static struct Hookup transformer_es_hook = {
+	.the_hook = transformer_es_onStart
+};
 static void register_custom_transformer(void)
 {
 	int it;
 	it = acq200_registerTransformer(&transformer);
 	if (it >= 0){
+		acq200_add_start_of_shot_hook(&transformer_es_hook);
+		acq200_registerTransformer(&transformer_es);
 		acq200_setTransformer(it);
 	}else{
 		err("transformer %s NOT registered", transformer.name);
@@ -1414,6 +1651,7 @@ static int __init acq132_fifo_init( void )
 	dbg(1, "acq200_debug set %d\n", acq200_debug );
 
 
+
 /* extra kobject init needed to hook driver sysfs WHY? */
 
 	kobject_init(&acq132_fpga_driver.kobj);
@@ -1474,6 +1712,8 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 	ics527 |= to_mask(ACQ132_ICS527_S1S0, Sx);
 
 	*ACQ132_ICS527 = ics527;
+
+	acq200_clk_hz = ob_clock_def.actual/acq132_decim * 1000;
 }
 
 

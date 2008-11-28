@@ -130,6 +130,9 @@ static ssize_t store_ob_clock(
 		   &def.demand, &def.actual,
 		   &def.FDW, &def.RDW, &def.R, &def.Sx) == 6){
 		ob_clock_def = def;
+
+		dbg(1, "demand:%d actual:%d", def.demand, def.actual);
+  
 		acq132_set_obclock(def.FDW, def.RDW, def.R, def.Sx);
 	}	
 
