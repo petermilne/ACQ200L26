@@ -118,8 +118,15 @@
 #define ACQ132_SCAN_MAX	16	/* max elements in list */
 
 /* CTRL_CHMASK - shifts */
+
+#define ACQ132_ADC_CTRL_LPSshl  24
+#define ACQ132_ADC_CTRL_RPSshl  8
+
+#define ACQ132_ADC_CTRL_PSmask	0x7f
+
 #define ACQ132_ADC_CTRL_LMSHFT	20
 #define ACQ132_ADC_CTRL_RMSHFT  4
+
 
 #define ACQ132_ADC_CTRL_CMASK	0x00f000f0
 
@@ -241,6 +248,34 @@ static inline void acq132_adc_clr_all(int reg, u32 bits)
 	}
 }
 
+static inline void acq132_set_prescale(int prescale)
+{
+	unsigned clr_mask = 
+		ACQ132_ADC_CTRL_PSmask<<ACQ132_ADC_CTRL_LPSshl |
+		ACQ132_ADC_CTRL_PSmask<<ACQ132_ADC_CTRL_RPSshl;
+	unsigned set_mask;
+	prescale = max(prescale, 1);
+	prescale = min(prescale, 128);
+	prescale -= 1;
+
+	set_mask = 
+		prescale<<ACQ132_ADC_CTRL_LPSshl |
+		prescale<<ACQ132_ADC_CTRL_RPSshl;
+
+	acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET, clr_mask);
+	if (set_mask){
+		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, set_mask);
+	}	
+}
+
+static inline int acq132_get_prescale(void)
+/* WARNING: reads BANK_A,L only */
+{
+	u32 ctrl = *ACQ132_ADC_CTRL(BANK_A);
+	u32 prescale = 
+		(ctrl>>ACQ132_ADC_CTRL_LPSshl & ACQ132_ADC_CTRL_PSmask) + 1;
+	return prescale;
+}
 static inline void sfpga_conf_clr_all(void) {
 	dbg(2, "01");
 	*ACQ132_SFPGA_CONF = 0;

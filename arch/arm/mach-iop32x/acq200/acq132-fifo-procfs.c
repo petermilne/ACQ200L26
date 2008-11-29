@@ -285,7 +285,32 @@ static DEVICE_ATTR(
 	AO_clock_mode, S_IRUGO|S_IWUGO, 
 	show_AO_clock_mode, store_AO_clock_mode);
 
+static ssize_t show_event_timer_prescale(
+	struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%d\n", acq132_get_prescale());	
+}
 
+static ssize_t store_event_timer_prescale(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int prescale;
+
+	if (sscanf(buf, "%d", &prescale) == 1){
+		acq132_set_prescale(prescale);
+		return count;
+	}else{
+		return -EINVAL;
+	}
+}
+
+static DEVICE_ATTR(
+	event_timer_prescale,  S_IRUGO|S_IWUGO,
+	show_event_timer_prescale, store_event_timer_prescale);
 
 
 DEFINE_EVENT_ATTR(1);
@@ -773,6 +798,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_slow_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_coding);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_clock_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_event_timer_prescale);
 	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
