@@ -390,5 +390,28 @@ static inline void reset_gpg(void)
 	udelay(5);
 }
 
+/*
+ * acq132 data is presented as 8-sample rows, in ROW_SAM blocks
+ *
+ * for block in BLOCKS
+ *	for row in { A B C D }
+ *		for ROW_SAM
+ *			acq132_transform_row(to+ROW_OFF(row), from)
+ *			update from
+ *		update to
+ *
+ */
+
+#define MAX_ROWS	4
+
+#define ROW_SAM		128
+#define ROW_CHAN	8
+#define ROW_WORDS	(ROW_SAM*ROW_CHAN)
+#define ROW_SIZE	(ROW_WORDS*sizeof(short))
+#define ROW_LONGS	(ROW_SIZE/USS)
+
+#define ROW_CHAN_SZ	(ROW_CHAN*sizeof(short))
+#define ROW_CHAN_LONGS  (ROW_CHAN_SZ/sizeof(unsigned))
+
 #endif	/*  __ACQ132_H__ */
 
