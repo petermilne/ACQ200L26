@@ -45,7 +45,8 @@
 #include "acq196-offset.h"
 
 #define INT_CLK_CALC_ROUNDING 0x80
-#define BEST_ICSINPUT_HZ 20000000
+//#define BEST_ICSINPUT_HZ 20000000
+#define BEST_ICSINPUT_HZ 1000000
 
 int int_clk_calcmode;
 module_param(int_clk_calcmode, int, 0664);
@@ -645,6 +646,7 @@ int acq200_custom_fpga_open (struct inode *inode, struct file *file)
 		break;
 	case ACQ132_TIMEBASE:
 		file->f_op = &acq132_timebase_ops;
+		break;
 	default:
 		return acq200_fpga_open(inode, file);
 	}

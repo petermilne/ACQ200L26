@@ -63,6 +63,17 @@ module_param(event_adjust_delta_blocks, int, 0600);
 int mark_event_data = 0;
 module_param(mark_event_data, int, 0600);
 
+int show_timebase_calcs = 0;
+module_param(show_timebase_calcs, int, 0600);
+
+int time_stamp_size = sizeof(u32);
+module_param(time_stamp_size, int, 0444);
+
+int timebase_first_entry_is_zero = 0;
+module_param(timebase_first_entry_is_zero, int, 0644);
+
+/* @TODO: make this variable 4byte, 8 byte 4byte = 4s worth of nsecs */
+
 extern int stub_event_adjust;
 
 #define TBG if (acq132_transform_debug) dbg
@@ -180,10 +191,35 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
  * because the DQAD is already in cache. ie the cost of search is small
  */
 
+
 #define ES_MAGIC_WORD 0xaa55
 
+#define ESC_OFFSET 0
+#define ESC_TS	 1
 
-int remove_es(int sam, int row, unsigned short* ch)
+/* todo assumes TS is clocking at intclock rate */
+extern int intclock_actual_rate;
+#define NS		1000000000
+#define TSCLK_NS	(NS/max(1,intclock_actual_rate))
+/* TODO: assumes ob_clock */
+extern int acq200_clk_hz;
+#define SMCLK_NS	(NS/max(1,acq200_clk_hz))
+
+struct ES_INFO {
+	int itb;
+	int tb_total;
+	unsigned last_end;
+	unsigned tsclk_ns;
+	unsigned smclk_ns;
+};
+
+#define ES_LEN		(8*sizeof(short))
+#define ESI(file)	((struct ES_INFO *)file->private_data)
+
+#define NBLOCKS		4	 /* @TODO */
+#define TB_GET_BLEN(c2, c1) (((c2)-(NBLOCKS-1)*ES_LEN-(c1))/sample_size())
+
+int remove_es(int sam, int row, unsigned short* ch, void *cursor)
 {
 	dbg(1, "sam:%6d row:%d %04x %04x %04x %04x %04x %04x %04x %04x",
 	    sam, row, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
@@ -195,7 +231,7 @@ int remove_es(int sam, int row, unsigned short* ch)
 		}else{
 			unsigned ts = ch[5] << 16 | ch[7];
 			if (ts != *es_cursor){
-				*++es_cursor = (unsigned)ch;
+				*++es_cursor = (unsigned)cursor;
 				*++es_cursor = ts;
 			}
 		}
@@ -203,6 +239,29 @@ int remove_es(int sam, int row, unsigned short* ch)
 	return 1;
 }
 
+static void timebase_debug(void)
+{
+	unsigned *cursor = (unsigned*)BB_PTR(es_tble->tblock->offset) + 1;
+	unsigned burst_start = *cursor++;
+	unsigned ts1 = *cursor++;
+	unsigned ts = ts1;
+	int iburst = 0;
+
+	if (ts1 != 0){
+		info("first timestamp %08x use as offset", ts1);
+	}
+	
+	while(cursor < es_cursor){
+		unsigned burst_end = *cursor++;
+		iburst++;
+
+	        info("burst [%4d] ts:0x%08x len:%d TB_GET_BLEN:%d",
+		     iburst, ts, (burst_end - burst_start)/sample_size(),
+			TB_GET_BLEN(burst_end, burst_start));
+		burst_start = burst_end;
+		ts = *cursor++;
+	}
+}
 static void transformer_es_onStart(void *unused)
 /* @TODO wants to be onPreArm (but not implemented) */
 {
@@ -252,7 +311,7 @@ int acq132_transform_row_es(
 			    buf.ch[1] == ES_MAGIC_WORD &&
 			    buf.ch[2] == ES_MAGIC_WORD &&
 			    buf.ch[3] == ES_MAGIC_WORD &&
-			    remove_es(nsamples-sam, row, buf.ch)){
+		    remove_es(nsamples-sam, row, buf.ch, full)){
 				continue;
 		}
 #ifdef DEBUGGING
@@ -443,19 +502,129 @@ void acq132_event_adjust(
 }
 
 
+
+static int acq132_timebase_open(struct inode *inode, struct file *file)
+{
+	file->private_data = kzalloc(sizeof(struct ES_INFO), GFP_KERNEL);
+	
+	if (show_timebase_calcs) timebase_debug();
+	ESI(file)->tsclk_ns = TSCLK_NS;
+	ESI(file)->smclk_ns = SMCLK_NS;
+	return 0;
+}
+
+//#define TSTYPE unsigned long long
+#define TSTYPE u32
+
+/*
+ * timebase structure in memory
+ *
+unsigned[] :
+[0] = 0
+[1] = [0].OFFSET
+[2] = [1].TS
+[3] = [2].OFFSET
+[4] = [3].TS
+
+Read strategy:
+	limit read to points in current burst.
+
+First time:
+	set itb = 1, set last_end = [0].OFFSET
+
+Iterate:
+	search to TB[+2] to calculate TBLEN
+        decide if in this range or not.
+
+Read:
+	create first time, then add smclk_ns to subseqent samples
+*/
+
 static ssize_t acq132_timebase_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset
 	)
 {
 	unsigned *es_base =  (unsigned*)BB_PTR(es_tble->tblock->offset);
-	int nstamps = es_cursor - es_base;
+	int nstamp_words = (es_cursor - es_base);
+	int sample = *offset;
+	int last = 0;
+	struct ES_INFO esi = *ESI(file);
+	TSTYPE ts;
+	int ncopy = 0;
+	int ii;
 
-	info("ES tblock: %d cursor %d", es_tble->tblock->iblock, nstamps);
-	return -1;
+	dbg(1, "kickoff with offset (sample) %d", sample);
+	dbg(2, "ES tblock: %d cursor %d", es_tble->tblock->iblock, 
+		nstamp_words);
+
+	if (esi.itb == 0){
+		++esi.itb;
+		esi.last_end = es_base[esi.itb+ESC_OFFSET];
+		dbg(1, "init last_end %08x", esi.last_end);
+	}
+
+	for (ii = esi.itb; ii < nstamp_words; ii += 2){
+		/* pick last_end from NEXT record */
+		unsigned last_end = es_base[ii+2+ESC_OFFSET];
+		unsigned blen = TB_GET_BLEN(last_end, esi.last_end);
+
+		dbg(2, "sample %d esi.tb_total %d last_end: %u this %u blen %d",
+		    sample, esi.tb_total, esi.last_end, last_end, blen);
+
+		if (sample < (last = esi.tb_total + blen)){
+			goto ok;
+		}else{
+			esi.tb_total += blen;
+			esi.last_end = last_end;
+			esi.itb += 2;
+		}
+	}
+	*ESI(file) = esi;
+	err("returning -ENODEV (couldn't find an entry in range for sample %d",
+	    sample);
+
+	return -ENODEV;
+
+ok:
+	if (timebase_first_entry_is_zero){
+		/* this is a hack to handle FPGA non-reset bug */
+		if (es_base[esi.itb+ESC_TS] >= es_base[0+ESC_TS]){
+			ts = es_base[esi.itb+ESC_TS] - es_base[0+ESC_TS];
+		}else{
+			ts = 0xffffffffU - es_base[0+ESC_TS];
+			ts += es_base[esi.itb+ESC_TS];
+		}
+		ts *= esi.tsclk_ns;
+	}else{
+		ts = esi.tsclk_ns * es_base[esi.itb+ESC_TS];
+	}
+	ts += esi.smclk_ns * (sample - esi.tb_total);
+
+	while (sample < last && len - ncopy > sizeof(TSTYPE)){
+		if (copy_to_user(buf+ncopy, &ts, sizeof(TSTYPE))){
+			return -EFAULT;
+		}else{
+			++sample;
+			ncopy += sizeof(TSTYPE);
+			ts += esi.smclk_ns;
+		}
+	}	
+
+	*ESI(file) = esi;
+	*offset = sample;
+
+	dbg(1, "returning %d", ncopy);
+
+	return ncopy;
 }
-
+static ssize_t acq132_timebase_release(struct inode *inode, struct file *file)
+{
+	kfree(ESI(file));
+	return 0;
+}
 struct file_operations acq132_timebase_ops = {
-	.read = acq132_timebase_read
+	.open = acq132_timebase_open,
+	.read = acq132_timebase_read,
+	.release = acq132_timebase_release
 };
-
 
