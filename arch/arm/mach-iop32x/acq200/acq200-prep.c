@@ -294,7 +294,7 @@ static struct Phase *getPhaseFromSpec(struct Spec *spec)
 	}
 	return 0;
 }
-static const char* phaseShowTblocks(struct Phase *phase)
+static const char* phaseShowTblocks(struct Phase *phase, const char *sep)
 {
 #define LBUF 40
 	if (phase != 0){
@@ -304,8 +304,8 @@ static const char* phaseShowTblocks(struct Phase *phase)
 
 		lbuf [0] = '\0';
 		list_for_each_entry(tble, &phase->tblocks, list){
-			ibuf += snprintf(lbuf+ibuf, LBUF-ibuf, "%03d,",
-				 tble->tblock->iblock);
+			ibuf += snprintf(lbuf+ibuf, LBUF-ibuf, "%03d%s",
+					 tble->tblock->iblock, sep);
 		}
 		return lbuf;
 	}else{
@@ -820,7 +820,7 @@ static ssize_t sum_read(struct file *file, char *buf,
 			char lb[LBL];
 			struct Phase *phase = getPhaseFromSpec(spec);
 			const char *ps = phase != 0?
-				phaseShowTblocks(phase):
+				phaseShowTblocks(phase, ","):
 				"null-phase";
 			int len = snprintf(lb, LBL, 
 					   "%03d %10d %8d %10s %s %s\n",
@@ -847,6 +847,41 @@ static ssize_t sum_read(struct file *file, char *buf,
 	return 0;
 #undef LBL
 }
+
+
+/*
+ * this is _very_ crude - we should stash the cursor between calls ...
+ */
+static ssize_t tb_read(struct file *file, char *buf,
+		size_t count, loff_t *offset)
+{
+#define LBL 128
+	struct Spec *spec;
+	int idx = *offset;
+	int ii = 0;
+
+	list_for_each_entry(spec, &PFG.spec.specs, list){
+		if (ii == idx){
+			struct Phase *phase = getPhaseFromSpec(spec);
+			const char *ps = phaseShowTblocks(phase, "\n");
+			int len = strlen(ps);
+			if (len <= count){
+				if (copy_to_user(buf, ps, len)){
+					return -EFAULT;
+				}
+				*offset += 1;
+				return len;
+			}else{
+				return 0;
+			}
+		}
+		++ii;
+	}
+
+	return 0;
+#undef LBL
+}
+
 
 static void initStatusConsumer(struct StatusConsumer *sc)
 {
@@ -1066,6 +1101,9 @@ static int prepfs_fill_super_statics(
 		.read = stat_read,
 		.release = stat_release
 	};
+	static struct file_operations tb_ops = {
+		.read = tb_read
+	};
 	static struct file_operations test_ops = {
 		.open = test_open,
 		.read = test_read,
@@ -1078,6 +1116,7 @@ static int prepfs_fill_super_statics(
 		{ .name = "spec",  .ops = &spec_ops, .mode = S_IWUSR|S_IRUGO },
 		{ .name = "summary",  .ops = &sum_ops,  .mode = S_IRUGO },
 		{ .name = "status", .ops = &stat_ops, .mode = S_IRUGO },
+		{ .name = "tblocks", .ops = &tb_ops, .mode = S_IRUGO },
 		{ .name = "test", .ops = &test_ops, .mode = S_IWUSR|S_IRUGO },
 		{ "", NULL, 0 },
 	};
