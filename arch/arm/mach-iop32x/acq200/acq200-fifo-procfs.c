@@ -2071,6 +2071,21 @@ static ssize_t store_transformer(
 		DG->bigbuf.tblocks.cursor_complete = 0;
 		info("CLEAR accepted");
 		goto cleanup;
+	}else if (sscanf(buf, "%d", &cursor) == 1){
+		/* single number specifies tblock to transform */
+		char* p_decimal = buf;
+		int iblock;
+		while(*p_decimal == '0'){
+			++p_decimal;		/* avoid octal convert! */
+		}
+		if (sscanf(buf, "%d", &iblock) == 1 && 
+			iblock > 0 && iblock < DG->bigbuf.tblocks.nblocks){
+			acq200_fifo_bigbuf_transform(iblock);	
+			DG->bigbuf.tblocks.the_tblocks[iblock].touched = 1;
+		}else{
+			err("failed to decode \"%s\"", buf);
+		}
+		return strlen(buf);
 	}
 
 #ifndef ACQ132

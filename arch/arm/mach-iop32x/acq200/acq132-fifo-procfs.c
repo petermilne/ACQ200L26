@@ -767,6 +767,7 @@ static ssize_t show_RGM(
 	static const char* modes[] = {
 		[0] = "OFF",
 		[1] = "GATE",
+		[2] = "GATE",
 	};
 	int mode = acq132_getRGM() != 0;
 
