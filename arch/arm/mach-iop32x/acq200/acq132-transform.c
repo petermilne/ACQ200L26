@@ -200,7 +200,14 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 /* todo assumes TS is clocking at intclock rate */
 extern int intclock_actual_rate;
 #define NS		1000000000
-#define TSCLK_NS	(NS/max(1,intclock_actual_rate))
+
+static inline unsigned getTsclkNs(void)
+{
+	unsigned tshz = acq200_clk_hz/acq132_get_prescale();
+	return NS/max(1U,tshz);
+}
+
+#define TSCLK_NS	getTsclkNs()
 /* TODO: assumes ob_clock */
 extern int acq200_clk_hz;
 #define SMCLK_NS	(NS/max(1,acq200_clk_hz))
@@ -262,6 +269,8 @@ static void timebase_debug(void)
 		ts = *cursor++;
 	}
 }
+
+
 static void transformer_es_onStart(void *unused)
 /* @TODO wants to be onPreArm (but not implemented) */
 {
@@ -308,11 +317,11 @@ int acq132_transform_row_es(
 		buf.ull[1] = *full++;
 
 		if (buf.ch[0] == ES_MAGIC_WORD &&
-			    buf.ch[1] == ES_MAGIC_WORD &&
-			    buf.ch[2] == ES_MAGIC_WORD &&
-			    buf.ch[3] == ES_MAGIC_WORD &&
+		    buf.ch[1] == ES_MAGIC_WORD &&
+		    buf.ch[2] == ES_MAGIC_WORD &&
+		    buf.ch[3] == ES_MAGIC_WORD &&
 		    remove_es(nsamples-sam, row, buf.ch, full)){
-				continue;
+			continue;
 		}
 #ifdef DEBUGGING
 		if ((short*)full < from1 || (short*)full > from2){
