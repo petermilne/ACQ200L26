@@ -1377,6 +1377,7 @@ static int ai_getattr (struct vfsmount *mnt, struct dentry *d, struct kstat *k)
 	generic_fillattr(inode, k);
 	was = k->size;
 	k->size = update_inode_stats(inode);
+	k->mtime = inode->i_mtime;
 	dbg(1, "size was %d set to %d", was, (int)k->size);
 	return 0;
 }
