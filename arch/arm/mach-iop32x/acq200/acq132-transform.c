@@ -79,6 +79,7 @@ extern int stub_event_adjust;
 #define TBG if (acq132_transform_debug) dbg
 
 static TBLE* es_tble;
+static unsigned *es_base;
 static unsigned *es_cursor;
 
 #define DEBUGGING
@@ -226,6 +227,23 @@ struct ES_INFO {
 #define NBLOCKS		4	 /* @TODO */
 #define TB_GET_BLEN(c2, c1) (((c2)-(NBLOCKS-1)*ES_LEN-(c1))/sample_size())
 
+static int already_known(ts)
+/* search back towards es_base to see if ts already found 
+   catches the case of multiple ts in _same_ block
+*/
+{
+	if (es_cursor - es_base > 2){
+		unsigned *cc = es_cursor - 2;
+		for (; cc - es_base > 0 && es_cursor - cc < ROW_SAM*2; cc -= 2){
+			if (ts == *cc){
+				dbg(1, "backwards match [-%d] %08x", 
+				    (es_cursor-cc)*2, ts);
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
 int remove_es(int sam, int row, unsigned short* ch, void *cursor)
 {
 	dbg(1, "sam:%6d row:%d %04x %04x %04x %04x %04x %04x %04x %04x",
@@ -237,7 +255,13 @@ int remove_es(int sam, int row, unsigned short* ch, void *cursor)
 			es_cursor += ROW_CHAN_LONGS;
 		}else{
 			unsigned ts = ch[5] << 16 | ch[7];
-			if (ts != *es_cursor){
+			if (likely(ts == *es_cursor)){
+				/* expecting TS in groups */
+				return 1;
+			}else if (already_known(ts)){
+				/* catch close bunched TS */
+				return 1;
+			}else{
 				*++es_cursor = (unsigned)cursor;
 				*++es_cursor = ts;
 			}
@@ -285,14 +309,17 @@ static void transformer_es_onStart(void *unused)
 	}
 
 	if (es_tble){
-		es_cursor = (unsigned*)BB_PTR(es_tble->tblock->offset);
+		es_base = es_cursor = 
+			(unsigned*)BB_PTR(es_tble->tblock->offset);
 		memset(es_cursor, 0, TBLOCK_LEN);
 	}
 }
 
 int acq132_transform_row_es(
 	int row,
-	short *to, short *from, int nsamples, int channel_sam)
+	short *to, 
+/*      short *to[ROW_CHAN], */
+	short *from, int nsamples, int channel_sam)
 /* read a block of data from to and farm 8 channels to from */
 {
 	union {
@@ -342,6 +369,10 @@ int acq132_transform_row_es(
 			}
 #endif
 			to[chx*channel_sam + tosam] = buf.ch[chx];
+/* change to splitter function to handle masks:
+			to[chx][tosam] = buf.ch[chx];
+*/
+			
 		}	
 		++tosam;		
 	}
@@ -351,6 +382,7 @@ int acq132_transform_row_es(
 }
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
+/* keep a stash of NSCAN to vectors */
 	const int nsamples = nwords/stride;	
 	const int rows = stride/ROW_CHAN;
 	const int block_words = rows * ROW_CHAN * ROW_SAM;
