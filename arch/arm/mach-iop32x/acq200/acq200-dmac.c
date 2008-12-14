@@ -634,6 +634,7 @@ static struct OneShot {
 	int result;
 	int ident;
 	unsigned throttle;
+	int chain_len;
 } oneshot;
 
 
@@ -654,24 +655,91 @@ static void run_oneshot_throttle(struct OneShot* ot, int incoming)
 			incoming);
 	}
 }
+
+#include "acq200-inline-dma.h"
+
+
+static void run_oneshot_chain(struct OneShot* ot, int incoming)
+{
+	unsigned offset;
+	unsigned block_len;
+	static int chain_count;
+	static struct iop321_dma_desc* the_chains[2][MAXCHAIN];
+	/* both dmacs are identical (the chains will differ) */
+	static struct DmaChannel dmac[2] = {
+		{ .regs = IOP321_DMA1_CCR, .id = 1 },
+		{ .regs = IOP321_DMA1_CCR, .id = 1 }		  
+	};
+	int cmax = min(MAXCHAIN, ot->chain_len);
+	int entry;
+	int chain;
+
+	if (chain_count == 0){
+		for (chain = 0; chain < 2; ++chain){
+			for (entry = 0; entry < MAXCHAIN; ++entry){
+				the_chains[chain][entry] = acq200_dmad_alloc();
+			}
+		}
+		chain_count = MAXCHAIN;
+	}
+	dmac[0].nchain = dmac[1].nchain = 0;
+
+	for (offset = entry = chain = 0; 
+	     (block_len = min(ot->throttle, ot->bc - offset)) > 0; 
+	     offset += block_len){		
+		struct iop321_dma_desc *pd = the_chains[chain][entry];
+		pd->NDA = 0;
+		pd->PDA = ot->remaddr+offset;
+		pd->PUAD = 0;
+		pd->LAD = ot->laddr+offset;
+		pd->BC = block_len;
+		pd->DC = incoming? DMA_DCR_PCI_MR: DMA_DCR_PCI_MW;		
+		dma_append_chain(&dmac[chain], pd, "");
+		
+		if (++entry == cmax){
+			u32 stat;
+
+			while(!DMA_DONE(dmac[!chain], stat)){
+				;
+			}
+			DMA_ARM(dmac[chain]);
+			DMA_FIRE(dmac[chain]);
+			entry = 0;
+			chain = !chain;
+			dmac[chain].nchain = 0;
+		}
+	}
+
+	if (entry != 0){
+		DMA_ARM(dmac[chain]);
+		DMA_FIRE(dmac[chain]);	
+	}
+}
+
 static ssize_t run_oneshot(
 	struct device * dev, 
 	struct device_attribute *attr,
 	const char * buf, 
 	size_t count, int channel, int incoming)
 {
-	int nargs = sscanf(buf, "%x %x %x %d", 
+	int nargs = sscanf(buf, "%x %x %x %d %d", 
 			   &oneshot.laddr, &oneshot.remaddr, &oneshot.bc, 
-			   &oneshot.throttle);
+			   &oneshot.throttle, &oneshot.chain_len);
 	oneshot.channel = channel;
-	if (nargs == 3){
+	switch(nargs){
+	case 3:
 		oneshot.ident++;
 		oneshot.result = acq200_post_dmac_request(
 			channel, 
 			oneshot.laddr, 0, oneshot.remaddr, 
 			oneshot.bc, incoming);
-	}else if (nargs == 4){
+		break;
+	case 4:
 		run_oneshot_throttle(&oneshot, incoming);
+		break;
+	case 5:
+		run_oneshot_chain(&oneshot, incoming);		
+		break;
 	}
 
 	return strlen(buf);
