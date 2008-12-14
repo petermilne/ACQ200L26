@@ -1318,5 +1318,7 @@ extern void acq200_setChannelLut(const int *lut, int nlut);
 /* index: memory order 1:32 
  * value: nameplate order 1:32 
  */
+
+
 #define NOLOOK_FOR_PIT	-1
 #endif /* ACQ200_FIFO_H__ */

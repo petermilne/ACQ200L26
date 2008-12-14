@@ -142,4 +142,8 @@ u32 acq216_pci2bus(u32 pci_addr);
 extern int acq200_check_entire_es(unsigned *pes);
 extern int acq200_lookup_pchan(int lchannel);
 
+extern void acq200_setChannelEnabled(int pchan, int enable);
+extern int acq200_pchanEnabled(int pchan);
+extern int acq200_lchanEnabled(int lchan);
+
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

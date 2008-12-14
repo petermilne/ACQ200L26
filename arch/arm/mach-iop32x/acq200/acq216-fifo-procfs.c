@@ -419,6 +419,7 @@ void acq200_setChannelMask(unsigned mask)
 	unsigned daqen = syscon&ACQ200_SYSCON_DAQEN;
 	unsigned ap = syscon&ACQ200_SYSCON_ANTIPHASE;
 	unsigned fifen = *ACQ200_FIFCON&ACQ200_FIFCON_HC_ENABLE;
+	unsigned lchan, mm;
 
 	if (fifen){
 		info("refusing to change CMASK with FIFO ENABLED");
@@ -466,6 +467,12 @@ void acq200_setChannelMask(unsigned mask)
 			mask = 0xfff0;
 		}
 	}
+
+	for (lchan = mm = 1; mm; mm<<=1, lchan++){
+		acq200_setChannelEnabled(
+			acq200_lookup_pchan(lchan), (mm&mask) != 0);
+	}
+
 	CAPDEF_set_nchan(nchan);
 	CAPDEF->channel_mask = mask;
 

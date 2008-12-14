@@ -129,7 +129,12 @@ static unsigned update_inode_stats(struct inode *inode)
 		break;
 	default:
 		if ((ident&BIGBUF_CHANNEL_DATA_DEVICE) != 0){
-			ssize = CSIZE;
+			int lchannel = ((unsigned)inode->i_private) & 0x7f;
+			if (acq200_lchanEnabled(lchannel)){
+				ssize = CSIZE;
+			}else{
+				ssize = 0;
+			}
 		}else{
 			ssize = 0;
 		}
@@ -368,6 +373,9 @@ static void initBBRP(
 	}else if (!tble){
 		err("null TBLOCK LIST ENTRY");
 		bbrp->status = -ENO_TBLOCK;
+	}else if (!acq200_pchanEnabled(DCI(file)->pchan)){
+		dbg(1, "channel Not enabled %d", DCI(file)->lchan);
+		bbrp->status = BBRP_COMPLETE;
 	}else{
 		bbrp->offsam = offsam;
 		if (DG->sample_read_length){

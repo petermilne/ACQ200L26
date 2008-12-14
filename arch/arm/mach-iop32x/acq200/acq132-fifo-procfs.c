@@ -884,6 +884,7 @@ eg
 void acq200_setChannelMask(unsigned mask)
 {
 	unsigned mm;
+	int lchan;
 
 	if ((mm = mask&MASK_D) != 0 && isValidMask(mm>>16, mm>>0)){
 		mask |= mm;
@@ -896,6 +897,11 @@ void acq200_setChannelMask(unsigned mask)
 	}
 	if ((mm = mask&MASK_A) != 0 && isValidMask(mm>>28, mm>>12)){
 		mask |= mm;
+	}
+
+	for (lchan = mm = 1; mm; mm<<=1, lchan++){
+		acq200_setChannelEnabled(
+			acq200_lookup_pchan(lchan), (mm&mask) != 0);
 	}
 
 	CAPDEF_set_nchan(count_bits(mask));

@@ -425,9 +425,22 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 void acq200_setChannelMask(unsigned mask)
 {
 	int nblocks;
+	unsigned cursor, block;
 
 	mask = mask&0x7;      /* actually a bank mask */
 	CAPDEF->channel_mask = mask;
+
+
+	for (block = 0; block < 3; block++){
+		int ic1 = 1 + block*32;
+		int ic2 = ic1 + 32;
+		int icc;
+		for (icc = ic1; icc < ic2; ++icc){
+			acq200_setChannelEnabled(
+				acq200_lookup_pchan(icc), 
+					(mask&(1<<block)) != 0);
+		}
+	}
 
 	for (nblocks = 0; mask; mask >>= 1){
 		if (mask&1){

@@ -593,3 +593,35 @@ int acq200_rounding(int khz, int precision)
 	}
 	return khz;
 }
+
+
+static unsigned char *cmap;
+
+
+extern void acq200_setChannelEnabled(int pchan, int enable)
+{
+	if (!cmap){
+		assert(get_nchan() != 0);
+		cmap = (unsigned char*)kzalloc(get_nchan(), GFP_KERNEL);
+		assert(cmap != 0);
+	}
+
+	dbg(1, "cmap %p pchan %d enabled %d", cmap, pchan, enable);
+	cmap[pchan] = enable;
+
+}
+extern int acq200_pchanEnabled(int pchan)
+{
+	dbg(1, "cmap %p pchan %d enabled %d", cmap, pchan, 
+	    cmap==0? 0: cmap[pchan]);
+
+	if (!cmap){
+		return 0;
+	}else{
+		return cmap[pchan];
+	}
+}
+extern int acq200_lchanEnabled(int lchan)
+{
+	return acq200_pchanEnabled(acq200_lookup_pchan(lchan));
+}

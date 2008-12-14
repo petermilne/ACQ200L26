@@ -68,6 +68,9 @@ int tblock_raw_extractor(
 	DBG(1, "returns cplen %d", cplen);
 	return cplen;
 }
+
+/** ACQ132 @@todo : abstract getChannelData(channel, &base, offset); */
+
 int tblock_cooked_extractor(
 	struct TBLOCK *this,
 	short* ubuf, int maxbuf, 
