@@ -124,6 +124,11 @@ void acq100_setCpldMaskBit(int slot) {
 /** NB: we have plug, not swap. */
 	u8 enable = 0;
 
+	if (slot == -1){
+		acq200_cpld_mask |= 0x10;	/* use XINT3 */
+		*(volatile u8*)ACQ200_CPLD = acq200_cpld_mask;
+	}
+
 
 	switch(slot%4){
 	case 0:

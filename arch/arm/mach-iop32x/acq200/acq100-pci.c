@@ -40,7 +40,7 @@ int acq100_is_system_slot_enabled(void);
 #define IRQ_EXT_PCI_CUSTOM	29	/* special for acq196_022 */
 #define IRQ_EXT_PCI_NEW		30	/* REV3 boards	          */
 
-static int is_system_slot = -1;
+static int is_system_slot = 0;
 static int irq_ext_pci = IRQ_EXT_PCI_ORIG;
 
 static int
@@ -273,7 +273,21 @@ int acq100_is_system_slot_enabled(void)
 	}
 }
 
+static void acq100_check_cpld_capability(void)
+{
+	volatile u8* cpld = (volatile u8*)ACQ200_CPLD;
+	u8 revid = cpld[3];
 
+	printk("acq100 cpld rev %d\n", revid);
+
+	if (revid >= 5){
+		is_system_slot = 1;
+		acq100_setCpldMaskBit(-1);	/* HACK */
+		irq_ext_pci = IRQ_EXT_PCI_NEW;
+
+		printk("rev5 CPLD, CPCI int %d selected\n", irq_ext_pci);
+	}
+}
 int acq132_is_system_slot(void)
 /** @@worktodo ... check CPLD for slot # */
 {
@@ -321,6 +335,10 @@ static int __init acq100_pci_init(void)
 			iop32x_check_pci_bus_speed();
 		}
 	}else if (machine_is_acq100()){
+		if (is_system_slot == 0){
+			/* only do this for DEFAULT config */
+			acq100_check_cpld_capability();
+		}
 		if (acq100_is_system_slot_enabled()){
 			if (irq_ext_pci == IRQ_EXT_PCI_NEW){
 				printk("PCI: ext int %d set cpld %x\n",
