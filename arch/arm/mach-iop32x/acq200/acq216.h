@@ -36,7 +36,7 @@
 
 
 /*
- * REGISTERS
+ * REGISTERS NB: 64 bit aligned
  */
 
 #define ACQ200_BDR      FPGA_REG( 0x00 )
@@ -44,8 +44,8 @@
 #define ACQ200_SYSCON   FPGA_REG( 0x10 )
 #define ACQ200_CLKCON   FPGA_REG( 0x18 )
 #define ACQ200_CLKDAT   FPGA_REG( 0x20 )
-/* 0x24 not used */
 #define ACQ200_DIOCON   FPGA_REG( 0x28 )
+#define ACQ200_TRGCON   FPGA_REG( 0x30 )
 /* 0x2c .. 0x3c not used */
 #define ACQ216_OFFSET_DACS FPGA_REG(0x40)
 /* 0x44 not used */
@@ -245,6 +245,17 @@
 #define ACQ200_CLKDAT_OD_SHL   24
 
 #define ACQ200_CLKDAT_FREQ_SHL 8
+
+#define ACQ200_TRGCON_TR_MASK   0x00f00000      /* Plant Trig input select */
+#define ACQ200_TRGCON_TRMAS     0x00080000      /* Sync Trig out active */
+#define ACQ200_TRGCON_OTR_MASK  0x00070000	/* Sync Trig out select */
+#define ACQ200_TRGCON_SST	0x00000001	/* Sync Soft Trig */
+
+#define ACQ200_TRGCON_TR_SHL	20	
+#define ACQ200_TRGCON_TR_DIx(x) ((0x8 | (x)) << ACQ200_TRGCON_TR_SHL)
+
+#define ACQ200_TRGCON_OTR_SHL   16
+#define ACQ200_TRGCON_OTR_DOx(x) ((x) << ACQ200_TRGCON_OTR_SHL)
 
 
 #define ACQ200_DIOCON_SETOUT    0x00ff0000

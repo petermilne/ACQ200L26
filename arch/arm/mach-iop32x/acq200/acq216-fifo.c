@@ -1505,6 +1505,38 @@ static int acq216_commitObClkSrc(struct Signal* signal)
 	return 0;
 }
 
+
+static int acq200_commitSyncTrigSrc(struct Signal* signal)
+{
+	u32 trgcon = *ACQ200_TRGCON;
+	
+	trgcon &= ~(ACQ200_TRGCON_TR_MASK);
+
+	if (signal->is_active){
+		trgcon |= ACQ200_TRGCON_TR_DIx(signal->DIx);
+	}
+	*ACQ200_TRGCON = trgcon;
+	return 0;	
+}
+
+static int acq200_commitMasSyncTrig(struct Signal *signal)
+{
+	u32 trgcon = *ACQ200_TRGCON;
+	
+	trgcon &= ~(ACQ200_TRGCON_OTR_MASK|ACQ200_TRGCON_OTR_MASK);
+
+	if (signal->is_active){
+                /* @@todo WARNING starts D0 == 0 */
+		trgcon |= 
+			ACQ200_TRGCON_OTR_DOx(signal->DIx)|
+			ACQ200_TRGCON_TRMAS;
+	}
+	*ACQ200_TRGCON = trgcon;
+	return 0;	
+}
+
+
+
 static struct CAPDEF* acq216_createCapdef(void)
 {
 	static struct CAPDEF _capdef = {
@@ -1545,6 +1577,15 @@ static struct CAPDEF* acq216_createCapdef(void)
 		"ob_clk_src", 0, 6, 6, 0, 1, acq216_commitObClkSrc);
 	capdef->counter_src = createSignal("counter_src", 0, 6, 6,0, 1, 
 				       acq216_commitTcrSrc);
+
+
+	capdef->sync_trig_src = createSignal(
+		"sync_trig_src", 3, 5, 3, 0, 0, acq200_commitSyncTrigSrc);
+
+	capdef->sync_trig_mas = createSignal(
+		"sync_trig_mas", 3, 5, 3, 0, 0, acq200_commitMasSyncTrig);
+	capdef->sync_trig_mas->is_output = 1;
+
 	dbg(1, "returns capdef %p", capdef);
 
 	return capdef;

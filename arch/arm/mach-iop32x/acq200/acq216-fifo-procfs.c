@@ -129,6 +129,11 @@ static ssize_t show_channel_mapping_bin(
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
+
+DEFINE_SIGNAL_ATTR(sync_trig_src);
+DEFINE_SIGNAL_ATTR(sync_trig_mas);
+
+
 static u32 ob_clock_word;
 static int actual_khz;
 
@@ -410,6 +415,9 @@ static void acq216_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_antiphase);
 	DEVICE_CREATE_FILE(dev, &dev_attr_translen);
 	DEVICE_CREATE_FILE(dev, &dev_attr_capcom);
+
+	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
 }
 
 void acq200_setChannelMask(unsigned mask)
@@ -519,6 +527,7 @@ int acq200_dumpregs_diag(char* buf, int len)
 	APPEND(ACQ200_CLKCON);
 	APPEND(ACQ200_CLKDAT);
 	APPEND(ACQ200_DIOCON);
+	APPEND(ACQ200_TRGCON);
 	APPEND(ACQ216_OFFSET_DACS);
 	APPEND(ACQ216_TCR_IMM);
 	APPEND(ACQ216_TCR_LAT);
