@@ -1107,13 +1107,17 @@ static ssize_t store_dio(
         return strlen(buf);
 }
 
+unsigned acq200_getDIO6(void)
+{
+	return *ACQ200_DIOCON;
+}
 static ssize_t show_dio(
 	struct device * dev, 
 	struct device_attribute *attr,
 	char * buf)
 {
 	int ibit;
-	unsigned control = *ACQ200_DIOCON;
+	unsigned control = acq200_getDIO6();
 
 	for (ibit = 0; ibit != MAXDIOBIT; ++ibit){
 		if (DIO_IS_OUTPUT(control, ibit)){
@@ -3758,3 +3762,5 @@ void delete_proc_entries(void)
 	RMP("bda");
 #undef RMP
 }
+
+EXPORT_SYMBOL_GPL(acq200_getDIO6);

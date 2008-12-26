@@ -58,6 +58,8 @@ module_param(rtm_debug, int, 0664);
 int pulse_top_usec;
 module_param(pulse_top_usec, int, 0600);
 
+int pollto_jiffies = 1;
+module_param(pollto_jiffies, int, 0644);
 
 char acq100_rtm_driver_string[] = "D-TACQ RTM driver";
 char acq100_rtm_driver_version[] = "$Revision: 1.6 $ build B1001 " __DATE__;
@@ -73,6 +75,16 @@ extern void acq200_setDO6_bit(int ibit, int value);
 #define SET_SYNC_ON  acq200_setDO6_bit(SYNC, 1)
 #define SET_SYNC_OFF acq200_setDO6_bit(SYNC, 0)
 
+
+#define INTERRUPTED	0	/* simulate interrupts for now */
+
+
+int major;
+
+
+unsigned acq200_getDIO32(void) {
+	return read_inputs();
+}
 
 static ssize_t store_dio(
 	struct device * dev, 
@@ -111,6 +123,16 @@ static ssize_t store_dio(
 	set_outputs();
         return strlen(buf);
 }
+
+static ssize_t show_dev(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf(buf, "%d:%d\n", major, 0);
+}
+
+static DEVICE_ATTR(dev, S_IRUGO, show_dev, 0);
 
 static ssize_t show_dio(
 	struct device * dev, 
@@ -279,12 +301,99 @@ static DEVICE_ATTR(dio32_hex, S_IRUGO|S_IWUGO, show_dio_hex, store_dio_hex);
 
 static void mk_rtm_sysfs(struct device *dev)
 {
+	DEVICE_CREATE_FILE(dev, &dev_attr_dev);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_bit);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_raw);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_dio_sync);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio32_hex);
 }
+
+struct DeviceState {
+	unsigned (*getDio)(void);
+	unsigned state;	
+	wait_queue_head_t waitq;
+};
+
+extern unsigned acq200_getDIO6(void);
+
+
+static int dio_open(struct inode *inode, struct file *file)
+{
+	int minor = MINOR(inode->i_rdev);
+	struct DeviceState state;
+	
+	switch(minor){
+	case 0:
+		state.getDio = acq200_getDIO6;
+		break;
+	case 1:
+		state.getDio = acq200_getDIO32;
+		break;
+	default:
+		return -ENODEV;
+	}	
+
+	init_waitqueue_head(&state.waitq);
+	file->private_data = kzalloc(sizeof(struct DeviceState), GFP_KERNEL);
+	if (file->private_data == 0){
+		err("failed to allocate device state");
+		return -ENOMEM;
+	}
+	memcpy(file->private_data, &state, sizeof(state));
+	return 0;
+}
+
+static int wait_cos(struct DeviceState *ds)
+{
+	unsigned s2;
+	int rc;
+
+	s2 = ds->state;
+
+	do {
+		rc = wait_event_interruptible_timeout(
+			ds->waitq, INTERRUPTED, pollto_jiffies);
+		if (rc != 0){
+			return rc;
+		}
+		ds->state = ds->getDio();
+	} while(s2 == ds->state);
+	
+	return 0;	
+}
+
+static ssize_t dio_read(
+	struct file* file, char* buf, size_t count, loff_t* posp)
+{
+	struct DeviceState* ds = (struct DeviceState*)file->private_data;
+	
+	if (count < sizeof(unsigned)){
+		return -EINVAL;
+	}
+	count = min(count, sizeof(unsigned));
+
+	if ((file->f_flags & O_NONBLOCK) != 0 || *posp == 0){
+		ds->state = ds->getDio();
+	}else{
+		if (wait_cos(ds)){
+			return -ERESTARTSYS;
+		}
+	}
+	if (copy_to_user(buf, &ds->state, count)){
+		return -EFAULT;
+	}
+	(*posp)++;
+	return count;
+}
+int dio_release (struct inode *inode, struct file *file)
+{
+	if (file->private_data){
+		kfree(file->private_data);
+	}
+	return 0;
+}
+
 
 static void rtm_dev_release(struct device * dev)
 {
@@ -296,7 +405,17 @@ static struct device_driver rtm_driver;
 
 static int rtm_probe(struct device *dev)
 {
+	static struct file_operations dio_fops = {
+		.open = dio_open,
+		.read = dio_read,
+		.release = dio_release
+	};
 	info("");
+	major = register_chrdev(0, "dio", &dio_fops);
+	if (major < 0){
+		err("can't get major");
+		return major;
+	}
 	mk_rtm_sysfs(dev);
 	init_inputs();
 	return 0;
@@ -352,9 +471,6 @@ rtm_exit_module(void)
 }
 
 
-unsigned acq200_getDIO32(void) {
-	return read_inputs();
-}
 
 EXPORT_SYMBOL_GPL(acq200_getDIO32);
 
