@@ -71,32 +71,38 @@ int tblock_raw_extractor(
 
 /** ACQ132 @@todo : abstract getChannelData(channel, &base, offset); */
 
+int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
+{
+	int bblock_samples = tb->length/NCHAN/sizeof(short);
+	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
+				channel*bblock_samples*sizeof(short));
+
+	*base = bblock_base + offset;
+	return bblock_samples;
+}
+
 int tblock_cooked_extractor(
 	struct TBLOCK *this,
 	short* ubuf, int maxbuf, 
 	int channel, int offset, int stride)
 {
-	int bblock_samples = this->length/NCHAN/sizeof(short);
-	short* bblock_base = (short*)(
-		va_buf(DG) + this->offset + 
-		channel*bblock_samples*sizeof(short));
+	short* bblock_base;
+	int bblock_samples = DG->bigbuf.tblocks.getChannelData(
+					this, &bblock_base, channel, offset);
 
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 
 	maxbuf = min(maxbuf, bblock_samples-offset);
 	if (stride == 1){
-		COPY_TO_USER(ubuf, bblock_base + offset, maxbuf*2);
+		COPY_TO_USER(ubuf, bblock_base, maxbuf*2);
 	}else{
 		int cplen;
 
 		DBG(1, "c:%d stride:%d", channel, stride);
 
 		for(cplen = 0; cplen < maxbuf && offset < this->length; 
-		    ++cplen){
-			COPY_TO_USER(ubuf+cplen, 
-				     bblock_base + offset, 
-				     sizeof(short));
-			offset += stride;
+		    ++cplen, bblock_base += stride){
+			COPY_TO_USER(ubuf+cplen, bblock_base, sizeof(short));
 		}		
 	}
 

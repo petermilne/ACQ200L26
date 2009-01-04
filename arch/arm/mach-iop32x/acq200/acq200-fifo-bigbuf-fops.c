@@ -117,6 +117,7 @@ static void deleteTBC(struct TblockConsumer *tbc)
 
 
 
+
 static unsigned update_inode_stats(struct inode *inode)
 {
 	int ident = (int)inode->i_private;
@@ -141,6 +142,7 @@ static unsigned update_inode_stats(struct inode *inode)
 	}
 
 	{
+/** @todo ... this must change for multi-rate */
 		unsigned totsam = (SAMPLES-(DG->sample_read_start))/
 			DG->sample_read_stride;
 
@@ -352,6 +354,10 @@ void acq200_initBBRP_using_phase(
 #undef LOCDEB
 #undef LOCDEP
 }
+
+
+
+
 static void initBBRP(
 	struct file *file, size_t len, loff_t *offset,
 	struct BigbufReadPrams* bbrp)

@@ -489,7 +489,6 @@ static int stream_open(struct inode *inode, struct file *filp)
 }  
 static ssize_t xx_read(	
 	struct file *filp, char *buf, size_t count, loff_t *offset)
-/** WARNING: NO EOF, so it only makes sense to read on timer */
 /** read a single sample and return */
 {
 	struct MC *mc = FMC(filp);

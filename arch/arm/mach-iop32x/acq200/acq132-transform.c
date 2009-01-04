@@ -17,6 +17,8 @@
  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                   */
 /* ------------------------------------------------------------------------- */
 
+/** @todo  handle multirate! */
+
 #define DTACQ_MACH 2
 #define ACQ132
 #define ACQ_IS_INPUT 1

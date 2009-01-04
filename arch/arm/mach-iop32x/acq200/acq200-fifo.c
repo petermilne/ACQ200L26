@@ -3837,6 +3837,7 @@ static void acqX00_fpga_remove (struct device *dev, int irq)
 
 
 static void init_dg(void)
+/** one-time initialization */
 {
 	DMC_WO = kzalloc(sizeof(struct DMC_WORK_ORDER), GFP_KERNEL);
 	IPC = kzalloc(sizeof(struct IPC), GFP_KERNEL);
@@ -3867,6 +3868,8 @@ static void init_dg(void)
 	spin_lock_init(&DG->tbc.lock);
 
 	INIT_WORK(&onEnable_work, onEnableAction);
+
+	DG->bigbuf.tblocks.getChannelData = getChannelData;
 }
 
 static void delete_dg(void)

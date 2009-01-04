@@ -402,6 +402,9 @@ struct TBLOCK {
 	Memcpy memcpy;
 };
 
+typedef int (*GetChannelData)(
+	struct TBLOCK* tb, short **base, int channel, int offset);
+
 #define NHISTO 16
 
 #define BTYPE_AI 0
@@ -574,6 +577,7 @@ struct DevGlobs {
 				short *to, short *from, 
 				int nwords, int stride);
 			unsigned t_flags;
+			GetChannelData getChannelData;
 		} tblocks;
 	} bigbuf;
 
@@ -1319,6 +1323,8 @@ extern void acq200_setChannelLut(const int *lut, int nlut);
  * value: nameplate order 1:32 
  */
 
+extern 
+int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset);
 
 #define NOLOOK_FOR_PIT	-1
 #endif /* ACQ200_FIFO_H__ */
