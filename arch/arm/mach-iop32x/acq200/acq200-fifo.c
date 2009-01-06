@@ -3835,6 +3835,10 @@ static void acqX00_fpga_remove (struct device *dev, int irq)
 
 }
 
+unsigned getChannelNumSamples(int pchan_not_used)
+{
+	return SAMPLES;
+}
 
 static void init_dg(void)
 /** one-time initialization */
@@ -3870,6 +3874,7 @@ static void init_dg(void)
 	INIT_WORK(&onEnable_work, onEnableAction);
 
 	DG->bigbuf.tblocks.getChannelData = getChannelData;
+	DG->getChannelNumSamples = getChannelNumSamples;
 }
 
 static void delete_dg(void)

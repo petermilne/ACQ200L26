@@ -116,23 +116,28 @@ static void deleteTBC(struct TblockConsumer *tbc)
 }
 
 
+#define NOSAMPLES 0xffffffff
 
 
 static unsigned update_inode_stats(struct inode *inode)
 {
 	int ident = (int)inode->i_private;
 	unsigned ssize;
+	unsigned samples = 0;
 
 	switch(ident){
 	case BIGBUF_DATA_DEVICE_XXP:
 	case BIGBUF_DATA_DEVICE_XXL:
 		ssize = sample_size();
+		samples = SAMPLES;
 		break;
 	default:
 		if ((ident&BIGBUF_CHANNEL_DATA_DEVICE) != 0){
 			int lchannel = ((unsigned)inode->i_private) & 0x7f;
-			if (acq200_lchanEnabled(lchannel)){
+			if (acq200_lchanEnabled(lchannel)){ 
 				ssize = CSIZE;
+				samples = DG->getChannelNumSamples(	
+					acq200_lookup_pchan(lchannel));
 			}else{
 				ssize = 0;
 			}
@@ -141,18 +146,17 @@ static unsigned update_inode_stats(struct inode *inode)
 		}
 	}
 
-	{
-/** @todo ... this must change for multi-rate */
-		unsigned totsam = (SAMPLES-(DG->sample_read_start))/
-			DG->sample_read_stride;
-
+	if (ssize){
+		unsigned totsam = (samples- DG->sample_read_start)/
+							DG->sample_read_stride;
 		if (DG->sample_read_length){
 			totsam = min(totsam, DG->sample_read_length);
 		}
-
-		inode->i_mtime = DG->stats.finish_time;
 		inode->i_size = ssize * totsam;	
+	}else{
+		inode->i_size = 0;
 	}
+	inode->i_mtime = DG->stats.finish_time;
 	return inode->i_size;
 
 }

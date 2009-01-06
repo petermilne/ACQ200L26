@@ -57,6 +57,11 @@
 
 #define BDR_MAGIC	0xdeadbeef
 
+/* channel mask in bank */
+#define MASK_1	0x1
+#define MASK_2	0x5
+#define MASK_4	0xf
+
 
 /* custom bits */
 
@@ -361,6 +366,16 @@ static inline int  acq132_getScanlistLen(void)
 {
 	return *ACQ132_SCAN_LIST_LEN + 1;
 }
+
+static inline int acq132_getScanlistEntry(int n)
+{
+	unsigned def = *ACQ132_SCAN_LIST_DEF;
+	if (n){
+		def >>= n*2;
+	}
+	return BANK_A + (def&0x3);
+}
+
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
 void acq132_set_channel_mask(u32 channel_mask);
 
@@ -413,5 +428,11 @@ static inline void reset_gpg(void)
 #define ROW_CHAN_SZ	(ROW_CHAN*sizeof(short))
 #define ROW_CHAN_LONGS  (ROW_CHAN_SZ/sizeof(unsigned))
 
+/* but with channel masking, we have 2 more possibilities: */
+#define ROW_CHAN2	4	/* two channels per fpga */
+#define ROW_CHAN4	8	/* one channel per fpga */
+
+int getChannelsInMask(int bank, int channels[2][4]);
+const char* acq132_getChannelSpeedMask(void);
 #endif	/*  __ACQ132_H__ */
 

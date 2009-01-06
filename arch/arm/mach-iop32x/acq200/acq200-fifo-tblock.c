@@ -69,7 +69,6 @@ int tblock_raw_extractor(
 	return cplen;
 }
 
-/** ACQ132 @@todo : abstract getChannelData(channel, &base, offset); */
 
 int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
 {

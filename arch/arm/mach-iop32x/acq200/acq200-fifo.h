@@ -647,6 +647,8 @@ struct DevGlobs {
 		spinlock_t lock;
 		void (* client)(void *data);
 	} refillClient;
+
+	unsigned (*getChannelNumSamples)(int pchan);
 };
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)
@@ -1110,8 +1112,7 @@ static inline int get_tblock_max_sam(void)
 
 #define SAMPLES_PRE    (phase_len(DMC_WO->pre)/sample_size())
 #define SAMPLES_POST   (phase_len(DMC_WO->post)/sample_size())
-#define SAMPLES (SAMPLES_PRE+SAMPLES_POST)
-
+#define SAMPLES	       (SAMPLES_PRE+SAMPLES_POST)
 
 extern void acq200_pipe_fiq(void);
 extern void acq200_pipe_fiq_end(void);
@@ -1325,6 +1326,7 @@ extern void acq200_setChannelLut(const int *lut, int nlut);
 
 extern 
 int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset);
+extern unsigned getChannelNumSamples(int lchan);
 
 #define NOLOOK_FOR_PIT	-1
 #endif /* ACQ200_FIFO_H__ */

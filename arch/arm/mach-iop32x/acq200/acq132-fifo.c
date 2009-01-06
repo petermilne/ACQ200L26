@@ -1329,47 +1329,48 @@ static void acq132_setDefaultScanlist(u32 masks[])
 static const struct ADC_CHANNEL_LUT {
 	int dev;
 	int side;
-	u32 mask;
+	u32 range_mask;
+	u32 cmask;
 } ADC_CHANNEL_LUT[] = {
 	[ 0] = {},
-	[ 1] = { BANK_D, 'R', ACQ132_ADC_RANGE_R1 },
-	[ 2] = { BANK_D, 'R', ACQ132_ADC_RANGE_R2 },
-	[ 3] = { BANK_D, 'R', ACQ132_ADC_RANGE_R3 },
-	[ 4] = { BANK_D, 'R', ACQ132_ADC_RANGE_R4 },
-	[ 5] = { BANK_C, 'R', ACQ132_ADC_RANGE_R1 },
-	[ 6] = { BANK_C, 'R', ACQ132_ADC_RANGE_R2 },
-	[ 7] = { BANK_C, 'R', ACQ132_ADC_RANGE_R3 },
-	[ 8] = { BANK_C, 'R', ACQ132_ADC_RANGE_R4 },
-	[ 9] = { BANK_B, 'R', ACQ132_ADC_RANGE_R1 },
-	[10] = { BANK_B, 'R', ACQ132_ADC_RANGE_R2 },
-	[11] = { BANK_B, 'R', ACQ132_ADC_RANGE_R3 },
-	[12] = { BANK_B, 'R', ACQ132_ADC_RANGE_R4 },
-	[13] = { BANK_A, 'R', ACQ132_ADC_RANGE_R1 },
-	[14] = { BANK_A, 'R', ACQ132_ADC_RANGE_R2 },
-	[15] = { BANK_A, 'R', ACQ132_ADC_RANGE_R3 },
-	[16] = { BANK_A, 'R', ACQ132_ADC_RANGE_R4 },
-	[17] = { BANK_D, 'L', ACQ132_ADC_RANGE_L1 },
-	[18] = { BANK_D, 'L', ACQ132_ADC_RANGE_L2 },
-	[19] = { BANK_D, 'L', ACQ132_ADC_RANGE_L3 },
-	[20] = { BANK_D, 'L', ACQ132_ADC_RANGE_L4 },
-	[21] = { BANK_C, 'L', ACQ132_ADC_RANGE_L1 },
-	[22] = { BANK_C, 'L', ACQ132_ADC_RANGE_L2 },
-	[23] = { BANK_C, 'L', ACQ132_ADC_RANGE_L3 },
-	[24] = { BANK_C, 'L', ACQ132_ADC_RANGE_L4 },
-	[25] = { BANK_B, 'L', ACQ132_ADC_RANGE_L1 },
-	[26] = { BANK_B, 'L', ACQ132_ADC_RANGE_L2 },
-	[27] = { BANK_B, 'L', ACQ132_ADC_RANGE_L3 },
-	[28] = { BANK_B, 'L', ACQ132_ADC_RANGE_L4 },
-	[29] = { BANK_A, 'L', ACQ132_ADC_RANGE_L1 },
-	[30] = { BANK_A, 'L', ACQ132_ADC_RANGE_L2 },
-	[31] = { BANK_A, 'L', ACQ132_ADC_RANGE_L3 },
-	[32] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4 }
+	[ 1] = { BANK_D, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
+	[ 2] = { BANK_D, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
+	[ 3] = { BANK_D, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[ 4] = { BANK_D, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
+	[ 5] = { BANK_C, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
+	[ 6] = { BANK_C, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
+	[ 7] = { BANK_C, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[ 8] = { BANK_C, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
+	[ 9] = { BANK_B, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
+	[10] = { BANK_B, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
+	[11] = { BANK_B, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[12] = { BANK_B, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
+	[13] = { BANK_A, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
+	[14] = { BANK_A, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
+	[15] = { BANK_A, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[16] = { BANK_A, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
+	[17] = { BANK_D, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
+	[18] = { BANK_D, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
+	[19] = { BANK_D, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[20] = { BANK_D, 'L', ACQ132_ADC_RANGE_L4, MASK_4 },
+	[21] = { BANK_C, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
+	[22] = { BANK_C, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
+	[23] = { BANK_C, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[24] = { BANK_C, 'L', ACQ132_ADC_RANGE_L4, MASK_4 },
+	[25] = { BANK_B, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
+	[26] = { BANK_B, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
+	[27] = { BANK_B, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[28] = { BANK_B, 'L', ACQ132_ADC_RANGE_L4, MASK_4 },
+	[29] = { BANK_A, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
+	[30] = { BANK_A, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
+	[31] = { BANK_A, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[32] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4, MASK_4 }
 };
+
+u32 masks[4] = {};
 
 void acq132_set_channel_mask(u32 channel_mask)
 {
-	u32 masks[4] = {};
-
 	u32 cursor = 1;
 	u32 ch = 1;
 	int dev;
@@ -1410,6 +1411,67 @@ void acq132_set_channel_mask(u32 channel_mask)
 	acq132_setDefaultScanlist(masks);	      
 }
 
+static int __getChannelsInMaskSide(int ic, u32 key, int channels[4], int *cix)
+{
+	const struct ADC_CHANNEL_LUT *pch = &ADC_CHANNEL_LUT[ic];
+	int ch_index = *cix;
+
+	switch(key){
+	case MASK_4:
+		channels[ch_index] = ic;
+		*cix = ch_index + 1;
+		break;
+	case MASK_2:
+		if (pch->cmask == MASK_2 ||
+		    pch->cmask == MASK_1   ){
+			channels[ch_index + 2] = ic;
+			channels[ch_index] = ic;
+			*cix = ch_index + 1;
+		}
+		break;
+	case MASK_1:
+		if (pch->cmask == MASK_1){
+			channels[ch_index + 3] =			
+			channels[ch_index + 2] =
+			channels[ch_index + 1] =
+			channels[ch_index] = ic;
+			*cix = ch_index + 4;
+		}
+		break;
+	default:
+		err("Bad mask");
+	}
+	return 0;
+}
+int getChannelsInMask(int bank, int channels[2][4])
+/* identify channels enabled in bank, filling id in channels[], return n */
+{
+	u32 mask = masks[bank];
+	u32 keyl = mask >> ACQ132_ADC_CTRL_LMSHFT;
+	u32 keyr = mask >> ACQ132_ADC_CTRL_RMSHFT;
+	int ic;
+	int cix[2];
+	int nc = 0;
+	
+	memset(channels, 0, sizeof(channels));
+
+	for (ic = 1; ic <= 32; ++ic){
+		const struct ADC_CHANNEL_LUT *pch = &ADC_CHANNEL_LUT[ic];
+		if (pch->dev == bank){
+			int right = pch->side == 'R';
+			__getChannelsInMaskSide(ic,
+				right? keyr: keyl, channels[right], cix+right);
+		}
+	}
+
+	for (ic = 0; ic < 8; ++ic){
+		if (channels[ic]){
+			nc++;
+		}
+	}
+	
+	return nc;	
+}
 static u32 adc_range_def;
 
 static void _acq132_set_adc_range(u32 channels)
@@ -1419,12 +1481,12 @@ static void _acq132_set_adc_range(u32 channels)
 
 	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
 		int dev = ADC_CHANNEL_LUT[ch].dev;
-		u32 mask = ADC_CHANNEL_LUT[ch].mask;
+		u32 range_mask = ADC_CHANNEL_LUT[ch].range_mask;
 
 		if ((channels&cursor) != 0){
-			*ACQ132_ADC_RANGE(dev) |= mask;
+			*ACQ132_ADC_RANGE(dev) |= range_mask;
 		}else{
-			*ACQ132_ADC_RANGE(dev) &= ~mask;
+			*ACQ132_ADC_RANGE(dev) &= ~range_mask;
 		}
 	}
 

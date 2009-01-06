@@ -49,6 +49,9 @@
 int stub_transform;
 module_param(stub_transform, int, 0664);
 
+int stub_esmr = 1;
+module_param(stub_esmr, int, 0664);
+
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
@@ -92,6 +95,23 @@ short* from1;
 short* from2;
 #endif
 
+#define MAXTBLOCKS (DG->bigbuf.tblocks.nblocks)
+#define TBLOCKCHSZ (MAXTBLOCKS * sizeof(ChannelData))
+#define NOTINMASK 0xffffffff
+
+typedef unsigned ChannelData[MAXCHAN];
+
+static ChannelData startOffsets;
+static ChannelData sampleCounts;
+static ChannelData *tblockChannels;	/* [TBLOCKS] */
+
+typedef unsigned * pUNS;
+
+struct Bank {
+	int nchan;	/* 2, 4, 8 */
+	unsigned id;
+	pUNS channelCursors[4][2];
+};
 
 void acq132_transform_row(
 	short *to, short *from, int nsamples, int channel_sam)
@@ -229,7 +249,7 @@ struct ES_INFO {
 #define NBLOCKS		4	 /* @TODO */
 #define TB_GET_BLEN(c2, c1) (((c2)-(NBLOCKS-1)*ES_LEN-(c1))/sample_size())
 
-static int already_known(ts)
+static int already_known(unsigned ts)
 /* search back towards es_base to see if ts already found 
    catches the case of multiple ts in _same_ block
 */
@@ -382,6 +402,8 @@ int acq132_transform_row_es(
 	TBG(3, "99");	
 	return tosam;
 }
+
+
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
 /* keep a stash of NSCAN to vectors */
@@ -441,6 +463,193 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 	TBG(1, "99");
 }
 
+/** esmr = Event Signature Multi Rate */
+#define MAXSCAN		4
+
+struct BankController {
+	int nbanks;			/* in scan */
+	struct Bank* scan[MAXSCAN];
+	struct Bank banks[4];
+	ChannelData * channelCursors;
+} bc;
+
+static void printCursors(struct Bank *b, int lr)
+{
+	char buf[128];
+	int ib;
+	char *pb = buf;
+
+	for (ib = 0; ib < 4; ++ib, pb += strlen(pb)){
+		sprintf(pb, "%d:%p=%d ", ib, 
+			b->channelCursors[ib][lr],
+			*b->channelCursors[ib][lr]);
+	}
+
+	info("\t%s", buf);
+}
+static void printBankController(void)
+{
+	int scan;
+	info("nbanks:%d", bc.nbanks);
+	for (scan = 0; scan < bc.nbanks; ++scan){
+		struct Bank *b = bc.scan[scan];
+		info("[%d] id %c nchan %d", scan, b->id, b->nchan);
+		printCursors(b, 0);
+		printCursors(b, 1);
+	}
+}
+#define NEXT_BANK(bank) (++(bank)>=bc.nbanks? 0: (bank))
+
+#define IDX(id)	((id)-BANK_A)
+
+static void setChannelOffsets(void)
+{
+	int chan;
+	int shares = 0;
+	int offset = 0;
+	const char* csm = acq132_getChannelSpeedMask();
+	ChannelData channelSpeeds = {};
+	int offset1;
+	
+
+	for (chan = 0; chan < MAXCHAN && csm[chan]; ++chan){
+		char cmul = csm[chan];
+		if (cmul >= '0' && cmul <= '9'){
+			channelSpeeds[chan] = cmul - '0';
+		}else if (cmul >= 'A' && cmul <= 'Z'){
+			channelSpeeds[chan] = cmul - 'A' + 10;
+		}else{
+			err("channel %d bad speed %c", chan, cmul);
+		}
+	}	
+
+	for (chan = 0; chan < MAXCHAN; ++chan){
+		shares += channelSpeeds[chan];
+	}
+
+	offset1 = TBLOCK_LEN/shares;
+
+	for (chan = 0; chan < MAXCHAN; ++chan){		
+		if (channelSpeeds[chan]){
+			startOffsets[chan] = offset;
+			offset += offset1 * channelSpeeds[chan];
+		}else{
+			startOffsets[chan] = NOTINMASK;
+		}
+	}
+}
+
+
+static void updateChannelCount(unsigned *cc)
+{
+	int chan;
+
+	for (chan = 0; chan < MAXCHAN; ++chan){
+		sampleCounts[chan] += cc[chan] - startOffsets[chan];
+	}
+}
+int acq132_transform_row_esmr(
+	int row,
+	short *base,
+	struct Bank *to,
+	short *from, int nsamples, int channel_sam)
+{
+	union {
+		unsigned long long ull[ROW_CHAN/4];
+		unsigned short ch[ROW_CHAN];
+	} buf;
+	unsigned long long *full = (unsigned long long *)from;
+	int sam;
+	int tosam = 0;
+	int chx;	
+
+	for (sam = nsamples; sam != 0; --sam){
+		buf.ull[0] = *full++;
+		buf.ull[1] = *full++;
+
+		if (buf.ch[0] == ES_MAGIC_WORD &&
+		    buf.ch[1] == ES_MAGIC_WORD &&
+		    buf.ch[2] == ES_MAGIC_WORD &&
+		    buf.ch[3] == ES_MAGIC_WORD &&
+		    remove_es(nsamples-sam, row, buf.ch, full)){
+			continue;
+		}
+
+		for (chx = 0; chx < ROW_CHAN; ++chx){
+			int cc = *to->channelCursors[chx/2][chx&1];
+			base[cc] = buf.ch[chx];
+			*to->channelCursors[chx/2][chx&1] = ++cc;
+		}
+		++tosam;
+	}
+	return tosam;
+
+}
+
+static unsigned* initBankController(int itb)
+{
+        unsigned *channelCursors = (unsigned*)&tblockChannels[itb];
+	int bank;
+
+	memcpy(channelCursors, startOffsets, sizeof(ChannelData));
+
+	for (bank = 0; bank < bc.nbanks; ++bank){
+		int id = acq132_getScanlistEntry(bank);
+		struct Bank *scanb = &bc.banks[IDX(id)];
+
+		if (scanb->id == 0){
+			int channels[2][4] = {};
+			int ic;
+/* init other stuff: ie ChannelData */
+			scanb->nchan = getChannelsInMask(bank+BANK_A, channels);
+			
+			for (ic = 0; ic < 4; ++ic){
+				bc.banks[IDX(id)].channelCursors[ic][0] = 
+					&channelCursors[channels[0][ic]];
+				bc.banks[IDX(id)].channelCursors[ic][1] =
+					&channelCursors[channels[1][ic]];
+			}
+			scanb->id = id;
+		}
+		bc.scan[bank] = scanb;
+	}
+	printBankController();
+	return channelCursors;
+}
+static void acq132_transform_esmr(
+	short *to, short *from, int nwords, int stride)
+/* valid stride == sample_size() only */
+{
+/* for each bank ... transform bank ...*/
+	int bank;
+	int nw = nwords;
+	const int rows = stride/ROW_CHAN;
+	const int block_words = rows * ROW_CHAN * ROW_SAM;
+
+	unsigned* channelCursors= 
+		initBankController(TBLOCK_INDEX((void*)to - va_buf(DG)));
+
+	for (bank = 0; nw > 0; nw -= ROW_WORDS, bank = NEXT_BANK(bank)){
+		acq132_transform_row_esmr(
+				bank, to, bc.scan[bank], from,
+				min(nw, block_words)/rows/ROW_CHAN, 0);
+	}
+
+	updateChannelCount(channelCursors);
+}
+
+int acq132_getChannelDataMr(
+	struct TBLOCK* tb, short **base, int pchan, int offset)
+{
+
+	unsigned *channelCursors = (unsigned*)&tblockChannels[tb->iblock];
+	int bblock_samples = channelCursors[pchan] - startOffsets[pchan];
+	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
+				      channelCursors[pchan]*sizeof(short));
+
+	*base = bblock_base + offset;
+	return bblock_samples;	
+}
 static 	struct Transformer transformer = {
 	.name = "acq132",
 	.transform = acq132_transform
@@ -451,8 +660,50 @@ static struct Transformer transformer_es = {
 	.transform = acq132_transform_es
 };
 
+static struct Transformer transformer_esmr = {
+	.name = "acq132esmr",
+	.transform = acq132_transform_esmr
+};
+
 static struct Hookup transformer_es_hook = {
 	.the_hook = transformer_es_onStart
+};
+
+static unsigned acq132_getChannelNumSamplesMr(int pchan)
+{
+	return sampleCounts[pchan];
+}
+
+static void transformer_esmr_onStart(void* unused)
+{
+	int nbanks = acq132_getScanlistLen();
+
+	if (stub_esmr){
+		return;
+	}
+
+	DG->bigbuf.tblocks.getChannelData = acq132_getChannelDataMr;
+	DG->getChannelNumSamples = acq132_getChannelNumSamplesMr;
+
+	if (!tblockChannels){
+		tblockChannels = kzalloc(TBLOCKCHSZ, GFP_KERNEL);
+		if (!tblockChannels){
+			err("ERROR: failed to alloc %d", TBLOCKCHSZ);
+			return;
+		}
+	}else{
+		memset(tblockChannels, 0, TBLOCKCHSZ);
+	}
+	memset(sampleCounts, 0, sizeof(sampleCounts));
+
+	setChannelOffsets();
+
+	memset(&bc, 0, sizeof(bc));	
+	bc.nbanks = nbanks;
+}
+
+static struct Hookup transformer_esmr_hook = {
+	.the_hook = transformer_esmr_onStart
 };
 
 void acq132_register_transformers(void)
@@ -461,7 +712,9 @@ void acq132_register_transformers(void)
 	it = acq200_registerTransformer(&transformer);
 	if (it >= 0){
 		acq200_add_start_of_shot_hook(&transformer_es_hook);
+		acq200_add_start_of_shot_hook(&transformer_esmr_hook);
 		acq200_registerTransformer(&transformer_es);
+		acq200_registerTransformer(&transformer_esmr);
 		acq200_setTransformer(it);
 	}else{
 		err("transformer %s NOT registered", transformer.name);
