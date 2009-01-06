@@ -56,7 +56,6 @@
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+1)*TD_SZ)
 
 
-#define MAXCHAN 32
 
 #define DACX 0
 #define DACY 1

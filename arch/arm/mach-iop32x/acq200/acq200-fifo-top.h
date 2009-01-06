@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------- */
-/* acq196-fifo-top.h customisation for fifo driver                           */
+/* acq200-fifo-top.h customisation for fifo driver                           */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
@@ -63,6 +63,7 @@
 */
 #define ISR_ADDS_ENDSTOP 0
 #define FPGA_IS_PCI_DEVICE 1
+#define MAXCHAN 16
 
 #elif defined WAV232
 
@@ -78,6 +79,8 @@
 /* @todo Big blocks 4096 work better but PBI will go out of order */
 #define ISR_ADDS_ENDSTOP 1
 #define FPGA_IS_PCI_DEVICE 0
+
+#define MAXCHAN 32
 
 #else
 
