@@ -703,25 +703,22 @@ static  ssize_t show_pci_env(
 	struct device * device, struct device_attribute *attr, char * buf)
 {
 	char* str = "not-supported";
+	int rc = -1;
 
-	if (machine_is_acq100()){
-		if (ACQ100_CPLD_SSM_CAPABLE){
-			switch(acq100_get_pci_env()){
-			case ACQ100_PCIENV_SSM:
-				str = "SSM"; break;
-			case ACQ100_PCIENV_PM:
-				str = "PM"; break;
-			case ACQ100_PCIENV_SAM:
-				str = "SAM"; break;
-			default:
-				str = "illegal";
-			}
+	if (machine_is_acq100() || machine_is_acq132()){
+		switch(rc = acq100_get_pci_env()){
+		case ACQ100_PCIENV_SSM:
+			str = "SSM"; break;
+		case ACQ100_PCIENV_PM:
+			str = "PM"; break;
+		case ACQ100_PCIENV_SAM:
+			str = "SAM"; break;
+		default:
+			;
 		}
-	        return sprintf(buf,"%d %s\n", acq100_get_pci_env(), str);
-	}else{
-		return sprintf(buf, "%d %s", -1, "acq196 only");
 	}
 
+	return sprintf(buf, "%d %s", rc, str);
 }
 
 static DEVICE_ATTR(pci_env, S_IRUGO, show_pci_env, 0);

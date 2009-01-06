@@ -19,8 +19,6 @@ extern u8 acq100_get_cpld_rev(void);
 
 #define ACQ100_CPLD_REV_SSM 2
 
-#define ACQ100_CPLD_SSM_CAPABLE \
-         (acq100_get_cpld_rev() >= ACQ100_CPLD_REV_SSM)
 
 extern u8 acq100_get_pci_env(void);
 

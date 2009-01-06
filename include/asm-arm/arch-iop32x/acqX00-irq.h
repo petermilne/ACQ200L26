@@ -41,10 +41,12 @@
 #undef irq_canonicalize
 #endif
 
+#define machine_is_acq1xx() (machine_is_acq100()||machine_is_acq132())
+
 #define irq_canonicalize(i) \
         ((i) == 0? IRQ_NONE: \
          (i) == IRQ_ACQX00_UART? ( \
-	          machine_is_acq100()? IRQ_ACQ100_UART: \
+		  machine_is_acq1xx()? IRQ_ACQ100_UART:		  \
 	          machine_is_acq200()? IRQ_ACQ200_UART: IRQ_NONE):\
 	 (i))
 

@@ -46,6 +46,10 @@
 
 #define CPLD(reg) *(volatile unsigned char*)(ACQ200_CPLD+ACQ1xx_CPLD_##reg)
 
+#define ACQ100_CPLD_SSM_CAPABLE \
+         (acq100_get_cpld_rev() >= ACQ100_CPLD_REV_SSM)
+
+
 u8 acq100_get_cpld_rev(void)
 {
 	return CPLD(REV) & 0xf;
