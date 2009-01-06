@@ -92,4 +92,8 @@ static inline u32 from_mask(u32 mask, u32 value)
 	return (value & mask) >> shr;
 }
 
+extern void acq200_set_cpld_mask_byte(u8 mask);
+extern unsigned acq200_get_cpld_mask_byte(void);
+extern void acq100_setCpldMaskBit(int slot);
+
 #endif /* #define __ACQ200_H__ */

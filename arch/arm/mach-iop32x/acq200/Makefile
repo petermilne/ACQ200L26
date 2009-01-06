@@ -48,6 +48,7 @@ CONFIG_ARCH_DTACQ_ACQ132_LFP=m
 obj-y			:= \
 	acq200-time.o \
 	acqX00-setup.o   \
+	acq200-sys.o \
 	acq100.o 	acq200.o \
 	acq200-irq.o 	acq200-mm.o \
 	acq100-pci.o 	acq200-pci.o \

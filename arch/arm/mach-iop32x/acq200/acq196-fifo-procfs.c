@@ -425,7 +425,7 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 void acq200_setChannelMask(unsigned mask)
 {
 	int nblocks;
-	unsigned cursor, block;
+	unsigned block;
 
 	mask = mask&0x7;      /* actually a bank mask */
 	CAPDEF->channel_mask = mask;

@@ -463,31 +463,6 @@ static inline u32 arch_set_int_clk_div(u32 clkdiv)
 }
 
 
-static inline u8 acq100_get_cpld_rev(void)
-{
-	return *(volatile unsigned char*)(ACQ200_CPLD+3) & 0xf;
-}
-
-#define ACQ100_CPLD_REV_SSM 2
-
-#define ACQ100_CPLD_SSM_CAPABLE \
-         (acq100_get_cpld_rev() >= ACQ100_CPLD_REV_SSM)
-
-static inline u8 acq100_get_pci_env(void)
-{
-	if (ACQ100_CPLD_SSM_CAPABLE){
-		return (*(volatile unsigned char*)(ACQ200_CPLD+2) >> 1) & 0x3;
-        }else{
-		return 0xff;
-	}
-}
-
-#define ACQ100_PCIENV_SSM 0           /** system slot master */
-#define ACQ100_PCIENV_PM  1           /** peripheral mode    */
-#define ACQ100_PCIENV_SAM 2           /** standalone mode    */
-
-
-
 #endif /* __ASSEMBLER__ */
 
 #define ACQ196_WAVLIMIT_FAWG_DIV   0x00ff0000U

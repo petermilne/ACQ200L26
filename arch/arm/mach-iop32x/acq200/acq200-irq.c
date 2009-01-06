@@ -30,6 +30,8 @@
 
 #include <asm/mach-types.h>
 
+#include "acq200.h"
+
 extern void __init iop32x_init_irq(void);
 
 
@@ -146,8 +148,5 @@ void acq100_setCpldMaskBit(int slot) {
 	printk("acq100_setCpldMaskBit IRQ 31 slot %d enable 0x%x mask 0x%x\n",
 	       slot, enable, acq200_cpld_mask);
 }
-/*
-EXPORT_SYMBOL_GPL(acq200_set_cpld_mask_byte);
-EXPORT_SYMBOL_GPL(acq200_get_cpld_mask_byte);
-*/
+
 

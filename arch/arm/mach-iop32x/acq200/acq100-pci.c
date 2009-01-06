@@ -30,9 +30,8 @@
 #include "acq200_debug.h"
 #include "acq196.h"
 
-
-
-extern void acq100_setCpldMaskBit(int slot);
+#include "acq200.h"
+#include "acq200-sys.h"
 
 int acq100_is_system_slot_enabled(void);
 
@@ -162,16 +161,12 @@ static int acq100_iop321_setup(int nr, struct pci_sys_data *sys)
 	}
 }
 
-int acq132_is_system_slot(void);
-int acq132_is_standalone(void);
-
 static int acq132_iop321_setup(int nr, struct pci_sys_data *sys)
 {
 	if ( nr != 0 ){
 		return 0;
 	}else{
-		if (acq132_is_system_slot() ||
-		    acq132_is_standalone() ){
+		if (acq100_get_pci_env() != ACQ100_PCIENV_PM){
 			acq200_iop321_setup(nr, sys);
 		}else{
 			struct resource* res = acq100_resources;
@@ -273,10 +268,9 @@ int acq100_is_system_slot_enabled(void)
 	}
 }
 
-static void acq100_check_cpld_capability(void)
+static void acq196_check_cpld_capability(void)
 {
-	volatile u8* cpld = (volatile u8*)ACQ200_CPLD;
-	u8 revid = cpld[3];
+	u8 revid = acq100_get_cpld_rev();
 
 	printk("acq100 cpld rev %d\n", revid);
 
@@ -288,16 +282,7 @@ static void acq100_check_cpld_capability(void)
 		printk("rev5 CPLD, CPCI int %d selected\n", irq_ext_pci);
 	}
 }
-int acq132_is_system_slot(void)
-/** @@worktodo ... check CPLD for slot # */
-{
-	return is_system_slot;
-}
 
-int acq132_is_standalone(void)
-{
-	return is_system_slot;
-}
 
 /* R3 boards - enable PCI A,B,C,D + ROUTE XINT3 */
 static unsigned acq100_cpld_pci_mask = 0x1f;	
@@ -322,7 +307,7 @@ extern void iop32x_check_pci_bus_speed(void);
 static int __init acq100_pci_init(void)
 {
 	if (machine_is_acq132()){
-		if (acq132_is_system_slot() || acq132_is_standalone()){
+		if (acq100_get_pci_env() != ACQ100_PCIENV_PM){
 			mmr_setup();
 			printk("PCI:acq132 system slot device debug %d\n",
 				G_iop321_pci_debug);
@@ -337,14 +322,13 @@ static int __init acq100_pci_init(void)
 	}else if (machine_is_acq100()){
 		if (is_system_slot == 0){
 			/* only do this for DEFAULT config */
-			acq100_check_cpld_capability();
+			acq196_check_cpld_capability();
 		}
 		if (acq100_is_system_slot_enabled()){
 			if (irq_ext_pci == IRQ_EXT_PCI_NEW){
 				printk("PCI: ext int %d set cpld %x\n",
 				       irq_ext_pci, acq100_cpld_pci_mask);
-				*(volatile u8*)ACQ200_CPLD = 
-						acq100_cpld_pci_mask;
+				acq200_set_cpld_mask_byte(acq100_cpld_pci_mask);
 			}
 			mmr_setup();
 			printk("PCI:acq100 system slot device debug %d\n",

@@ -69,6 +69,7 @@ Check for DONE at end - bit 0 at address 18h
 #include "acq200_minors.h"
 
 #include "acq196.h"
+#include "acq200-sys.h"
 
 struct proc_dir_entry* proc_acq200;
 EXPORT_SYMBOL_GPL(proc_acq200);
@@ -92,25 +93,9 @@ static int acq200_nbits;
 #define FPGA_DEV   2
 #define FPGA_DEVFN (FPGA_DEV*8)
 
-
-void acq200_arch_reset(char mode)
-{
-
-	printk("acq200_arch_reset\n");
-#if 0
-	printk("%s: %p = %d\n", FN, 
-	       (volatile unsigned char*)(ACQ200_CPLD+0x18),
-	       0);
-	*(volatile unsigned char*)(ACQ200_CPLD+0x18) = 0; 
-	printk("%s: %p = %d\n", FN, 
-	       (volatile unsigned char*)(ACQ200_CPLD+2),
-	       1);
-#endif
-	*(volatile unsigned char*)(ACQ200_CPLD+2) = 1;
-	printk("**** ERROR **** ALL DONE: now we should be dead\n");
-}
-
-
+#define FPGA_CSR	(volatile u8*)(ACQ200_CPLD+0x18)
+#define FPGA_DATA	(volatile u8*)(ACQ200_CPLD+0x19)
+#define DIO(dx)		(volatile u8*)(ACQ200_CPLD+0x10+(dx))
 
 static void 
 pdev_fixup_irq(struct pci_dev *dev,
@@ -176,7 +161,7 @@ static int acq200_fpga_hotplug_pci(void)
 
 static int acq200_fpga_load_open (struct inode *inode, struct file *file)
 {
-	volatile u8* fpga_csr = (volatile u8*)(ACQ200_CPLD+0x18);
+	volatile u8* fpga_csr = FPGA_CSR;
 	int timeout = 100000;
 
 	acq200_nbits = 0;
@@ -201,7 +186,7 @@ static int acq200_fpga_load_open (struct inode *inode, struct file *file)
 
 static void add_config_clocks(void)
 {
-	volatile u8* fpga_data= (volatile u8*)(ACQ200_CPLD+0x19);
+	volatile u8* fpga_data = FPGA_DATA;
 	int nclocks = NCLOCKS;
 
 	while(nclocks--){
@@ -213,7 +198,7 @@ static int acq200_fpga_load_release (struct inode *inode, struct file *file)
  * Test that the load has completed OK, then hotplug into pci subsys
  */
 {
-	volatile u8* fpga_csr = (volatile u8*)(ACQ200_CPLD+0x18);
+	volatile u8* fpga_csr = FPGA_CSR;
 	u8 status;
 	int timeout = 0x10000;
 	int rc = 0;
@@ -273,9 +258,9 @@ static ssize_t acq200_fpga_load_write (
 {
 #if defined(CHECK_INIT_HIGH) || defined(LAZY_CHECKING)
 	u8 status;
-	volatile u8* fpga_csr = (volatile u8*)(ACQ200_CPLD+0x18);
+	volatile u8* fpga_csr = FPGA_CSR;
 #endif
-	volatile u8* fpga_data= (volatile u8*)(ACQ200_CPLD+0x19);
+	volatile u8* fpga_data = FPGA_DATA;
 
 	int ibuf = 0;
 	int timeout = 0x1000;
@@ -547,7 +532,7 @@ static ssize_t store_dio_route(
 {
 	unsigned mask;
 	unsigned m1, m2;
-	volatile u8* dio = (volatile u8*)(ACQ200_CPLD+0x10+dx);
+	volatile u8* dio = DIO(dx);
 
 /*
  * input 2 digit hex OR 2 dec nums (easier with shell)
@@ -650,9 +635,6 @@ static  ssize_t show_cpld_rev(
 static DEVICE_ATTR(cpld_rev, S_IRUGO, show_cpld_rev, 0);
 
 
-extern void acq200_set_cpld_mask_byte(u8 mask);
-extern unsigned acq200_get_cpld_mask_byte(void);
-
 static	ssize_t set_hpi_mask(
 	struct device *device,
 	struct device_attribute *attr,
@@ -745,20 +727,12 @@ static  ssize_t show_pci_env(
 static DEVICE_ATTR(pci_env, S_IRUGO, show_pci_env, 0);
 
 
-#define ACQ200_SYSSLOT() ((*(volatile u8*)(ACQ200_CPLD+3) & 0x01) == 0)
+
 
 static ssize_t show_sysslot(
 	struct device * device, struct device_attribute *attr, char * buf)
 {
-	int is_sysslot = 0;
-
-	if (machine_is_acq100()){
-		is_sysslot = acq100_get_pci_env() == ACQ100_PCIENV_SSM;
-	}else if (machine_is_acq200()){
-		is_sysslot = ACQ200_SYSSLOT();
-	}	
-	/** @todo acq132 */
-	return sprintf(buf, "%d\n", is_sysslot);
+	return sprintf(buf, "%d\n", acq200_is_sysslot());
 }
 
 static DEVICE_ATTR(sysslot, S_IRUGO, show_sysslot, 0);
