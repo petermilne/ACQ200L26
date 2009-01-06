@@ -791,6 +791,33 @@ static ssize_t store_RGM(
 
 static DEVICE_ATTR(RepeatingGateMode, S_IRUGO|S_IWUGO, show_RGM, store_RGM);
 
+char channelSpeedMask[MAXCHAN+1];
+
+const char* acq132_getChannelSpeedMask(void)
+{
+	return channelSpeedMask;
+}
+
+static ssize_t show_ChannelSpeedMask(
+	struct device *dev,
+	struct device_attribute *attr,
+	char* buf)
+{
+	strcpy(buf, channelSpeedMask);
+	return strlen(channelSpeedMask);
+}
+
+static ssize_t store_ChannelSpeedMask(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	strncpy(channelSpeedMask, buf, sizeof(channelSpeedMask));
+	return count;
+}
+
+static DEVICE_ATTR(ChannelSpeedMask, S_IRUGO|S_IWUGO, 
+		   show_ChannelSpeedMask, store_ChannelSpeedMask);
 
 static void acq132_mk_dev_sysfs(struct device *dev)
 {
@@ -815,6 +842,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
 	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ChannelSpeedMask);
 }
 
 #define MASK_D	0x000f000f
@@ -822,9 +850,6 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 #define MASK_B  0x0f000f00
 #define MASK_A  0xf000f000
 
-#define MASK_1	0x1
-#define MASK_2	0x5
-#define MASK_4	0xf
 
 int count_bits(unsigned mask) {
 	int ibit;
