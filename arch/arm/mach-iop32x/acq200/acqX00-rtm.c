@@ -29,6 +29,7 @@
 #include <linux/timex.h>
 #include <linux/mm.h>
 
+#include <linux/delay.h>
 #include <asm/delay.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
@@ -58,8 +59,8 @@ module_param(rtm_debug, int, 0664);
 int pulse_top_usec;
 module_param(pulse_top_usec, int, 0600);
 
-int pollto_jiffies = 1;
-module_param(pollto_jiffies, int, 0644);
+int poll_ms = 10;
+module_param(poll_ms, int, 0644);
 
 char acq100_rtm_driver_string[] = "D-TACQ RTM driver";
 char acq100_rtm_driver_version[] = "$Revision: 1.6 $ build B1001 " __DATE__;
@@ -312,7 +313,6 @@ static void mk_rtm_sysfs(struct device *dev)
 struct DeviceState {
 	unsigned (*getDio)(void);
 	unsigned state;	
-	wait_queue_head_t waitq;
 };
 
 extern unsigned acq200_getDIO6(void);
@@ -334,7 +334,6 @@ static int dio_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	}	
 
-	init_waitqueue_head(&state.waitq);
 	file->private_data = kzalloc(sizeof(struct DeviceState), GFP_KERNEL);
 	if (file->private_data == 0){
 		err("failed to allocate device state");
@@ -351,14 +350,12 @@ static int wait_cos(struct DeviceState *ds)
 
 	s2 = ds->state;
 
-	do {
-		rc = wait_event_interruptible_timeout(
-			ds->waitq, INTERRUPTED, pollto_jiffies);
-		if (rc != 0){
+	while((ds->state = ds->getDio()) == s2){
+		rc = msleep_interruptible(poll_ms);
+		if (rc){
 			return rc;
 		}
-		ds->state = ds->getDio();
-	} while(s2 == ds->state);
+	}
 	
 	return 0;	
 }
