@@ -110,7 +110,8 @@ extern int acq200_lookup_pchan(int lchannel);
 #define EVENT_MAGIC_MASK 0x0000037f
 
 #define ES_SIZE  (sample_size())
-#define EVENT_MAGIC_EXEMPT(ipair) (0)
+/* second half of event block is timestamp */
+#define EVENT_MAGIC_EXEMPT(ipair) ((ipair)%16 >= 7)
 #endif
 
 #define EVENT_SOFT   0x40

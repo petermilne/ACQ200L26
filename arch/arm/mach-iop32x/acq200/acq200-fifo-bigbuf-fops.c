@@ -574,18 +574,15 @@ static struct file_operations fifo_bigbuf_data_fops = {
 };
 
 
-#if 1
-
 static void fifo_AIfs_vma_open(struct vm_area_struct *vma) {
 	struct BigbufReadPrams* bbrp = 
-		kmalloc(sizeof(struct BigbufReadPrams), GFP_KERNEL);
+		kzalloc(sizeof(struct BigbufReadPrams), GFP_KERNEL);
 	vma->vm_private_data = bbrp;
-	info("");
-	initBBRP(vma->vm_file, vma->vm_end-vma->vm_start, 0, bbrp);
+	dbg(1, "");
 }
 
 static void fifo_AIfs_vma_close(struct vm_area_struct *vma) {
-	info("");
+	dbg(1, "");
 	if (vma->vm_private_data) kfree(vma->vm_private_data);
 }
 
@@ -601,12 +598,13 @@ static struct page *fifo_AIfs_vma_nopage(
 
 
 	struct page *page = NOPAGE_SIGBUS;
+
 	loff_t offset = 
-		(address - vma->vm_start) + (vma->vm_pgoff << PAGE_SHIFT);
+		(address - vma->vm_start); // + (vma->vm_pgoff << PAGE_SHIFT);
 	struct BigbufReadPrams* bbrp = 
 		(struct BigbufReadPrams*)vma->vm_private_data;
 
-	info("address 0x%08lx", address);
+	dbg(1, "address 0x%08lx", address);
 
 	if (offset > bbrp->my_samples_reqlen){
 		initBBRP(vma->vm_file, vma->vm_end-vma->vm_start,
@@ -621,8 +619,12 @@ static struct page *fifo_AIfs_vma_nopage(
 	}else{
 		unsigned choffset = DCI(vma->vm_file)->lchan * 
 			bbrp->tblock_samples * sizeof(short);
-		unsigned physaddr = pa_buf(DG) + choffset + offset; 
-		page = pfn_to_page(physaddr >> PAGE_SHIFT);
+		unsigned pa = PA_TBLOCK(bbrp->tblock) + choffset + offset; 
+
+		dbg(1, "offset:%6d pa:%08x va:%p",offset,
+		    pa, VA_TBLOCK(bbrp->tblock) + choffset + offset);
+
+		page = pfn_to_page(pa >> PAGE_SHIFT);
 		get_page(page);
 		if (type){
 			*type = VM_FAULT_MINOR;
@@ -632,7 +634,7 @@ static struct page *fifo_AIfs_vma_nopage(
 #undef RETURN
 #undef LOCDEB
 }
-#endif
+
 
 
 int fifo_AIfs_mmap(struct file * file, struct vm_area_struct * vma)

@@ -591,4 +591,5 @@ static inline unsigned acq100_get_maccon_ref(unsigned bank) {
 #define ACQ196_RGATE_MODE_GATE  2	/* gated */
 #define ACQ196_RGATE_MODE_COMB  3	/* combined transient, gated */
 
+
 #endif /* acq196.h */

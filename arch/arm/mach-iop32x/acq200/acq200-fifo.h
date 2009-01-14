@@ -653,6 +653,7 @@ struct DevGlobs {
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)
 #define VA_TBLOCK(tblock) (va_buf(DG) + (tblock)->offset)
+#define PA_TBLOCK(tblock) (pa_buf(DG) + (tblock)->offset)
 #define MAX_TBLOCK (DG->bigbuf.tblocks.nblocks)
 
 struct CAPDEF_PRIVATE;  /* opaque store used by subclass */
