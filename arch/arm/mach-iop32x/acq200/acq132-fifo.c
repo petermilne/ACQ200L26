@@ -698,7 +698,6 @@ static void enable_acq132_start(void)
 
 
 	DBGSF("FINAL:next enable FIFCON");
-	acq132_set_channel_mask(CAPDEF->channel_mask);
 	enable_fifo(CAPDEF->channel_mask);
 
 	preEnable();
@@ -1307,6 +1306,13 @@ static void global_set_adc_range(u32 channels)
 	}
 }
 
+void acq132_setScanList(int scanlen, u32 scanlist)
+{
+	dbg(1, "%d, 0x%08x", scanlen, scanlist);
+	*ACQ132_SCAN_LIST_DEF = scanlist;
+	*ACQ132_SCAN_LIST_LEN = scanlen - 1;
+}
+
 static void acq132_setDefaultScanlist(u32 masks[])
 {
 	int dev;
@@ -1321,8 +1327,7 @@ static void acq132_setDefaultScanlist(u32 masks[])
 		}
 	}
 
-	*ACQ132_SCAN_LIST_DEF = scanlist;
-	acq132_setScanlistLen(scanlen);
+	acq132_setScanList(scanlen, scanlist);	
 }
 
 

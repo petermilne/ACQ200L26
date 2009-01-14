@@ -538,8 +538,7 @@ static ssize_t store_scanlist(
 		}		
 	}
 	if (ok){
-		*ACQ132_SCAN_LIST_DEF = scan_def;
-		acq132_setScanlistLen(iscan);
+		acq132_setScanList(iscan, scan_def);
 		return strlen(buf);
 	}else{
 		return -EINVAL;

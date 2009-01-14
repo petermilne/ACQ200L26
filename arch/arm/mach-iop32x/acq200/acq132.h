@@ -357,10 +357,7 @@ static inline int acq132_supports_channel_vrange_switch(void)
 	return acq132_sfpga_get_rev() >= 0x300;
 }
 
-static inline void acq132_setScanlistLen(int len)
-{
-	*ACQ132_SCAN_LIST_LEN = len - 1;
-}
+void acq132_setScanList(int scanlen, u32 scanlist);
 
 static inline int  acq132_getScanlistLen(void)
 {
