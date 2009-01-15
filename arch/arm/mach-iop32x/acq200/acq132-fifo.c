@@ -1501,6 +1501,8 @@ static void _acq132_set_adc_range(u32 channels)
 void acq132_set_adc_range(u32 channels)
 {
 	if (acq132_supports_channel_vrange_switch()){
+		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
+						ACQ132_ADC_CTRL_LRANGE);
 		_acq132_set_adc_range(channels);
 	}else{
 		global_set_adc_range(channels);

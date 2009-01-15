@@ -844,10 +844,14 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ChannelSpeedMask);
 }
 
-#define MASK_D	0x000f000f
-#define MASK_C  0x00f000f0
-#define MASK_B  0x0f000f00
-#define MASK_A  0xf000f000
+
+#define MASK_A	0x000f000f
+#define MASK_B  0x00f000f0
+#define MASK_C  0x0f000f00
+#define MASK_D  0xf000f000
+
+
+
 
 
 int count_bits(unsigned mask) {
@@ -958,10 +962,12 @@ static ssize_t set_daq_enable(
 	return strlen(buf);
 }
 
+#define BANK_ENTRY(dev, cmask)	  { "BANK" #dev " " #cmask "\n", 0 }
 #define SPACER_ENTRY	  { "\n", 0 }
 #define REGS_LUT_ENTRY(n) { #n, n }
 
-#define ADC_REGS_ENTRY(dev)			\
+#define ADC_REGS_ENTRY(dev, cmask)		\
+	BANK_ENTRY(dev, cmask),			\
 	REGS_LUT_ENTRY(ACQ132_ADC_TEST(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_CTRL(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_RANGE(dev)),	\
@@ -982,10 +988,10 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_LEN),
 		SPACER_ENTRY,
-		ADC_REGS_ENTRY(BANK_A),
-		ADC_REGS_ENTRY(BANK_B),
-		ADC_REGS_ENTRY(BANK_C),
-		ADC_REGS_ENTRY(BANK_D),
+		ADC_REGS_ENTRY(BANK_A, MASK_A),
+		ADC_REGS_ENTRY(BANK_B, MASK_B),
+		ADC_REGS_ENTRY(BANK_C, MASK_C),
+		ADC_REGS_ENTRY(BANK_D, MASK_D),
 		REGS_LUT_ENTRY(ACQ196_CLKCON),
 		REGS_LUT_ENTRY(ACQ200_CLKDAT),
 		REGS_LUT_ENTRY(ACQ200_DIOCON),
@@ -1064,6 +1070,7 @@ static int dump_regs_seq_show(struct seq_file *s, void *v)
 
 	const char* name = plut->name;
 	volatile u32 *reg = plut->preg;
+	int bank = (int)reg;
 	
 
 	if (reg == 0){
