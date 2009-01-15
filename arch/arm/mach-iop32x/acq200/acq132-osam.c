@@ -75,11 +75,11 @@ void acq132_set_osam_nacc(
 	osam = acq132_adc_set_osam(osam, ACQ132_ADC_OSAM_R_NACC+lr, nacc);
 	osam = acq132_adc_set_shift(osam, ACQ132_ADC_OSAM_R_SHIFT+lr, shift);
 	if (decimate){
-		osam &= ~ 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);
+		osam &= ~(1<<(ACQ132_ADC_OSAM_R_ACCEN+lr));
 	}else{
 		osam |= 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);
 	}
 	*ACQ132_ADC_OSAM(dev) = osam;
-	dbg(1, "%p was: 0x %08x set 0x%08x reads 0x%08x ",
+	dbg(1, "%p was: 0x%08x set 0x%08x reads 0x%08x ",
 	    ACQ132_ADC_OSAM(dev), osam1, osam, *ACQ132_ADC_OSAM(dev));
 }
