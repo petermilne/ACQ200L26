@@ -15,8 +15,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#warning WORKTODO ACQ132 crib from ACQ196
-
 #define DTACQ_MACH 1
 #define ACQ132
 #include <linux/seq_file.h>
@@ -404,7 +402,7 @@ static int store_osam(
 		}else if (!belongs(shift, good_shift, GOOD_SHIFT)){
 			err("bad shift %d", shift);
 		}else{
-			ACQ132_SET_OSAM_X_NACC(
+			acq132_set_osam_nacc(
 				block, OSAMLR(lr), nacc, shift, decimate);
 			return strlen(buf);
 		}

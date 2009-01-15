@@ -320,8 +320,8 @@ static void acq132_setAllDecimate(int dec)
 	dbg(1, "setting decimation to %d", dec);
 
 	for (block = 0; block <= 3; ++block){
-		ACQ132_SET_OSAM_X_NACC(block, OSAMLR('L'), dec, -2, DECIM);
-		ACQ132_SET_OSAM_X_NACC(block, OSAMLR('R'), dec, -2, DECIM);
+		acq132_set_osam_nacc(block, OSAMLR('L'), dec, -2, DECIM);
+		acq132_set_osam_nacc(block, OSAMLR('R'), dec, -2, DECIM);
 	}
 }	
 

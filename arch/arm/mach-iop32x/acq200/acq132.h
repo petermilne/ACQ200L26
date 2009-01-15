@@ -161,65 +161,14 @@
 #define ACQ132_ADC_OSAM_R_SHIFT		 8
 #define ACQ132_ADC_OSAM_R_ACCEN		 0
 
+#define OSAMBITS	0x0fU
+#define SHIFTBITS	0x0fU
 
-static inline u32 acq132_adc_set_osam(u32 osam, int shl, int nacc)
-{
-	u32 field = 0;
-	osam &= ~(0xf << shl);
-
-	nacc = max(1, nacc);
-	nacc = min(nacc, 16);
-
-	field = (nacc-1)&0x0f;
-
-	osam |= field << shl;
-
-	return osam;
-}
-
-
-#define SHIFT_M1 0xf
-#define SHIFT_M2 0xe
-#define SHIFT_0	 0x0
-#define SHIFT_P1 0x1
-#define SHIFT_P2 0x2
-
-static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
-{
-	u32 field = 0;
-	osam &= ~(0xf << shl);
-
-	switch(shift){
-	case -2:
-	default:
-		field = SHIFT_M2; break;
-	case -1:
-		field = SHIFT_M1; break;
-	case 1:
-		field = SHIFT_P1; break;
-	case 2:
-		field = SHIFT_P2; break;
-	case 0:
-		field = SHIFT_0; break;
-	}
-
-	osam |= field << shl;
-	return osam;
-}
-
-#define ACQ132_SET_OSAM_X_NACC(dev, lr, nacc, shift, decimate) do {	\
-	u32 osam = *ACQ132_ADC_OSAM(dev);				\
-	osam = acq132_adc_set_osam(osam, ACQ132_ADC_OSAM_R_NACC+lr, nacc); \
-	osam = acq132_adc_set_shift(osam, ACQ132_ADC_OSAM_R_SHIFT+lr, shift); \
-	if (decimate){							\
-		osam &= ~ 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);		\
-	}else{								\
-		osam |= 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);		\
-	}								\
-	*ACQ132_ADC_OSAM(dev) = osam;					\
-	dbg(1, "%p set 0x%08x reads 0x%08x ",				\
-	    ACQ132_ADC_OSAM(dev), osam, *ACQ132_ADC_OSAM(dev));		\
-} while(0)
+#define SHIFT_M1 0x0fU
+#define SHIFT_M2 0x0eU
+#define SHIFT_0	 0x00U
+#define SHIFT_P1 0x01U
+#define SHIFT_P2 0x02U
 
 #define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
 
@@ -229,6 +178,8 @@ void acq132_set_adc_range(u32 channels);
 
 u32 acq132_get_adc_range(void);
 
+void acq132_set_osam_nacc(
+	int dev, int lr, int nacc, int shift, int decimate);
 
 static inline void acq132_adc_set_all(int reg, u32 bits)
 {

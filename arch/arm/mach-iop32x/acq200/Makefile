@@ -184,6 +184,7 @@ acq196f-objs := acq196-fifo-f.o acq196-fiq-f.o \
 
 acq132-objs := acq132-fifo.o acq132-fiq.o \
 	acq132-fifo-procfs.o acq132-offset.o acq196-AO.o \
+	acq132-osam.o \
 	acq132-gated.o acq132-transform.o \
 	$(ACQ2XX_FIFO_COMMON)
 
