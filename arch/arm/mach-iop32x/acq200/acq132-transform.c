@@ -591,6 +591,9 @@ static unsigned* initBankController(int itb)
         unsigned *channelCursors = (unsigned*)&tblockChannels[itb];
 	int bank;
 
+	dbg(1, "itb:%d channelCursors:%p startOffsets:%p",
+	    itb, channelCursors, startOffsets);
+
 	memcpy(channelCursors, startOffsets, sizeof(ChannelData));
 
 	for (bank = 0; bank < bc.nbanks; ++bank){
@@ -627,7 +630,7 @@ static void acq132_transform_esmr(
 	const int block_words = rows * ROW_CHAN * ROW_SAM;
 
 	unsigned* channelCursors= 
-		initBankController(TBLOCK_INDEX((void*)to - va_buf(DG)));
+		initBankController(TBLOCK_INDEX((void*)from - va_buf(DG)));
 
 	for (bank = 0; nw > 0; nw -= ROW_WORDS, bank = NEXT_BANK(bank)){
 		acq132_transform_row_esmr(
@@ -691,6 +694,8 @@ static void transformer_esmr_onStart(void* unused)
 			err("ERROR: failed to alloc %d", TBLOCKCHSZ);
 			return;
 		}
+		info("tblockChannels %p size %d", tblockChannels, TBLOCKCHSZ);	
+		info("first block %p", &tblockChannels[0]);
 	}else{
 		memset(tblockChannels, 0, TBLOCKCHSZ);
 	}
