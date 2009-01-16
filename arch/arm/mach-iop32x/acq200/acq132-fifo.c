@@ -1421,6 +1421,8 @@ static int __getChannelsInMaskSide(int ic, u32 key, int channels[4], int *cix)
 	const struct ADC_CHANNEL_LUT *pch = &ADC_CHANNEL_LUT[ic];
 	int ch_index = *cix;
 
+	dbg(2, "01: ic %2d key %04x cix %d", ic, key, *cix);
+
 	switch(key){
 	case MASK_4:
 		channels[ch_index] = ic;
@@ -1443,19 +1445,25 @@ static int __getChannelsInMaskSide(int ic, u32 key, int channels[4], int *cix)
 			*cix = ch_index + 4;
 		}
 		break;
+	case 0:
+		return 0;
 	default:
-		err("Bad mask");
+		err("Bad mask ic %d key %u", ic, key);
+		return -1;
 	}
+
+	dbg(1, "99:ic %2d key %u cix %d GOOD", ic, key, *cix);
+
 	return 0;
 }
 int getChannelsInMask(int bank, int channels[2][4])
 /* identify channels enabled in bank, filling id in channels[], return n */
 {
 	u32 mask = masks[bank];
-	u32 keyl = mask >> ACQ132_ADC_CTRL_LMSHFT;
-	u32 keyr = mask >> ACQ132_ADC_CTRL_RMSHFT;
+	u32 keyl = NORMALISE_MASK(mask, ACQ132_ADC_CTRL_LMSHFT);
+	u32 keyr = NORMALISE_MASK(mask, ACQ132_ADC_CTRL_RMSHFT);
 	int ic;
-	int cix[2];
+	int cix[2] = {};
 	int nc = 0;
 	
 	memset(channels, 0, sizeof(channels));
@@ -1464,17 +1472,27 @@ int getChannelsInMask(int bank, int channels[2][4])
 		const struct ADC_CHANNEL_LUT *pch = &ADC_CHANNEL_LUT[ic];
 		if (pch->dev == bank){
 			int right = pch->side == 'R';
-			__getChannelsInMaskSide(ic,
-				right? keyr: keyl, channels[right], cix+right);
+			int rc = __getChannelsInMaskSide(ic,
+					right? keyr: keyl, 
+					channels[right], cix+right);
+			if (rc){
+				err("bad mask");
+				return 0;
+			}
 		}
 	}
 
 	for (ic = 0; ic < 8; ++ic){
-		if (channels[ic]){
+		if (channels[ic/4][ic%4]){
 			nc++;
 		}
 	}
-	
+
+	dbg(1, "return %d %d %d %d, %d %d %d %d : %d", 
+	    channels[0][0], channels[0][1], channels[0][2], channels[0][3],
+	    channels[1][0], channels[1][1], channels[1][2], channels[1][3],
+	    nc);
+
 	return nc;	
 }
 static u32 adc_range_def;

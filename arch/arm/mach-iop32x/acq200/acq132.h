@@ -140,10 +140,6 @@
 #define ACQ132_ADC_CTRL_SIGEN	0x00020002    /* EventSig (Timestamp) Enable) */
 #define ACQ132_ADC_CTRL_ACQEN	0x00010001
 
-
-
-
-
 #define ACQ132_ADC_RANGE_L4	0x00080000
 #define ACQ132_ADC_RANGE_L3	0x00040000
 #define ACQ132_ADC_RANGE_L2	0x00020000
@@ -171,6 +167,9 @@
 #define SHIFT_P2 0x02U
 
 #define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
+
+
+#define NORMALISE_MASK(mask, shft) (((mask)&(0xfU << (shft))) >> (shft))
 
 /* @todo one bit, all bits. multiple settings todo */
 void acq132_set_adc_range(u32 channels);

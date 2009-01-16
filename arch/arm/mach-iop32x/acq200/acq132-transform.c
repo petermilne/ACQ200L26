@@ -49,9 +49,6 @@
 int stub_transform;
 module_param(stub_transform, int, 0664);
 
-int stub_esmr = 1;
-module_param(stub_esmr, int, 0664);
-
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
@@ -471,7 +468,7 @@ struct BankController {
 	struct Bank* scan[MAXSCAN];
 	struct Bank banks[4];
 	ChannelData * channelCursors;
-} bc;
+} bc;						/* @todo: should be dynamic?*/
 
 static void printCursors(struct Bank *b, int lr)
 {
@@ -480,22 +477,24 @@ static void printCursors(struct Bank *b, int lr)
 	char *pb = buf;
 
 	for (ib = 0; ib < 4; ++ib, pb += strlen(pb)){
-		sprintf(pb, "%d:%p=%d ", ib, 
+		sprintf(pb, "%d:%p=%06x ", ib, 
 			b->channelCursors[ib][lr],
 			*b->channelCursors[ib][lr]);
 	}
 
-	info("\t%s", buf);
+	info("%s", buf);
 }
 static void printBankController(void)
 {
 	int scan;
-	info("nbanks:%d", bc.nbanks);
+	info("nbanks:%d\n", bc.nbanks);
 	for (scan = 0; scan < bc.nbanks; ++scan){
 		struct Bank *b = bc.scan[scan];
-		info("[%d] id %c nchan %d", scan, b->id, b->nchan);
-		printCursors(b, 0);
-		printCursors(b, 1);
+		if (b){
+			info("[%d] id %c nchan %d\n", scan, b->id, b->nchan);
+			printCursors(b, 0);
+			printCursors(b, 1);
+		}
 	}
 }
 #define NEXT_BANK(bank) (++(bank)>=bc.nbanks? 0: (bank))
@@ -510,7 +509,9 @@ static void setChannelOffsets(void)
 	const char* csm = acq132_getChannelSpeedMask();
 	ChannelData channelSpeeds = {};
 	int offset1;
-	
+
+	dbg(1, "01 sizeof startOffsets:%d %p %p",
+	    sizeof(startOffsets), &startOffsets[0], &startOffsets[1]);		
 
 	for (chan = 0; chan < MAXCHAN && csm[chan]; ++chan){
 		char cmul = csm[chan];
@@ -527,12 +528,20 @@ static void setChannelOffsets(void)
 		shares += channelSpeeds[chan];
 	}
 
+	if (shares == 0){
+		err("NO shares in mask");
+		return;
+	}
+
 	offset1 = TBLOCK_LEN/shares;
 
 	for (chan = 0; chan < MAXCHAN; ++chan){		
 		if (channelSpeeds[chan]){
 			startOffsets[chan] = offset;
 			offset += offset1 * channelSpeeds[chan];
+
+			dbg(1, "ch %02d spd %d so %d",
+			    chan, channelSpeeds[chan], startOffsets[chan]);
 		}else{
 			startOffsets[chan] = NOTINMASK;
 		}
@@ -600,17 +609,22 @@ static unsigned* initBankController(int itb)
 		int id = acq132_getScanlistEntry(bank);
 		struct Bank *scanb = &bc.banks[IDX(id)];
 
+		dbg(1, "id %c idx:%d scanb %p", id, IDX(id), scanb);
+
 		if (scanb->id == 0){
 			int channels[2][4] = {};
+/* getChannelsInMask returns index from 1, zero it: */
+#define ZIC(c) ((c)-1)		
 			int ic;
 /* init other stuff: ie ChannelData */
 			scanb->nchan = getChannelsInMask(bank+BANK_A, channels);
+
 			
 			for (ic = 0; ic < 4; ++ic){
 				bc.banks[IDX(id)].channelCursors[ic][0] = 
-					&channelCursors[channels[0][ic]];
+					&channelCursors[ZIC(channels[0][ic])];
 				bc.banks[IDX(id)].channelCursors[ic][1] =
-					&channelCursors[channels[1][ic]];
+					&channelCursors[ZIC(channels[1][ic])];
 			}
 			scanb->id = id;
 		}
@@ -632,6 +646,9 @@ static void acq132_transform_esmr(
 	unsigned* channelCursors= 
 		initBankController(TBLOCK_INDEX((void*)from - va_buf(DG)));
 
+	if (stub_transform){
+		return;
+	}
 	for (bank = 0; nw > 0; nw -= ROW_WORDS, bank = NEXT_BANK(bank)){
 		acq132_transform_row_esmr(
 				bank, to, bc.scan[bank], from,
@@ -644,7 +661,6 @@ static void acq132_transform_esmr(
 int acq132_getChannelDataMr(
 	struct TBLOCK* tb, short **base, int pchan, int offset)
 {
-
 	unsigned *channelCursors = (unsigned*)&tblockChannels[tb->iblock];
 	int bblock_samples = channelCursors[pchan] - startOffsets[pchan];
 	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
@@ -681,10 +697,6 @@ static void transformer_esmr_onStart(void* unused)
 {
 	int nbanks = acq132_getScanlistLen();
 
-	if (stub_esmr){
-		return;
-	}
-
 	DG->bigbuf.tblocks.getChannelData = acq132_getChannelDataMr;
 	DG->getChannelNumSamples = acq132_getChannelNumSamplesMr;
 
@@ -696,6 +708,7 @@ static void transformer_esmr_onStart(void* unused)
 		}
 		info("tblockChannels %p size %d", tblockChannels, TBLOCKCHSZ);	
 		info("first block %p", &tblockChannels[0]);
+		info("last  block %p", &tblockChannels[MAXTBLOCKS]);
 	}else{
 		memset(tblockChannels, 0, TBLOCKCHSZ);
 	}
