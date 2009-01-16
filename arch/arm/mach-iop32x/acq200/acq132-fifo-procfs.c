@@ -524,9 +524,9 @@ static ssize_t store_scanlist(
 	while(isspace(buf[maxscan-1])){
 		--maxscan;
 	}
-	for (iscan = 0, place = 0; iscan < maxscan; ++iscan, ++place){
+	for (iscan = 0; iscan < maxscan; ++iscan){
 		if (IS_SX(buf[iscan])){
-       			scan_def |= TO_SX(buf[iscan]) << 2*place;
+       			scan_def |= TO_SX(buf[iscan]) << 2*iscan;
 			ok = 1;
 		}else{
 			err("\"%s\" char %d valid scan codes: A,B,C,D",
