@@ -111,7 +111,7 @@ typedef unsigned * pUNS;
 struct Bank {
 	int nchan;	/* 2, 4, 8 */
 	unsigned id;
-	pUNS channelCursors[4][2];
+	ChannelBankCursors bk_channelCursors;
 };
 
 void acq132_transform_row(
@@ -473,18 +473,25 @@ struct BankController {
 	struct Bank banks[4];
 } bc;						/* @todo: should be dynamic?*/
 
+int pc_calls;
+
 static void printCursors(struct Bank *b, int lr)
 {
 	char buf[128];
-	int ib;
+	int qc;
 	char *pb = buf;
 
 	if (!print_cursors) return;
 
-	for (ib = 0; ib < 4; ++ib, pb += strlen(pb)){
-		sprintf(pb, "%d:%p=%06x ", ib, 
-			b->channelCursors[ib][lr],
-			*b->channelCursors[ib][lr]);
+	if (++pc_calls > 100){
+		pc_calls = 0;
+		print_cursors = 0;
+		return;
+	}
+	for (qc = 0; qc < QUADCH; ++qc, pb += strlen(pb)){
+		sprintf(pb, "%d:%p=%06x ", qc, 
+			b->bk_channelCursors[lr][qc],
+			*b->bk_channelCursors[lr][qc]);
 	}
 
 	info("%s", buf);
@@ -498,13 +505,13 @@ static void printBankController(void)
 	for (scan = 0; scan < bc.nbanks; ++scan){
 		struct Bank *b = bc.scan[scan];
 		if (b){
-			info("[%d] id %c nchan %d\n", scan, b->id, b->nchan);
+			info("[%d] id %c nchan %d\n",scan,b->id+'A',b->nchan);
 			printCursors(b, 0);
 			printCursors(b, 1);
 		}
 	}
 }
-#define NEXT_BANK(bank) (++(bank)>=bc.nbanks? 0: (bank))
+#define NEXT_BANK(bank) ((bank)+1 >= bc.nbanks? 0: (bank)+1)
 
 #define IDX(id)	((id)-BANK_A)
 
@@ -564,6 +571,19 @@ static void updateChannelCount(unsigned *cc)
 		sampleCounts[chan] += cc[chan] - startOffsets[chan];
 	}
 }
+
+
+int gashone(void)
+{
+	int chx;
+
+	for (chx = 0; chx < ROW_CHAN; ++chx){
+			int lr = ROWCHAN2LRCH(chx);
+			int qc = ROWCHAN2QUADCH(chx);
+
+			dbg(1, "%d %d", lr, qc);
+	}
+}
 int acq132_transform_row_esmr(
 	int row,
 	short *base,
@@ -578,9 +598,6 @@ int acq132_transform_row_esmr(
 	int sam;
 	int tosam = 0;
 	int chx;	
-#ifdef DEBUG
-	int maxcc = 0;
-#endif
 	dbg(2, "01 row:%d base:%p nsamples:%d", row, base, nsamples);
 
 	printCursors(to, 0);
@@ -599,19 +616,17 @@ int acq132_transform_row_esmr(
 		}
 
 		for (chx = 0; chx < ROW_CHAN; ++chx){
-			int cc = *to->channelCursors[chx/2][chx&1];
+			int lr = ROWCHAN2LRCH(chx);
+			int qc = ROWCHAN2QUADCH(chx);
+
+			int cc = *to->bk_channelCursors[lr][qc];
 			base[cc] = buf.ch[chx];
-
-			if (cc > maxcc){
-				maxcc = cc;
-			}
-			*to->channelCursors[chx/2][chx&1] = ++cc;
-
+			*to->bk_channelCursors[lr][qc] = ++cc;
 		}
 		++tosam;
 	}
 
-	dbg(2, "99 maxcc %06x ret:%d", maxcc, tosam);
+	dbg(2, "99 ret:%d", tosam);
 	printCursors(to, 0);
 	printCursors(to, 1);
 
@@ -635,18 +650,18 @@ static unsigned* initBankController(int itb)
 		dbg(1, "id %c idx:%d scanb %p", id+'A', IDX(id), scanb);
 
 		if (scanb->id == 0){
-			int channels[2][4] = {};
-			int ic;
+			ChannelBank channels = {};
+			int qc;
 /* getChannelsInMask returns index from 1, zero it: */
 #define ZIC(c) ((c)-1)		
 
 			scanb->nchan = getChannelsInMask(id, channels);
 			
-			for (ic = 0; ic < 4; ++ic){
-				bc.banks[IDX(id)].channelCursors[ic][0] = 
-					&channelCursors[ZIC(channels[0][ic])];
-				bc.banks[IDX(id)].channelCursors[ic][1] =
-					&channelCursors[ZIC(channels[1][ic])];
+			for (qc = 0; qc < QUADCH; ++qc){
+				bc.banks[IDX(id)].bk_channelCursors[0][qc] = 
+					&channelCursors[ZIC(channels[0][qc])];
+				bc.banks[IDX(id)].bk_channelCursors[1][qc] =
+					&channelCursors[ZIC(channels[1][qc])];
 			}
 			scanb->id = id;
 		}
@@ -682,9 +697,6 @@ static void acq132_transform_esmr(
 		acq132_transform_row_esmr(
 				bank, to, bc.scan[bank], from,
 				min(nw, block_words)/rows/ROW_CHAN, 0);
-		if (stub_transform){
-			break;
-		}
 	}
 
 	updateChannelCount(channelCursors);

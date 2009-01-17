@@ -379,7 +379,16 @@ static inline void reset_gpg(void)
 #define ROW_CHAN2	4	/* two channels per fpga */
 #define ROW_CHAN4	8	/* one channel per fpga */
 
-int getChannelsInMask(int bank, int channels[2][4]);
+#define LRCH	2
+#define QUADCH	4
+
+typedef unsigned ChannelBank[LRCH][QUADCH];
+typedef unsigned * ChannelBankCursors[LRCH][QUADCH];
+
+#define ROWCHAN2LRCH(ix)	((ix)>>2)
+#define ROWCHAN2QUADCH(ix)	((ix)&0x0f)
+
+int getChannelsInMask(int bank, ChannelBank channels);
 const char* acq132_getChannelSpeedMask(void);
 #endif	/*  __ACQ132_H__ */
 

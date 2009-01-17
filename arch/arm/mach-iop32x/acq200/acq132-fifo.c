@@ -1416,7 +1416,8 @@ void acq132_set_channel_mask(u32 channel_mask)
 	acq132_setDefaultScanlist(masks);	      
 }
 
-static int __getChannelsInMaskSide(int ic, u32 key, int channels[4], int *cix)
+static int __getChannelsInMaskSide(
+	int ic, u32 key, unsigned channels[QUADCH], int *cix)
 {
 	const struct ADC_CHANNEL_LUT *pch = &ADC_CHANNEL_LUT[ic];
 	int ch_index = *cix;
@@ -1446,26 +1447,27 @@ static int __getChannelsInMaskSide(int ic, u32 key, int channels[4], int *cix)
 		}
 		break;
 	case 0:
-		dbg(1, "98: ic %2d key %04x cix %d ret 0", ic, key, *cix);
+		dbg(2, "98: ic %2d key %04x cix %d ret 0", ic, key, *cix);
 		return 0;
 	default:
 		err("Bad mask ic %d key %u", ic, key);
 		return -1;
 	}
 
-	dbg(1, "99:ic %2d key %u cix %d GOOD", ic, key, *cix);
+	dbg(2, "99:ic %2d key %u cix %d GOOD", ic, key, *cix);
 
 	return 0;
 }
-int getChannelsInMask(int bank, int channels[2][4])
+int getChannelsInMask(int bank, ChannelBank channels)
 /* identify channels enabled in bank, filling id in channels[], return n */
 {
 	u32 mask = masks[bank];
 	u32 keyl = NORMALISE_MASK(mask, ACQ132_ADC_CTRL_LMSHFT);
 	u32 keyr = NORMALISE_MASK(mask, ACQ132_ADC_CTRL_RMSHFT);
 	int ic;
-	int cix[2] = {};
+	int cix[LRCH] = {};
 	int nc = 0;
+	int qc;
 	
 	dbg(2, "masks: A:%08x B:08x C:%08x D:%08x : [%d] %08x",
 	    masks[0], masks[1], masks[2], masks[3], bank, masks[bank]);
@@ -1486,8 +1488,11 @@ int getChannelsInMask(int bank, int channels[2][4])
 		}
 	}
 
-	for (ic = 0; ic < 8; ++ic){
-		if (channels[ic/4][ic%4]){
+	for (qc = 0; qc < QUADCH; ++qc){
+		if (channels[0][qc]){
+			nc++;
+		}
+		if (channels[1][qc]){
 			nc++;
 		}
 	}
