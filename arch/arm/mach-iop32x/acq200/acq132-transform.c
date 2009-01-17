@@ -18,6 +18,7 @@
 /* ------------------------------------------------------------------------- */
 
 /** @todo  handle multirate! */
+#define DEBUG 1
 
 #define DTACQ_MACH 2
 #define ACQ132
@@ -48,6 +49,9 @@
 
 int stub_transform;
 module_param(stub_transform, int, 0664);
+
+int print_cursors;
+module_param(print_cursors, int, 0664);
 
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
@@ -98,7 +102,7 @@ short* from2;
 
 typedef unsigned ChannelData[MAXCHAN];
 
-static ChannelData startOffsets;
+static ChannelData startOffsets;	/* offset in shorts */
 static ChannelData sampleCounts;
 static ChannelData *tblockChannels;	/* [TBLOCKS] */
 
@@ -467,7 +471,6 @@ struct BankController {
 	int nbanks;			/* in scan */
 	struct Bank* scan[MAXSCAN];
 	struct Bank banks[4];
-	ChannelData * channelCursors;
 } bc;						/* @todo: should be dynamic?*/
 
 static void printCursors(struct Bank *b, int lr)
@@ -475,6 +478,8 @@ static void printCursors(struct Bank *b, int lr)
 	char buf[128];
 	int ib;
 	char *pb = buf;
+
+	if (!print_cursors) return;
 
 	for (ib = 0; ib < 4; ++ib, pb += strlen(pb)){
 		sprintf(pb, "%d:%p=%06x ", ib, 
@@ -487,6 +492,8 @@ static void printCursors(struct Bank *b, int lr)
 static void printBankController(void)
 {
 	int scan;
+	if (!print_cursors) return;
+
 	info("nbanks:%d\n", bc.nbanks);
 	for (scan = 0; scan < bc.nbanks; ++scan){
 		struct Bank *b = bc.scan[scan];
@@ -533,7 +540,7 @@ static void setChannelOffsets(void)
 		return;
 	}
 
-	offset1 = TBLOCK_LEN/shares;
+	offset1 = TBLOCK_LEN/sizeof(short)/shares;
 
 	for (chan = 0; chan < MAXCHAN; ++chan){		
 		if (channelSpeeds[chan]){
@@ -571,6 +578,13 @@ int acq132_transform_row_esmr(
 	int sam;
 	int tosam = 0;
 	int chx;	
+#ifdef DEBUG
+	int maxcc = 0;
+#endif
+	dbg(2, "01 row:%d base:%p nsamples:%d", row, base, nsamples);
+
+	printCursors(to, 0);
+	printCursors(to, 1);
 
 	for (sam = nsamples; sam != 0; --sam){
 		buf.ull[0] = *full++;
@@ -587,12 +601,21 @@ int acq132_transform_row_esmr(
 		for (chx = 0; chx < ROW_CHAN; ++chx){
 			int cc = *to->channelCursors[chx/2][chx&1];
 			base[cc] = buf.ch[chx];
+
+			if (cc > maxcc){
+				maxcc = cc;
+			}
 			*to->channelCursors[chx/2][chx&1] = ++cc;
+
 		}
 		++tosam;
 	}
-	return tosam;
 
+	dbg(2, "99 maxcc %06x ret:%d", maxcc, tosam);
+	printCursors(to, 0);
+	printCursors(to, 1);
+
+	return tosam;
 }
 
 static unsigned* initBankController(int itb)
@@ -649,13 +672,19 @@ static void acq132_transform_esmr(
 	unsigned* channelCursors= 
 		initBankController(TBLOCK_INDEX((void*)from - va_buf(DG)));
 
-	if (stub_transform){
+	dbg(1, "01: to:%p from:%p nwords:%d stride:%d",
+	    to, from, nwords, stride);
+
+	if (stub_transform > 2){
 		return;
 	}
 	for (bank = 0; nw > 0; nw -= ROW_WORDS, bank = NEXT_BANK(bank)){
 		acq132_transform_row_esmr(
 				bank, to, bc.scan[bank], from,
 				min(nw, block_words)/rows/ROW_CHAN, 0);
+		if (stub_transform){
+			break;
+		}
 	}
 
 	updateChannelCount(channelCursors);
