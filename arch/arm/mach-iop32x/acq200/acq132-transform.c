@@ -609,16 +609,15 @@ static unsigned* initBankController(int itb)
 		int id = acq132_getScanlistEntry(bank);
 		struct Bank *scanb = &bc.banks[IDX(id)];
 
-		dbg(1, "id %c idx:%d scanb %p", id, IDX(id), scanb);
+		dbg(1, "id %c idx:%d scanb %p", id+'A', IDX(id), scanb);
 
 		if (scanb->id == 0){
 			int channels[2][4] = {};
+			int ic;
 /* getChannelsInMask returns index from 1, zero it: */
 #define ZIC(c) ((c)-1)		
-			int ic;
-/* init other stuff: ie ChannelData */
-			scanb->nchan = getChannelsInMask(bank+BANK_A, channels);
 
+			scanb->nchan = getChannelsInMask(id, channels);
 			
 			for (ic = 0; ic < 4; ++ic){
 				bc.banks[IDX(id)].channelCursors[ic][0] = 
@@ -629,10 +628,14 @@ static unsigned* initBankController(int itb)
 			scanb->id = id;
 		}
 		bc.scan[bank] = scanb;
+#undef ZIC
 	}
 	printBankController();
 	return channelCursors;
 }
+
+
+
 static void acq132_transform_esmr(
 	short *to, short *from, int nwords, int stride)
 /* valid stride == sample_size() only */

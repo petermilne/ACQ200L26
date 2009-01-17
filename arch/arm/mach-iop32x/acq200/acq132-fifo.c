@@ -1446,6 +1446,7 @@ static int __getChannelsInMaskSide(int ic, u32 key, int channels[4], int *cix)
 		}
 		break;
 	case 0:
+		dbg(1, "98: ic %2d key %04x cix %d ret 0", ic, key, *cix);
 		return 0;
 	default:
 		err("Bad mask ic %d key %u", ic, key);
@@ -1466,6 +1467,9 @@ int getChannelsInMask(int bank, int channels[2][4])
 	int cix[2] = {};
 	int nc = 0;
 	
+	dbg(2, "masks: A:%08x B:08x C:%08x D:%08x : [%d] %08x",
+	    masks[0], masks[1], masks[2], masks[3], bank, masks[bank]);
+
 	memset(channels, 0, sizeof(channels));
 
 	for (ic = 1; ic <= 32; ++ic){
