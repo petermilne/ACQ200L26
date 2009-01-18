@@ -573,17 +573,6 @@ static void updateChannelCount(unsigned *cc)
 }
 
 
-int gashone(void)
-{
-	int chx;
-
-	for (chx = 0; chx < ROW_CHAN; ++chx){
-			int lr = ROWCHAN2LRCH(chx);
-			int qc = ROWCHAN2QUADCH(chx);
-
-			dbg(1, "%d %d", lr, qc);
-	}
-}
 int acq132_transform_row_esmr(
 	int row,
 	short *base,
@@ -598,7 +587,8 @@ int acq132_transform_row_esmr(
 	int sam;
 	int tosam = 0;
 	int chx;	
-	dbg(2, "01 row:%d base:%p nsamples:%d", row, base, nsamples);
+	dbg(2, "01 %c row:%d base:%p nsamples:%d", 
+	    to->id+'A', row, base, nsamples);
 
 	printCursors(to, 0);
 	printCursors(to, 1);
@@ -621,7 +611,14 @@ int acq132_transform_row_esmr(
 
 			int cc = *to->bk_channelCursors[lr][qc];
 			base[cc] = buf.ch[chx];
-			*to->bk_channelCursors[lr][qc] = ++cc;
+
+			*to->bk_channelCursors[lr][qc] = cc + 1;
+#ifdef DEBUG
+			if (sam < 2){
+				dbg(3, "%c %d cc = [%d][%d] %06x",
+				    to->id+'A',chx,lr,qc,cc);
+			}
+#endif
 		}
 		++tosam;
 	}
@@ -658,9 +655,9 @@ static unsigned* initBankController(int itb)
 			scanb->nchan = getChannelsInMask(id, channels);
 			
 			for (qc = 0; qc < QUADCH; ++qc){
-				bc.banks[IDX(id)].bk_channelCursors[0][qc] = 
+				scanb->bk_channelCursors[0][qc] = 
 					&channelCursors[ZIC(channels[0][qc])];
-				bc.banks[IDX(id)].bk_channelCursors[1][qc] =
+				scanb->bk_channelCursors[1][qc] =
 					&channelCursors[ZIC(channels[1][qc])];
 			}
 			scanb->id = id;

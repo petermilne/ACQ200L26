@@ -386,7 +386,7 @@ typedef unsigned ChannelBank[LRCH][QUADCH];
 typedef unsigned * ChannelBankCursors[LRCH][QUADCH];
 
 #define ROWCHAN2LRCH(ix)	((ix)>>2)
-#define ROWCHAN2QUADCH(ix)	((ix)&0x03)
+#define ROWCHAN2QUADCH(ix)	((ix)&(QUADCH-1))
 
 int getChannelsInMask(int bank, ChannelBank channels);
 const char* acq132_getChannelSpeedMask(void);
