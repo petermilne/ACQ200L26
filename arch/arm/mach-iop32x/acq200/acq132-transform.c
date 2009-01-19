@@ -902,6 +902,7 @@ static ssize_t acq132_timebase_read (
 	unsigned *es_base =  (unsigned*)BB_PTR(es_tble->tblock->offset);
 	int nstamp_words = (es_cursor - es_base);
 	int sample = *offset;
+	int maxsamples = SAMPLES;
 	int last = 0;
 	struct ES_INFO esi = *ESI(file);
 	TSTYPE ts;
@@ -909,9 +910,12 @@ static ssize_t acq132_timebase_read (
 	int ii;
 
 	dbg(1, "kickoff with offset (sample) %d", sample);
-	dbg(2, "ES tblock: %d cursor %d", es_tble->tblock->iblock, 
-		nstamp_words);
+	dbg(2, "ES tblock: %d cursor %d / %d", 
+		es_tble->tblock->iblock, esi.itb, nstamp_words);
 
+	if (sample >= maxsamples){
+		return 0;
+	}
 	if (esi.itb == 0){
 		++esi.itb;
 		esi.last_end = es_base[esi.itb+ESC_OFFSET];
@@ -923,7 +927,7 @@ static ssize_t acq132_timebase_read (
 		unsigned last_end = es_base[ii+2+ESC_OFFSET];
 		unsigned blen = TB_GET_BLEN(last_end, esi.last_end);
 
-		dbg(2, "sample %d esi.tb_total %d last_end: %u this %u blen %d",
+		dbg(3, "sample %d esi.tb_total %d last_end: %u this %u blen %d",
 		    sample, esi.tb_total, esi.last_end, last_end, blen);
 
 		if (sample < (last = esi.tb_total + blen)){
@@ -941,6 +945,8 @@ static ssize_t acq132_timebase_read (
 	return -ENODEV;
 
 ok:
+	dbg(1, "ok: here with sample:%d last:%d", sample, last);
+
 	if (timebase_first_entry_is_zero){
 		/* this is a hack to handle FPGA non-reset bug */
 		if (es_base[esi.itb+ESC_TS] >= es_base[0+ESC_TS]){
@@ -955,6 +961,8 @@ ok:
 	}
 	ts += esi.smclk_ns * (sample - esi.tb_total);
 
+	last = min(last, maxsamples);
+
 	while (sample < last && len - ncopy > sizeof(TSTYPE)){
 		if (copy_to_user(buf+ncopy, &ts, sizeof(TSTYPE))){
 			return -EFAULT;
@@ -968,7 +976,7 @@ ok:
 	*ESI(file) = esi;
 	*offset = sample;
 
-	dbg(1, "returning %d", ncopy);
+	dbg(1, "99 cursor: %d returning %d", esi.itb, ncopy);
 
 	return ncopy;
 }
