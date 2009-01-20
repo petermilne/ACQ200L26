@@ -4016,8 +4016,6 @@ EXPORT_SYMBOL_GPL(CAPDEF_set_nchan);
 EXPORT_SYMBOL_GPL(CAPDEF_set_word_size);
 EXPORT_SYMBOL_GPL(acq200_registerTransformer);
 EXPORT_SYMBOL_GPL(acq200_unregisterTransformer);
-EXPORT_SYMBOL_GPL(acq200_getTransformer);
-EXPORT_SYMBOL_GPL(acq200_setTransformer);
 EXPORT_SYMBOL_GPL(acq200_resetBigBufCursor);
 
 EXPORT_SYMBOL_GPL(acq200_add_start_of_shot_hook);

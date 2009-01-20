@@ -318,25 +318,6 @@ static void timebase_debug(void)
 }
 
 
-static void transformer_es_onStart(void *unused)
-/* @TODO wants to be onPreArm (but not implemented) */
-{
-	if (!es_tble){
-		es_tble = acq200_reserveFreeTblock();
-		if (es_tble == 0){
-			err("failed to reserve ES TBLOCK");
-		}else{
-			es_tblock = es_tble->tblock->iblock;
-			info("reserved ES TBLOCK %d", es_tblock);
-		}
-	}
-
-	if (es_tble){
-		es_base = es_cursor = 
-			(unsigned*)BB_PTR(es_tble->tblock->offset);
-		memset(es_cursor, 0, TBLOCK_LEN);
-	}
-}
 
 int acq132_transform_row_es(
 	int row,
@@ -720,45 +701,85 @@ static struct Transformer transformer_es = {
 	.transform = acq132_transform_es
 };
 
+static int transformSelected(void *fun, const char* name)
+{
+	int selected = acq200_getSelectedTransformerFunc() == fun;
+	dbg(1, "%s %s", name, selected? "YES": "NO");
+	return selected;
+}
+
+#define TRANSFORM_SELECTED(fun) transformSelected(fun, #fun)
+
+static void transformer_es_onStart(void *unused)
+/* @TODO wants to be onPreArm (but not implemented) */
+{
+	if (!TRANSFORM_SELECTED(acq132_transform_es)){
+		return;
+	}else if (!es_tble){
+		es_tble = acq200_reserveFreeTblock();
+		if (es_tble == 0){
+			err("failed to reserve ES TBLOCK");
+		}else{
+			es_tblock = es_tble->tblock->iblock;
+			info("reserved ES TBLOCK %d", es_tblock);
+		}
+	}
+
+	if (es_tble){
+		es_base = es_cursor = 
+			(unsigned*)BB_PTR(es_tble->tblock->offset);
+		memset(es_cursor, 0, TBLOCK_LEN);
+	}
+}
+
+static struct Hookup transformer_es_hook = {
+	.the_hook = transformer_es_onStart
+};
+
+
 static struct Transformer transformer_esmr = {
 	.name = "acq132esmr",
 	.transform = acq132_transform_esmr
 };
 
-static struct Hookup transformer_es_hook = {
-	.the_hook = transformer_es_onStart
-};
+
 
 static unsigned acq132_getChannelNumSamplesMr(int pchan)
 {
 	return sampleCounts[pchan];
 }
 
+
 static void transformer_esmr_onStart(void* unused)
 {
-	int nbanks = acq132_getScanlistLen();
-
-	DG->bigbuf.tblocks.getChannelData = acq132_getChannelDataMr;
-	DG->getChannelNumSamples = acq132_getChannelNumSamplesMr;
-
-	if (!tblockChannels){
-		tblockChannels = kzalloc(TBLOCKCHSZ, GFP_KERNEL);
-		if (!tblockChannels){
-			err("ERROR: failed to alloc %d", TBLOCKCHSZ);
-			return;
-		}
-		info("tblockChannels %p size %d", tblockChannels, TBLOCKCHSZ);	
-		info("first block %p", &tblockChannels[0]);
-		info("last  block %p", &tblockChannels[MAXTBLOCKS]);
+	if (!TRANSFORM_SELECTED(acq132_transform_esmr)){
+		return;
 	}else{
-		memset(tblockChannels, 0, TBLOCKCHSZ);
+		int nbanks = acq132_getScanlistLen();
+
+		DG->bigbuf.tblocks.getChannelData = acq132_getChannelDataMr;
+		DG->getChannelNumSamples = acq132_getChannelNumSamplesMr;
+
+		if (!tblockChannels){
+			tblockChannels = kzalloc(TBLOCKCHSZ, GFP_KERNEL);
+			if (!tblockChannels){
+				err("ERROR: failed to alloc %d", TBLOCKCHSZ);
+				return;
+			}
+			info("tblockChannels %p size %d", 
+					       tblockChannels, TBLOCKCHSZ);	
+			info("first block %p", &tblockChannels[0]);
+			info("last  block %p", &tblockChannels[MAXTBLOCKS]);
+		}else{
+			memset(tblockChannels, 0, TBLOCKCHSZ);
+		}
+		memset(sampleCounts, 0, sizeof(sampleCounts));
+
+		setChannelOffsets();
+
+		memset(&bc, 0, sizeof(bc));	
+		bc.nbanks = nbanks;
 	}
-	memset(sampleCounts, 0, sizeof(sampleCounts));
-
-	setChannelOffsets();
-
-	memset(&bc, 0, sizeof(bc));	
-	bc.nbanks = nbanks;
 }
 
 static struct Hookup transformer_esmr_hook = {

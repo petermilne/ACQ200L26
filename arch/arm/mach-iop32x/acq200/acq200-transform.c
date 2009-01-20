@@ -502,6 +502,13 @@ const struct Transformer* acq200_getTransformer(int it)
 	    
 	return 0;
 }
+
+const void* acq200_getSelectedTransformerFunc(void)
+{
+	return DG->bigbuf.tblocks.transform;
+}
+
+
 void acq200_resetBigBufCursor(void)
 {
 	DG->bigbuf.tblocks.cursor = 0;
@@ -625,3 +632,7 @@ extern int acq200_lchanEnabled(int lchan)
 {
 	return acq200_pchanEnabled(acq200_lookup_pchan(lchan));
 }
+
+EXPORT_SYMBOL_GPL(acq200_getTransformer);
+EXPORT_SYMBOL_GPL(acq200_setTransformer);
+EXPORT_SYMBOL_GPL(acq200_getSelectedTransformerFunc);

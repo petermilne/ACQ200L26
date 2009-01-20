@@ -621,7 +621,7 @@ static struct page *fifo_AIfs_vma_nopage(
 			bbrp->tblock_samples * sizeof(short);
 		unsigned pa = PA_TBLOCK(bbrp->tblock) + choffset + offset; 
 
-		dbg(1, "offset:%6d pa:%08x va:%p",offset,
+		dbg(1, "offset:%6lu pa:%08x va:%p",(unsigned long)offset,
 		    pa, VA_TBLOCK(bbrp->tblock) + choffset + offset);
 
 		page = pfn_to_page(pa >> PAGE_SHIFT);

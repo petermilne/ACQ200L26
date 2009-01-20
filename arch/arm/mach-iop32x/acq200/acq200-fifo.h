@@ -437,6 +437,7 @@ struct Transformer {
 int acq200_registerTransformer(const struct Transformer* transformer);
 void acq200_unregisterTransformer(const struct Transformer* transformer);
 const struct Transformer* acq200_getTransformer(int it);
+const void* acq200_getSelectedTransformerFunc(void);
 void acq200_setTransformer(int it);
 void acq200_resetBigBufCursor(void);
 
