@@ -1469,7 +1469,7 @@ int getChannelsInMask(int bank, ChannelBank channels)
 	int nc = 0;
 	int qc;
 	
-	dbg(2, "masks: A:%08x B:08x C:%08x D:%08x : [%d] %08x",
+	dbg(2, "masks: A:%08x B:%08x C:%08x D:%08x : [%d] %08x",
 	    masks[0], masks[1], masks[2], masks[3], bank, masks[bank]);
 
 	memset(channels, 0, sizeof(channels));

@@ -800,35 +800,6 @@ static void __init acq200_proc_init(void)
 	
 }
 
-static int __devinit
-run_core_mknod_helper( int major )
-{
-	static char* envp[] = {
-		"HOME=/",
-		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
-		0
-	};
-	static char args[3][5] = {
-		{},
-	};
-	char *argv[6];
-	int rc;
-
-	sprintf( args[1], "%d", major );
-
-        argv[0] = "/sbin/acq200_core_helper";
-	argv[1] = args[1];  /* major */
-	argv[2] = 0;
-
-
-	dbg( 1, "call_usermodehelper %s\n", argv[0] );
-
-	rc = call_usermodehelper(argv [0], argv, envp, 0);
-
-	if ( rc != 0 ) err( "call done returned %d", rc );
-
-	return 0;
-}
 
 static int acq200_core_probe(struct device * dev)
 {
@@ -854,10 +825,6 @@ static int acq200_core_probe(struct device * dev)
 	}else if ( acq200_core_major == 0 ){
 		acq200_core_major = rc;
 	}
-#if 0
-	/* Chicken/Egg: core helper lives on extra, not yet mounted */
-	run_core_mknod_helper(acq200_core_major);
-#endif
 	return 0;
 }
 

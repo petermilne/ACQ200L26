@@ -32,6 +32,8 @@
 #include "ringbuffer.h"
 
 
+#include "acq200-signal.h"
+
 struct TblockListElement;
 
 #define IN_RANGE(xx, ll, rr) ((xx)>=(ll)&&(xx)<=(rr))
@@ -660,108 +662,6 @@ struct DevGlobs {
 struct CAPDEF_PRIVATE;  /* opaque store used by subclass */
 
 #define ACQ196_AO_HISTO cold_fifo_histo
-
-/*
- * class Signal - generic per device, per function line handling
- * external interface deals in logical values, internal is board, func
- * specific
- */
-struct Signal {
-	char name[16];
-	int is_active;
-	int was_active;
-	int DIx;                
-	int rising;
-
-	int _minDIx, _maxDIx;
-	int has_internal_option;
-	int is_output;
-	const char *key_hi;
-	const char *key_lo;
-
-	int (*commit)(struct Signal* signal);
-};
-
-#define DIX_INTERNAL -2
-#define DIX_NONE -1
-
-struct Signal* createSignal(
-	const char* name, 
-	int minDIx, int maxDIx,
-	int DIx, int rising, int is_active,
-	int (*commit)(struct Signal* signal)
-);
-/**
- * createSignal
- * name, minDIx, maxDIx, DIx, rising, is_active, commit
- */
-
-struct Signal* createLevelSignal(
-	const char* name, 
-	int minDIx, int maxDIx,
-	int DIx, int rising, int is_active,
-	int (*commit)(struct Signal* signal)
-);
-
-void destroySignal(struct Signal* signal);
-#define SIGNAL_SZ (sizeof(struct Signal))
-
-
-#define createNullSignal() createSignal("null",0,0,0,0,0,0)
-
-static inline int setSignal(struct Signal* signal, int DIx, int rising)
-{
-	if (DIx == DIX_NONE){
-		signal->DIx = DIX_NONE;
-		return 0;
-	}else if (IN_RANGE(DIx, signal->_minDIx, signal->_maxDIx)){
-		signal->DIx = DIx;
-		signal->rising = rising;
-		return 0;
-	}else{
-		return -1;
-	}
-}
-
-static inline int enableSignal(struct Signal* signal, int enable)
-{
-	if (signal->DIx != DIX_NONE){
-		return signal->is_active = enable;
-	}else{
-		return 0;
-	}
-}
-static inline int signalCommit(struct Signal* signal)
-{
-	if (signal->DIx != DIX_NONE){
-		return signal->commit(signal);
-	}else{
-		return 0;
-	}
-}
-
-
-static inline void activateSignal(struct Signal* signal)
-{
-	dbg(1, "%s", signal->name);
-	enableSignal(signal, 1);
-	signalCommit(signal);
-}
-static inline void deactivateSignal(struct Signal* signal)
-{
-	dbg(1, "%s", signal->name);
-	signal->was_active = signal->is_active;
-	enableSignal(signal, 0);
-	signalCommit(signal);
-}
-static inline void reactivateSignal(struct Signal* signal)
-{
-	dbg(1, "%s", signal->name);
-	enableSignal(signal, signal->was_active);
-	signalCommit(signal);
-}
-
-
 
 
 

@@ -519,7 +519,6 @@ static ssize_t store_scanlist(
 	int maxscan = min((int)strlen(buf), ACQ132_SCAN_MAX);
 	u32 scan_def = 0;
 	int ok = 0;
-	int place = 0;
 
 	while(isspace(buf[maxscan-1])){
 		--maxscan;
@@ -1068,8 +1067,6 @@ static int dump_regs_seq_show(struct seq_file *s, void *v)
 
 	const char* name = plut->name;
 	volatile u32 *reg = plut->preg;
-	int bank = (int)reg;
-	
 
 	if (reg == 0){
 		seq_printf(s, "%s", name);

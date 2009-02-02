@@ -68,102 +68,6 @@ static inline unsigned long long elapsed_samples(void)
 
 #define ELAPSED_SAMPLES elapsed_samples()
 
-static ssize_t show_signal(
-	struct Signal* signal, struct device * dev, char * buf)
-{
-	if (!signal){
-		err("ERROR: null signal");
-		return -ENODEV;
-	}
-	switch(signal->DIx){
-	case DIX_NONE:
-		return sprintf(buf, "%s none\n", signal->name);
-	case DIX_INTERNAL:	
-		return sprintf(buf, "%s internal %s\n",
-			       signal->name,
-			       signal->is_active?"ACTIVE":"inactive");
-	default:
-		return sprintf(buf, "%s D%c%d %s %s\n",
-			       signal->name, 
-			       signal->is_output? 'O': 'I',
-/* frig DIx for case of phys bits already set (ob_clk_src) gimme C++ */
-			       signal->DIx <= 16? signal->DIx: 16,
-			       signal->is_output? "":
-			               signal->rising? 
-						signal->key_hi: signal->key_lo,
-			       signal->is_active? "ACTIVE":"inactive");
-	}
-}
-
-
-static ssize_t store_signal(
-	struct Signal* signal,
-	struct device * dev, const char * _buf, size_t count)
-{
-	char buf[80];
-	char name[64];
-	char io;
-	int xx;
-	char edge[64];
-	int ok = __LINE__;
-	int nc;
-/**
- * debug parsing - sets ok to line# on fail, second cond ALWAYS fails
- * resulting in drop out.
- *
- */
-#define OKL(cond) ((cond) || !(ok = __LINE__))
-#define OKOK (ok = 0)
-
-	if (!signal){
-		err("ERROR: null signal");
-		return -ENODEV;
-	}
-
-	buf[79] = '\0';
-	strncpy(buf, _buf, min((int)count,78));
-	if (strchr(buf, '\n')){
-		*strchr(buf, '\n') = '\0';
-	}
-
-	if (signal->has_internal_option &&
-	    OKL(strcmp(name, signal->name) == 0) && 
-	    OKL(strcmp(edge, "internal") == 0)){
-		if (OKL(setSignal(signal, DIX_INTERNAL, 1) == 1)){
-		    activateSignal(signal);
-		    OKOK;
-		}
-	}else if (OKL(sscanf(buf, "%s %s", name, edge) == 2) && 
-	    OKL(strcmp(name, signal->name) == 0) && 
-	    OKL(strcmp(edge, "none") == 0)){
-		deactivateSignal(signal);
-		setSignal(signal, DIX_NONE, 0);
-		OKOK;
-	}else if (OKL((nc=sscanf(buf,"%s D%c%d %s",name,&io,&xx,edge)) >= 3) &&
-		  OKL(strcmp(name, signal->name) == 0) &&
-		  OKL((signal->is_output == 1 && io == 'O') || 
-		      (signal->is_output == 0 && io == 'I')   ) ){
-
-		if ((nc == 3 || OKL(strcmp(edge, signal->key_lo) == 0)) &&
-		     OKL(setSignal(signal, xx, 0) == 0)                ){
-			activateSignal(signal);
-			OKOK;
-		}else if (OKL(strcmp(edge, signal->key_hi) == 0)  &&
-  		    OKL(setSignal(signal, xx, 1) == 0)   ){
-			activateSignal(signal);
-			OKOK;
-		}
-
-		dbg(1, "nc:%d name \"%s\" D%c%d edge \"%s\"", 
-		    nc, name, io, xx, edge);
-	}
-
-	if (ok != 0){
-		err("signal %s input validation failed %d \"%s\"", 
-		    signal->name, ok, buf);
-	}
-	return count;	  
-}
 
 #ifndef WAV232
 
@@ -2077,7 +1981,7 @@ static ssize_t store_transformer(
 		goto cleanup;
 	}else if (sscanf(buf, "%d", &cursor) == 1){
 		/* single number specifies tblock to transform */
-		char* p_decimal = buf;
+		const char* p_decimal = buf;
 		int iblock;
 		while(*p_decimal == '0'){
 			++p_decimal;		/* avoid octal convert! */

@@ -3886,63 +3886,6 @@ static void delete_dg(void)
 	kfree(DG);
 }
 
-/** 
- *  @@null_signal - default signal class
- */
-static int def_commit(struct Signal* signal)
-{
-	dbg(1, "");
-	return 0;
-}
-
-struct Signal* createSignal(
-	const char* name, 
-	int minDIx, int maxDIx,
-	int DIx, int rising, int is_active,
-	int (*commit)(struct Signal* signal)
-)
-{
-	static struct Signal def_signal = {
-		.is_active = 0,
-		.commit = def_commit,
-		.key_lo = "falling",
-		.key_hi = "rising"
-	};
-	struct Signal* signal = kzalloc(SIGNAL_SZ, GFP_KERNEL);
-	memcpy(signal, &def_signal, SIGNAL_SZ);
-	strncpy(signal->name, name, sizeof(signal->name)-1);
-	signal->_minDIx = minDIx;
-	signal->_maxDIx = maxDIx;
-	signal->DIx = DIx;
-	signal->rising = rising;
-	signal->is_active = is_active;
-	if (commit){
-		signal->commit = commit;
-	}
-	return signal;
-}
-
-struct Signal* createLevelSignal(
-	const char* name, 
-	int minDIx, int maxDIx,
-	int DIx, int rising, int is_active,
-	int (*commit)(struct Signal* signal)
-)
-{
-	struct Signal *signal =  createSignal(
-		name, minDIx, maxDIx, DIx, rising, is_active, commit);
-	signal->key_lo = "low";
-	signal->key_hi = "high";
-	return signal;
-}
-
-void destroySignal(struct Signal* signal)
-{
-	kfree(signal);
-}
-
-
-
 
 
 

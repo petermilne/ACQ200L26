@@ -156,6 +156,7 @@ ACQ2XX_FIFO_COMMON=\
 	acq200-rb.o \
 	acq200-fifo-bigbuf-fops.o \
 	acq200-hook.o \
+	acq200-signal.o \
 	acq200-cdog.o
 
 acq216-objs := acq216-fifo.o acq216-fiq.o \
