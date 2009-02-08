@@ -1170,7 +1170,8 @@ static ssize_t show_free_tblocks(
 	return sprintf(buf,"%d\n", free_block_count());
 }
 
-static DEVICE_ATTR(free_tblocks, S_IRUGO|S_IWUGO, show_free_tblocks, store_free_tblocks);
+static DEVICE_ATTR(
+	free_tblocks, S_IRUGO|S_IWUGO, show_free_tblocks, store_free_tblocks);
 
 
 
