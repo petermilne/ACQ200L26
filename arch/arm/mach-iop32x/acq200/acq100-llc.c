@@ -790,7 +790,7 @@ static void llPreamble2V(void)
 			marker = 0xdeadbeef;    /* emulate FPGA BDR reg */
 			break;
 		default:
-			marker = LLC_SYNC2V_IDLE_PAT;
+			marker = LLC_SYNC2V_IDLE_PAT | (ireg<<8);
 			break;
 		}
 		ACQ196_LL_AI_SCRATCH[ireg] = marker;
