@@ -108,11 +108,11 @@ ssize_t acq200_store_signal(
 		  OKL((signal->is_output == 1 && io == 'O') || 
 		      (signal->is_output == 0 && io == 'I')   ) ){
 
-		if ((nc == 3 || OKL(strcmp(edge, "falling") == 0)) &&
+		if ((nc == 3 || OKL(strcmp(edge, signal->key_lo) == 0)) &&
 		     OKL(setSignal(signal, xx, 0) == 0)                ){
 			activateSignal(signal);
 			OKOK;
-		}else if (OKL(strcmp(edge, "rising") == 0)  &&
+		}else if (OKL(strcmp(edge, signal->key_hi) == 0)  &&
   		    OKL(setSignal(signal, xx, 1) == 0)   ){
 			activateSignal(signal);
 			OKOK;
