@@ -96,8 +96,7 @@ static const char* VERID =
 #endif
 
 
-
-static int acq200_debug;
+int acq200_debug;
 
 #include "acq32busprot.h"
 #include "acqX00-port.h"
@@ -128,6 +127,7 @@ static int acq200_debug;
 int acq200_databuf_debug = 0;
 module_param(acq200_databuf_debug, int, 0664);
 
+module_param(acq200_debug, int, 0664);
 
 int HBPHYS;
 module_param(HBPHYS, int, 0444);
@@ -144,6 +144,10 @@ module_param(downstream_is_set, int, 0444);
 
 int dma1_IE = 1;
 module_param(dma1_IE, int, 0644);
+
+
+unsigned max_dma = 0;			/* 0 => no maximum */
+module_param(max_dma, int, 0644);
 
 #define EOT_TO_TICKS (HZ/10)
 int eot_to_ticks = EOT_TO_TICKS;
@@ -392,44 +396,8 @@ static DEVICE_ATTR(host_base, S_IRUGO|S_IWUGO,
 		   show_host_base, set_host_base);
 
 
-static ssize_t show_databuf_debug(
-	struct device *dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-	return sprintf( buf, "%d\n", acq200_databuf_debug );
-}
 
-static ssize_t set_databuf_debug(
-	struct device *dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	sscanf( buf, "%d", &acq200_databuf_debug );
-	return strlen(buf);
-}
-static DEVICE_ATTR(acq200_databuf_debug,  S_IRUGO|S_IWUGO,
-		   show_databuf_debug, set_databuf_debug);
 
-static ssize_t show_acq200_debug(
-	struct device *dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-	return sprintf( buf, "%d\n", acq200_debug );
-}
-
-static ssize_t set_acq200_debug(
-	struct device *dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	sscanf( buf, "%d", &acq200_debug );
-	return strlen(buf);
-}
-
-static DEVICE_ATTR(acq200_debug, S_IRUGO|S_IWUGO,
-		   show_acq200_debug, set_acq200_debug);
 
 static int acq200_mu_ipq_int_enable = 1;
 
@@ -599,12 +567,10 @@ static void mk_sysfs(struct device *dev)
 
 	DEVICE_CREATE_FILE(dev, &dev_attr_host_base);
 	DEVICE_CREATE_FILE(dev, &dev_attr_queue_state);
-	DEVICE_CREATE_FILE(dev, &dev_attr_acq200_debug);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ipq_entries);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ifq_entries);
 	DEVICE_CREATE_FILE(dev, &dev_attr_opq_entries);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ofq_entries);
-	DEVICE_CREATE_FILE(dev, &dev_attr_acq200_databuf_debug);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mu_ipq_int_enable);
 	DEVICE_CREATE_FILE(dev, &dev_attr_OIMR);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_counts);
@@ -1127,15 +1093,37 @@ static struct u32_ringbuffer DMADQ;
 static int new_chain_ready;
 static spinlock_t eot_lock = SPIN_LOCK_UNLOCKED;
 
+static DECLARE_WAIT_QUEUE_HEAD(show_dma_waitq);
+static enum DMA_START_MODE { D_OFF, D_FIRE, D_RELOAD } dma_start_mode;
 
+static ssize_t show_dma_channel(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	enum DMA_START_MODE mode;
+
+	if (wait_event_interruptible_timeout(
+		    show_dma_waitq, (mode = dma_start_mode) != D_OFF, 2*HZ)){
+		dma_start_mode = D_OFF;
+		sprintf(buf, "DMA_START %s\n", mode==D_FIRE? "D_FIRE":
+					mode==D_RELOAD? "D_RELOAD": "???");
+		print_chain(&dma_channel, buf+strlen(buf));
+		return strlen(buf);		
+	}else{
+		return -ETIMEDOUT;
+	}
+}
+
+static DEVICE_ATTR(dma_chain, S_IRUGO, show_dma_channel, 0);
 
 static int acq200mu_EOT_task(void *nothing)
 {
 	struct InterruptSync * isync = &DMA_ISYNC;
-
+	struct DmaChannel *ch = &dma_channel;
 	unsigned long flags;
 	u32 stat;
-	struct DmaChannel *ch = &dma_channel;
+
 	unsigned iter = 0;
 
 	while(!kthread_should_stop()) {
@@ -1230,25 +1218,22 @@ static int acq200mu_EOT_task(void *nothing)
 						dmad, dmad->clidat);
 				dma_append_chain(ch, dmad, "data");
 			}
+			ch->dmad[ch->nchain-1]->DC |= IOP321_DCR_IE;
 				
-			if (acq200_debug > 1){
-				char *buf = kmalloc(4096, GFP_KERNEL);
-				info("dar %x", dar);
-				print_chain(&dma_channel, buf);
-				printk(buf);
-				kfree(buf);
-			}
 			if (dar == 0){
 				IMARK;
 				DMA_ARM(dma_channel);
 				DMA_FIRE(dma_channel);
 				IMARK;
 				UPSTATS(fire, 1);
+				dma_start_mode = D_FIRE;
 			}else{
 				IMARK;
 				DMA_RELOAD(dma_channel);
 				UPSTATS(reload, 1);
+				dma_start_mode = D_RELOAD;
 			}
+			wake_up_interruptible(&show_dma_waitq);
 		}else{
 			IMARK;
 			continue; /* no room, try later */
@@ -1275,6 +1260,64 @@ static int acq200mu_queue_dma_desc(struct iop321_dma_desc* dmad)
 	
 	
 
+static int queue_data_dmad_remote_write(struct mu_rma* rma)
+{
+	struct iop321_dma_desc* dmad = 0;
+	struct PCI_DMA_BUFFER dma_buf;
+	int dmad_count = 0;
+	unsigned pci_addr = rma->bb_remote_pci_offset;
+
+	int cursor;
+	int chunk_len;
+	int remainder;
+	int _max_dma = max_dma;
+	unsigned dc;
+
+	dma_buf.va = bbva(rma->buffer_offset);
+	if (MU_RMA_IS_PCI_REL(rma)){			
+		pci_addr += mug.rma_base; /* rma offset */
+	}
+
+	if (MU_RMA_IS_HOSTBOUND(rma)){
+		dma_buf.direction = DMA_TO_DEVICE;
+		dc = DMA_DCR_PCI_MW;
+	}else{
+		dma_buf.direction = DMA_FROM_DEVICE;
+		dc = DMA_DCR_PCI_MR;
+	}
+
+	dma_buf.laddr = dma_map_single(mug.dev, dma_buf.va, 
+					rma->length, dma_buf.direction);
+
+	if (_max_dma == 0){
+		_max_dma = rma->length;
+	}
+
+	for (cursor = 0, remainder = rma->length; 
+	     (chunk_len = min(_max_dma, remainder)) > 0;
+	     remainder -= chunk_len, cursor += chunk_len) {
+
+		dmad = dmad_alloc();
+
+		dmad->NDA	= 0;
+		dmad->PDA	= pci_addr+cursor;
+		dmad->PUAD	= 0;
+		dmad->LAD	= dma_buf.laddr+cursor;
+		dmad->BC	= chunk_len;
+		dmad->DC	= dc;
+		dmad->clidat    = 0;
+
+		if (acq200mu_queue_dma_desc(dmad) == 0){
+			err("mu_queue full");
+			break;
+		}
+		++dmad_count;
+	}
+	dbg(1, "Q %p", dmad);
+	return dmad_count;
+}
+
+
 
 static ssize_t acq200_mu_remote_write_chain(
 	struct file *file, const char *buf, size_t len, loff_t *offset
@@ -1293,42 +1336,15 @@ static ssize_t acq200_mu_remote_write_chain(
 		COPY_FROM_USER(rma, buf, sizeof(u32));
 		switch(MU_RMA_MAGIC(rma)){
 		case MU_MAGIC_BB: {
-			struct PCI_DMA_BUFFER dma_buf;
-			unsigned pci_addr;
-
 			dbg(1, "MU_MAGIC_BB, copy %d", MU_RMA_RESIDUE);
 
 			COPY_FROM_USER(MU_RMA_PAYLOAD(rma), 
 				       BUF_PAYLOAD, MU_RMA_RESIDUE);
 
-			pci_addr = rma->bb_remote_pci_offset;
-			if (MU_RMA_IS_PCI_REL(rma)){			
-				pci_addr += mug.rma_base; /* rma offset */
-			}
-			dmad = dmad_alloc();
-			dma_buf.va = bbva(rma->buffer_offset);
-			if (MU_RMA_IS_HOSTBOUND(rma)){
-				dma_buf.direction = DMA_TO_DEVICE;
-				dmad->DC = DMA_DCR_PCI_MW;
-			}else{
-				dma_buf.direction = DMA_FROM_DEVICE;
-				dmad->DC = DMA_DCR_PCI_MR;
-			}
-	
-			dma_buf.laddr = dma_map_single(mug.dev, 
-				dma_buf.va, rma->length, dma_buf.direction);
+			dmad_count = queue_data_dmad_remote_write(rma); 
 
-			dmad->NDA	= 0;
-			dmad->PDA	= pci_addr;
-			dmad->PUAD	= 0;
-			dmad->LAD	= dma_buf.laddr;
-			dmad->BC	= rma->length;
-			dmad->clidat    = 0;
-
-			dbg(1, "Q %p", dmad);
-			rc = acq200mu_queue_dma_desc(dmad);
-
-			++dmad_count; buf += MU_RMA_SZ;	rlen -= MU_RMA_SZ;
+			buf += MU_RMA_SZ;	
+			rlen -= MU_RMA_SZ;
 			break;
 		}
 		case MU_MAGIC_OB: {
@@ -1876,7 +1892,7 @@ static void free_databufs(void)
 			break;
 		}else{
 			mug.databufs[ibuf].va = 0;
-			free_pages((unsigned)abuf, PO(HBBLOCK));			
+			free_pages((unsigned)abuf, PO(HBBLOCK));
 		}
 	}
 }
@@ -2013,6 +2029,7 @@ static DEVICE_ATTR(downstream_window,
 
 static void mk_dev_sysfs(struct device *dev)
 {
+	DEVICE_CREATE_FILE(dev, &dev_attr_dma_chain);
 	DEVICE_CREATE_FILE(dev, &dev_attr_globs);
 	DEVICE_CREATE_FILE(dev, &dev_attr_downstream_window);
 }
