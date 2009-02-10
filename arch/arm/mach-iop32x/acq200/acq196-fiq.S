@@ -83,7 +83,7 @@
 #if DMA_BLOCK_LEN < 256
 #define CHECK_2B 0	
 #else	
-#define HOT3B 0x8	     /* for 96 channels */		
+#define HOT3B 0x9	     /* for 96 channels */		
 #define CHECK_2B 3           /* Q Fourth block */		
 #endif	
 
