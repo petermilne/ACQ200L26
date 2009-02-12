@@ -364,15 +364,16 @@ static inline void reset_gpg(void)
  *
  */
 
+#define SWS		2		/* Sample Word Size */
 #define MAX_ROWS	4
 
 #define ROW_SAM		128
 #define ROW_CHAN	8
 #define ROW_WORDS	(ROW_SAM*ROW_CHAN)
-#define ROW_SIZE	(ROW_WORDS*sizeof(short))
+#define ROW_SIZE	(ROW_WORDS*SWS)
 #define ROW_LONGS	(ROW_SIZE/USS)
 
-#define ROW_CHAN_SZ	(ROW_CHAN*sizeof(short))
+#define ROW_CHAN_SZ	(ROW_CHAN*SWS)
 #define ROW_CHAN_LONGS  (ROW_CHAN_SZ/sizeof(unsigned))
 
 /* but with channel masking, we have 2 more possibilities: */

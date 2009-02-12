@@ -249,11 +249,76 @@ struct ES_INFO {
 
 #define ESI_BURST_START(esi)	((esi).esi_base[(esi).itb+ESC_OFFSET])
 
-#define ES_LEN		(8*sizeof(short))
+#define ES_LEN		(ROW_CHAN*SWS)
 #define ESI(file)	((struct ES_INFO *)file->private_data)
 
-/* @todo - we assume that the ES takes one full sample! */
-#define TB_GET_BLEN(c2, c1) (((c2)-(c1))/sample_size() - 1)
+/* @@todo NROWS = f(scan list) */
+#define NROWS		MAX_ROWS	
+#define ROW_SAMPLE_SIZE	(ROW_CHAN*SWS)
+#define ROW_ES_SIZE	ROW_SAMPLE_SIZE
+#define BLOCK_BYTES	(ROW_SIZE*NROWS)
+/* there may be NROWS, but the #samples is the same .. */
+#define BLOCK_SAM	ROW_SAM	
+
+
+static int tb_get_blen(unsigned start, unsigned end)
+{
+#define PRTVAL(x)	dbg(1, "%20s : %d", #x, x)
+	static int init;
+/* (((c2)-(c1))/sample_size() - 1) */
+	unsigned d_bytes = end - start;
+	unsigned d_sam;
+	const char *BRANCH;
+
+	if (acq200_debug>=1 && !init){
+
+		PRTVAL(NROWS);
+		PRTVAL(ROW_SAMPLE_SIZE);
+		PRTVAL(ROW_ES_SIZE);
+		PRTVAL(ROW_SIZE);
+		PRTVAL(BLOCK_BYTES);
+		PRTVAL(BLOCK_SAM);
+		init = 1;
+
+	}
+	if (d_bytes < ROW_SIZE){
+		BRANCH = "small";
+		d_bytes -= ROW_ES_SIZE;
+		d_sam = d_bytes / ROW_SAMPLE_SIZE;
+	}else if (d_bytes >= BLOCK_BYTES){
+		/* compute how many full BLOCKS are involved 
+                 * NB: start may be offset into the first ROW, not BLOCK! */
+		unsigned start_data = start+sample_size();
+		unsigned d_bytes2 = end - start_data;
+		unsigned start_in_block = start_data % BLOCK_BYTES;
+		unsigned d_blocks = (d_bytes2 - start_in_block)/BLOCK_BYTES;
+		unsigned d_bytes_row = d_bytes2 - 
+			d_blocks*BLOCK_BYTES +	      /* bytes in full blocks*/
+			(BLOCK_BYTES-start_in_block); /* bytes in part block */
+
+		PRTVAL(start_data);
+		PRTVAL(d_bytes2);
+		PRTVAL(start_in_block);
+		PRTVAL(d_blocks);
+		PRTVAL(d_bytes_row);
+
+		d_sam = d_blocks*BLOCK_SAM + d_bytes_row/ROW_SAMPLE_SIZE;
+
+		BRANCH = "large";
+	}else{
+		err("Condition not met ROW_SIZE %d < %d <= %d BLOCK_LEN",
+		    ROW_SIZE, d_bytes, BLOCK_BYTES);
+		BRANCH = "error";
+		d_sam = -37;
+	}
+
+	dbg(2, "%10s:start:%10u end:%10u db:%8u return %d", 
+	    BRANCH, start, end, d_bytes, d_sam);
+
+	return d_sam;
+#undef PRTVAL
+}
+#define TB_GET_BLEN(c2, c1)  tb_get_blen(c1, c2)
 
 static int already_known(unsigned ts)
 /* search back towards es_base to see if ts already found 
@@ -1009,7 +1074,7 @@ ok:
 	sample_in_gate = sample - esi.tb_total;
 	last = min(last, maxsamples);
 
-	dbg(2, "cipy_loop: esi.itb:%d sample:%d last:%d gate_time:%d",
+	dbg(2, "copy_loop: esi.itb:%d sample:%d last:%d gate_time:%d",
 			esi.itb, sample, last, gate_time);
 
 	while (sample < last && len - ncopy > sizeof(TSTYPE)){
