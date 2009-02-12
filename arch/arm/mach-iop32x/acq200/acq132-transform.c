@@ -90,9 +90,14 @@ extern int stub_event_adjust;
 
 #define TBG if (acq132_transform_debug) dbg
 
-static TBLE* es_tble;
-static unsigned *es_base;
-static unsigned *es_cursor;
+static struct ES_META_DATA{
+	TBLE* es_tble;
+	unsigned *es_base;
+	unsigned *es_cursor;
+
+}
+	g_esm;
+
 
 #define DEBUGGING
 #ifdef DEBUGGING
@@ -327,16 +332,17 @@ static int tb_get_blen(unsigned start, unsigned end)
 #define TB_GET_BLEN(c2, c1)  tb_get_blen(c1, c2)
 
 static int already_known(unsigned ts)
-/* search back towards es_base to see if ts already found 
+/* search back towards g_esm.base to see if ts already found 
    catches the case of multiple ts in _same_ block
 */
 {
-	if (es_cursor - es_base > 2){
-		unsigned *cc = es_cursor - 2;
-		for (; cc - es_base > 0 && es_cursor - cc < ROW_SAM*2; cc -= 2){
+	if (g_esm.es_cursor - g_esm.es_base > 2){
+		unsigned *cc = g_esm.es_cursor - 2;
+		for (; cc - g_esm.es_base > 0 && 
+				g_esm.es_cursor - cc < ROW_SAM*2; cc -= 2){
 			if (ts == *cc){
 				dbg(1, "backwards match [-%d] %08x", 
-				    (es_cursor-cc)*2, ts);
+				    (g_esm.es_cursor-cc)*2, ts);
 				return 1;
 			}
 		}
@@ -349,21 +355,21 @@ int remove_es(int sam, int row, unsigned short* ch, void *cursor)
 	dbg(1, "sam:%6d row:%d %04x %04x %04x %04x %04x %04x %04x %04x",
 	    sam, row, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
 
-	if (es_cursor){	
+	if (g_esm.es_cursor){	
 		if (es_stash_full){
-			memcpy(es_cursor, ch, ROW_CHAN_SZ);
-			es_cursor += ROW_CHAN_LONGS;
+			memcpy(g_esm.es_cursor, ch, ROW_CHAN_SZ);
+			g_esm.es_cursor += ROW_CHAN_LONGS;
 		}else{
 			unsigned ts = ch[5] << 16 | ch[7];
-			if (likely(ts == *es_cursor)){
+			if (likely(ts == *g_esm.es_cursor)){
 				/* expecting TS in groups */
 				return 1;
 			}else if (already_known(ts)){
 				/* catch close bunched TS */
 				return 1;
 			}else{
-				*++es_cursor = (unsigned)cursor;
-				*++es_cursor = ts;
+				*++g_esm.es_cursor = (unsigned)cursor;
+				*++g_esm.es_cursor = ts;
 			}
 		}
 	}
@@ -372,7 +378,7 @@ int remove_es(int sam, int row, unsigned short* ch, void *cursor)
 
 static void timebase_debug(void)
 {
-	unsigned *cursor = (unsigned*)BB_PTR(es_tble->tblock->offset) + 1;
+	unsigned *cursor = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset) + 1;
 	unsigned burst_start = *cursor++;
 	unsigned ts1 = *cursor++;
 	unsigned ts = ts1;
@@ -382,7 +388,7 @@ static void timebase_debug(void)
 		info("first timestamp %08x use as offset", ts1);
 	}
 	
-	while(cursor < es_cursor){
+	while(cursor < g_esm.es_cursor){
 		unsigned burst_end = *cursor++;
 		iburst++;
 
@@ -523,7 +529,7 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 	TBG(1, "99");
 }
 
-/** esmr = Event Signature Multi Rate */
+/** esmmnr = Event Signature Multi Rate */
 #define MAXSCAN		4
 
 struct BankController {
@@ -794,20 +800,22 @@ static void transformer_es_onStart(void *unused)
 	if (!TRANSFORM_SELECTED(acq132_transform_es)){
 		return;
 	}else{
-		es_tble = acq200_reserveFreeTblock();
+		g_esm.es_tble = acq200_reserveFreeTblock();
 
-		if (es_tble == 0){
+		if (g_esm.es_tble == 0){
 			err("failed to reserve ES TBLOCK");
-		}else{
-			atomic_inc(&es_tble->tblock->in_phase);
-			es_tblock = es_tble->tblock->iblock;
-			info("reserved ES TBLOCK %d", es_tblock);
+			return;
+		}
+
+		atomic_inc(&g_esm.es_tble->tblock->in_phase);
+		es_tblock = g_esm.es_tble->tblock->iblock;
+		info("reserved ES TBLOCK %d", es_tblock);
 			/* ... and we never give it back .. */
-		if (es_tble){
-			es_base = es_cursor = 
-				(unsigned*)BB_PTR(es_tble->tblock->offset);
-			dbg(1, "es_cursor reset %p", es_base);
-			memset(es_cursor, 0, TBLOCK_LEN);
+
+		g_esm.es_base = g_esm.es_cursor = (unsigned*)
+					BB_PTR(g_esm.es_tble->tblock->offset);
+		dbg(1, "g_esm.es_cursor reset %p", g_esm.es_base);
+		memset(g_esm.es_cursor, 0, TBLOCK_LEN);
 	}
 }
 
@@ -961,8 +969,8 @@ static void init_esi(struct file * file)
 {
 	struct ES_INFO *esi = ESI(file);
 	/* step over gash first entry */
-	esi->esi_base = (unsigned*)BB_PTR(es_tble->tblock->offset) + 1;
-	esi->nstamp_words = es_cursor - es_base;
+	esi->esi_base = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset) + 1;
+	esi->nstamp_words = g_esm.es_cursor - g_esm.es_base;
 	dbg(1, "init entries %d", esi->nstamp_words/2);
 }
 
@@ -1032,7 +1040,7 @@ static ssize_t acq132_timebase_read (
 
 	dbg(1, "kickoff with offset (sample) %d", sample);
 	dbg(2, "ES tblock: %d cursor %d / %d", 
-		es_tble->tblock->iblock, esi.itb/2, esi.nstamp_words/2);
+		g_esm.es_tble->tblock->iblock, esi.itb/2, esi.nstamp_words/2);
 
 	if (sample >= maxsamples){
 		return 0;
