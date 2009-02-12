@@ -263,7 +263,7 @@ struct ES_INFO {
 
 static int tb_get_blen(unsigned start, unsigned end)
 {
-#define PRTVAL(x)	dbg(1, "%20s : %d", #x, x)
+#define PRTVAL(x)	dbg(1, "%20s : %u", #x, x)
 	static int init;
 /* (((c2)-(c1))/sample_size() - 1) */
 	unsigned d_bytes = end - start;
@@ -271,7 +271,7 @@ static int tb_get_blen(unsigned start, unsigned end)
 	const char *BRANCH;
 
 	if (acq200_debug>=1 && !init){
-
+		PRTVAL((unsigned)va_buf(DG));
 		PRTVAL(NROWS);
 		PRTVAL(ROW_SAMPLE_SIZE);
 		PRTVAL(ROW_ES_SIZE);
@@ -287,16 +287,22 @@ static int tb_get_blen(unsigned start, unsigned end)
 		d_sam = d_bytes / ROW_SAMPLE_SIZE;
 	}else if (d_bytes >= BLOCK_BYTES){
 		/* compute how many full BLOCKS are involved 
-                 * NB: start may be offset into the first ROW, not BLOCK! */
+                 * NB: start may be offset into the first ROW, not BLOCK! 
+		 */
 		unsigned start_data = start+sample_size();
+		unsigned bb_offset = start_data - (unsigned)va_buf(DG);
+		unsigned tblock_start = bb_offset - TBLOCK_OFFSET(bb_offset);
 		unsigned d_bytes2 = end - start_data;
-		unsigned start_in_block = start_data % BLOCK_BYTES;
+		unsigned start_in_block = (bb_offset-tblock_start) % 
+								BLOCK_BYTES;
 		unsigned d_blocks = (d_bytes2 - start_in_block)/BLOCK_BYTES;
 		unsigned d_bytes_row = d_bytes2 - 
-			d_blocks*BLOCK_BYTES +	      /* bytes in full blocks*/
+			d_blocks*BLOCK_BYTES -	      /* bytes in full blocks*/
 			(BLOCK_BYTES-start_in_block); /* bytes in part block */
 
 		PRTVAL(start_data);
+		PRTVAL(bb_offset);
+		PRTVAL(tblock_start);
 		PRTVAL(d_bytes2);
 		PRTVAL(start_in_block);
 		PRTVAL(d_blocks);
@@ -422,7 +428,8 @@ int acq132_transform_row_es(
 		    buf.ch[1] == ES_MAGIC_WORD &&
 		    buf.ch[2] == ES_MAGIC_WORD &&
 		    buf.ch[3] == ES_MAGIC_WORD &&
-		    remove_es(nsamples-sam, row, buf.ch, full)){
+		    /* remove pre-increment from cursor */
+		    remove_es(nsamples-sam, row, buf.ch, full-2)){
 			continue;
 		}
 #ifdef DEBUGGING
@@ -786,7 +793,7 @@ static void transformer_es_onStart(void *unused)
 {
 	if (!TRANSFORM_SELECTED(acq132_transform_es)){
 		return;
-	}else if (!es_tble){
+	}else{
 		es_tble = acq200_reserveFreeTblock();
 
 		if (es_tble == 0){
@@ -796,14 +803,11 @@ static void transformer_es_onStart(void *unused)
 			es_tblock = es_tble->tblock->iblock;
 			info("reserved ES TBLOCK %d", es_tblock);
 			/* ... and we never give it back .. */
-		}
-	}
-
-	if (es_tble){
-		es_base = es_cursor = 
-			(unsigned*)BB_PTR(es_tble->tblock->offset);
-		dbg(1, "es_cursor reset %p", es_base);
-		memset(es_cursor, 0, TBLOCK_LEN);
+		if (es_tble){
+			es_base = es_cursor = 
+				(unsigned*)BB_PTR(es_tble->tblock->offset);
+			dbg(1, "es_cursor reset %p", es_base);
+			memset(es_cursor, 0, TBLOCK_LEN);
 	}
 }
 
