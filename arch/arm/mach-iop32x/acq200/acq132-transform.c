@@ -92,6 +92,7 @@ extern int stub_event_adjust;
 
 static struct ES_META_DATA{
 	TBLE* es_tble;
+	TBLE* es_deblock;	/* to go when done at source */
 	unsigned *es_base;
 	unsigned *es_cursor;
 
@@ -349,11 +350,11 @@ static int already_known(unsigned ts)
 	}
 	return 0;
 }
-int remove_es(int sam, int row, unsigned short* ch, void *cursor)
+int remove_es(int sam, unsigned short* ch, void *cursor)
 /* NB: cursor points to start of pulse, AFTER ES */
 {
-	dbg(1, "sam:%6d row:%d %04x %04x %04x %04x %04x %04x %04x %04x",
-	    sam, row, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
+	dbg(1, "sam:%6d %04x %04x %04x %04x %04x %04x %04x %04x",
+	    sam, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
 
 	if (g_esm.es_cursor){	
 		if (es_stash_full){
@@ -403,7 +404,6 @@ static void timebase_debug(void)
 
 
 int acq132_transform_row_es(
-	int row,
 	short *to, 
 /*      short *to[ROW_CHAN], */
 	short *from, int nsamples, int channel_sam)
@@ -435,7 +435,7 @@ int acq132_transform_row_es(
 		    buf.ch[2] == ES_MAGIC_WORD &&
 		    buf.ch[3] == ES_MAGIC_WORD &&
 		    /* remove pre-increment from cursor */
-		    remove_es(nsamples-sam, row, buf.ch, full-2)){
+		    remove_es(nsamples-sam, buf.ch, full-2)){
 			continue;
 		}
 #ifdef DEBUGGING
@@ -451,7 +451,7 @@ int acq132_transform_row_es(
 #ifdef DEBUGGING
 			short *pto = to + chx*channel_sam + tosam;
 			if (pto < to1 || pto > to2){
-				err("buffer outrun at %p %p %p chx:%d sam:%d",
+				err("buffer outrun at %p %p %p chx:%d tosam:%d",
 				    to1, pto, to2, chx, tosam);
 				return nsamples;
 			}
@@ -469,7 +469,7 @@ int acq132_transform_row_es(
 	return tosam;
 }
 
-
+#if 0
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
 /* keep a stash of NSCAN to vectors */
@@ -527,6 +527,90 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 	}
 
 	TBG(1, "99");
+}
+#endif
+
+#define DQ_BLOCK_OFF(blk) (blk*TBLOCK_LEN/4)
+
+static void acq132_transform_unblocked(
+	short *to, short *from, int nwords, int stride)
+{
+/* keep a stash of NSCAN to vectors */
+	const int nsamples = nwords/stride;	
+	const int rows = stride/ROW_CHAN;
+#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
+	int row_off[MAX_ROWS];
+	int row;
+
+	if (rows > MAX_ROWS){
+		err("rows %d > MAX_ROWS", rows);
+		return;
+	}
+	for (row = 0; row < rows; ++row){
+		row_off[row] = DQ_BLOCK_OFF(row)/sizeof(short);
+	}
+
+	TBG(1, "nsamples:%d", nsamples);
+
+#ifdef DEBUGGING
+	to1 = to;
+	to2 = to+nwords;
+	TBG(1, "to   %p to %p", to1, to2);
+	from1 = from;
+	from2 = from+nwords;
+	TBG(1, "from %p to %p", from1, from2);
+#endif
+
+
+	for (row = 0; row < rows; ++row){
+		row_off[row] += acq132_transform_row_es(
+			to + row_off[row], 
+			from, 
+			nsamples,
+			nsamples
+			);
+		from += nsamples*ROW_CHAN;
+	}
+
+	TBG(1, "99");
+}
+
+static void acq132_deblock(short *from, int nwords, int stride)
+{
+	void *to = BB_PTR(g_esm.es_deblock->tblock->offset);
+	void *frm = from;
+	int row_off[MAX_ROWS];
+	int block;
+
+	
+	for (block = 0; block != 4; ++block){
+		row_off[block] = DQ_BLOCK_OFF(block);	
+		dbg(1, "01b:%d", row_off[block]);
+	}
+	
+	while(nwords > 0){
+		for (block = 0; block != 4; ++block){
+
+			dbg(4, "b:%d memcpy(%p, %p, %d)",
+			    block, to+row_off[block], frm, ROW_SIZE);
+
+			memcpy(to+row_off[block], frm, ROW_SIZE);
+			row_off[block] += ROW_SIZE;
+			frm += ROW_SIZE;
+			nwords -= ROW_SIZE/SWS;
+		}
+	}
+
+	for (block = 0; block != 4; ++block){
+		dbg(1, "99b:%d", row_off[block]);
+	}
+       
+}
+static void acq132_transform_es(short *to, short *from, int nwords, int stride)
+{
+	acq132_deblock(from, nwords, stride);
+	acq132_transform_unblocked(
+		to, BB_PTR(g_esm.es_deblock->tblock->offset), nwords, stride);
 }
 
 /** esmmnr = Event Signature Multi Rate */
@@ -666,7 +750,7 @@ int acq132_transform_row_esmr(
 		    buf.ch[1] == ES_MAGIC_WORD &&
 		    buf.ch[2] == ES_MAGIC_WORD &&
 		    buf.ch[3] == ES_MAGIC_WORD &&
-		    remove_es(nsamples-sam, row, buf.ch, full)){
+		    remove_es(nsamples-sam, buf.ch, full)){
 			continue;
 		}
 
@@ -794,23 +878,30 @@ static int transformSelected(void *fun, const char* name)
 
 #define TRANSFORM_SELECTED(fun) transformSelected(fun, #fun)
 
+static TBLE *reserveFreeTblock(const char *id){
+	TBLE *tble = acq200_reserveFreeTblock();
+	if (tble == 0){
+		err("%s:failed to reserve TBLOCK", id);
+		return 0;
+	}else{
+		info("reserved %10s TBLOCK %d", id, tble->tblock->iblock);
+	}
+	atomic_inc(&tble->tblock->in_phase);
+	return tble;
+}
 static void transformer_es_onStart(void *unused)
 /* @TODO wants to be onPreArm (but not implemented) */
 {
 	if (!TRANSFORM_SELECTED(acq132_transform_es)){
 		return;
 	}else{
-		g_esm.es_tble = acq200_reserveFreeTblock();
-
-		if (g_esm.es_tble == 0){
-			err("failed to reserve ES TBLOCK");
+		if ((g_esm.es_tble = reserveFreeTblock("ES")) == 0){
+			es_tblock = g_esm.es_tble->tblock->iblock;
 			return;
 		}
-
-		atomic_inc(&g_esm.es_tble->tblock->in_phase);
-		es_tblock = g_esm.es_tble->tblock->iblock;
-		info("reserved ES TBLOCK %d", es_tblock);
-			/* ... and we never give it back .. */
+		if ((g_esm.es_deblock = reserveFreeTblock("DEBLOCK")) == 0){
+			return;
+		}
 
 		g_esm.es_base = g_esm.es_cursor = (unsigned*)
 					BB_PTR(g_esm.es_tble->tblock->offset);
