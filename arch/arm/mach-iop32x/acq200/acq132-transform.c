@@ -56,9 +56,6 @@ module_param(print_cursors, int, 0664);
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
-int es_stash_full;
-module_param(es_stash_full, int, 0600);
-
 int es_tblock;
 module_param(es_tblock, int, 0444);
 
@@ -365,21 +362,16 @@ int remove_es(int sam, unsigned short* ch, void *cursor)
 	    sam, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
 
 	if (g_esm.es_cursor){	
-		if (es_stash_full){
-			memcpy(g_esm.es_cursor, ch, ROW_CHAN_SZ);
-			g_esm.es_cursor += ROW_CHAN_LONGS;
+		unsigned ts = ch[5] << 16 | ch[7];
+		if (likely(ts == *g_esm.es_cursor)){
+			/* expecting TS in groups */
+			return 1;
+		}else if (already_known(ts)){
+			/* catch close bunched TS */
+			return 1;
 		}else{
-			unsigned ts = ch[5] << 16 | ch[7];
-			if (likely(ts == *g_esm.es_cursor)){
-				/* expecting TS in groups */
-				return 1;
-			}else if (already_known(ts)){
-				/* catch close bunched TS */
-				return 1;
-			}else{
-				*++g_esm.es_cursor = (unsigned)cursor;
-				*++g_esm.es_cursor = ts;
-			}
+			*++g_esm.es_cursor = (unsigned)cursor;
+			*++g_esm.es_cursor = ts;
 		}
 	}
 	return 1;
