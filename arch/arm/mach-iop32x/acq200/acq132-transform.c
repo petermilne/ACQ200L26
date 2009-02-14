@@ -287,6 +287,7 @@ static int tb_get_blen(unsigned start, unsigned end)
 		init = 1;
 
 	}
+#if 0
 	if (d_bytes < ROW_SIZE){
 		BRANCH = "small";
 		d_bytes -= ROW_ES_SIZE;
@@ -323,6 +324,13 @@ static int tb_get_blen(unsigned start, unsigned end)
 		BRANCH = "error";
 		d_sam = -37;
 	}
+#else
+		BRANCH = "deblocked";
+		d_bytes -= ROW_ES_SIZE;
+		d_sam = d_bytes / ROW_SAMPLE_SIZE;	
+
+/* @@todo : what about across tblocks? */
+#endif
 
 	dbg(2, "%10s:start:%10u end:%10u db:%8u return %d", 
 	    BRANCH, start, end, d_bytes, d_sam);
