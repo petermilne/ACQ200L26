@@ -477,66 +477,7 @@ int acq132_transform_row_es(
 	return tosam;
 }
 
-#if 0
-static void acq132_transform_es(short *to, short *from, int nwords, int stride)
-{
-/* keep a stash of NSCAN to vectors */
-	const int nsamples = nwords/stride;	
-	const int rows = stride/ROW_CHAN;
-	const int block_words = rows * ROW_CHAN * ROW_SAM;
-	int blocks = nwords/block_words;
-	int nw = nwords;
-	int block;
-#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
-	int row_off[MAX_ROWS];
-	int row;
 
-	if (rows > MAX_ROWS){
-		err("rows %d > MAX_ROWS", rows);
-		return;
-	}
-	for (row = 0; row < rows; ++row){
-		row_off[row] = ROW_OFF(row);
-	}
-
-	if (blocks * block_words < nwords){
-		++blocks;
-	}
-
-	TBG(1, "blocks:%d", blocks);
-	TBG(1, "nsamples:%d", nsamples);
-
-#ifdef DEBUGGING
-	to1 = to;
-	to2 = to+nwords;
-	TBG(1, "to   %p to %p", to1, to2);
-	from1 = from;
-	from2 = from+nwords;
-	TBG(1, "from %p to %p", from1, from2);
-#endif
-
-	for (block = 0; block < blocks; ++block, nw -= block_words){
-		const int bsamples = min(nw, block_words)/rows/ROW_CHAN;
-
-		TBG(2, "block:%d to:%p from:%p bsamples %d", 
-		    block, to, from, bsamples);
-
-		for (row = 0; row < rows; ++row){
-			row_off[row] += acq132_transform_row_es(
-				row,
-				to + row_off[row], 
-				from, 
-				bsamples,
-				nsamples
-				);
-			from += bsamples*ROW_CHAN;
-		}
-		TBG(2, "block:%d to:%p from:%p", block, to, from);
-	}
-
-	TBG(1, "99");
-}
-#endif
 
 #define DQ_BLOCK_OFF(blk) (blk*TBLOCK_LEN/4)
 
