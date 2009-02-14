@@ -25,7 +25,7 @@
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID							\
-	"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1012\n"
+	"$Id: acq132-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1020\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -284,50 +284,12 @@ static int tb_get_blen(unsigned start, unsigned end)
 		init = 1;
 
 	}
-#if 0
-	if (d_bytes < ROW_SIZE){
-		BRANCH = "small";
-		d_bytes -= ROW_ES_SIZE;
-		d_sam = d_bytes / ROW_SAMPLE_SIZE;
-	}else if (d_bytes >= BLOCK_BYTES){
-		/* compute how many full BLOCKS are involved 
-                 * NB: start may be offset into the first ROW, not BLOCK! 
-		 */
-		unsigned start_data = start+sample_size();
-		unsigned bb_offset = start_data - (unsigned)va_buf(DG);
-		unsigned tblock_start = bb_offset - TBLOCK_OFFSET(bb_offset);
-		unsigned d_bytes2 = end - start_data;
-		unsigned start_in_block = (bb_offset-tblock_start) % 
-								BLOCK_BYTES;
-		unsigned d_blocks = (d_bytes2 - start_in_block)/BLOCK_BYTES;
-		unsigned d_bytes_row = d_bytes2 - 
-			d_blocks*BLOCK_BYTES -	      /* bytes in full blocks*/
-			(BLOCK_BYTES-start_in_block); /* bytes in part block */
 
-		PRTVAL(start_data);
-		PRTVAL(bb_offset);
-		PRTVAL(tblock_start);
-		PRTVAL(d_bytes2);
-		PRTVAL(start_in_block);
-		PRTVAL(d_blocks);
-		PRTVAL(d_bytes_row);
-
-		d_sam = d_blocks*BLOCK_SAM + d_bytes_row/ROW_SAMPLE_SIZE;
-
-		BRANCH = "large";
-	}else{
-		err("Condition not met ROW_SIZE %d < %d <= %d BLOCK_LEN",
-		    ROW_SIZE, d_bytes, BLOCK_BYTES);
-		BRANCH = "error";
-		d_sam = -37;
-	}
-#else
-		BRANCH = "deblocked";
-		d_bytes -= ROW_ES_SIZE;
-		d_sam = d_bytes / ROW_SAMPLE_SIZE;	
+	BRANCH = "deblocked";
+	d_bytes -= ROW_ES_SIZE;
+	d_sam = d_bytes / ROW_SAMPLE_SIZE;	
 
 /* @@todo : what about across tblocks? */
-#endif
 
 	dbg(2, "%10s:start:%10u end:%10u db:%8u return %d", 
 	    BRANCH, start, end, d_bytes, d_sam);
