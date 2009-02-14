@@ -332,8 +332,8 @@ int remove_es(int sam, unsigned short* ch, void *cursor)
 			/* catch close bunched TS */
 			return 1;
 		}else{
-			*++g_esm.es_cursor = (unsigned)cursor;
-			*++g_esm.es_cursor = ts;
+			*g_esm.es_cursor++ = (unsigned)cursor;
+			*g_esm.es_cursor++ = ts;
 		}
 	}
 	return 1;
@@ -392,6 +392,7 @@ int acq132_transform_row_es(
 		buf.ull[0] = *full++;
 		buf.ull[1] = *full++;
 
+		/* rapid fail ES_MAGIC test */
 		if (buf.ch[0] == ES_MAGIC_WORD &&
 		    buf.ch[1] == ES_MAGIC_WORD &&
 		    buf.ch[2] == ES_MAGIC_WORD &&
@@ -962,8 +963,7 @@ void acq132_event_adjust(
 static void init_esi(struct file * file)
 {
 	struct ES_INFO *esi = ESI(file);
-	/* step over gash first entry */
-	esi->esi_base = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset) + 1;
+	esi->esi_base = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset);
 	esi->nstamp_words = g_esm.es_cursor - g_esm.es_base;
 	dbg(1, "init entries %d", esi->nstamp_words/2);
 }
