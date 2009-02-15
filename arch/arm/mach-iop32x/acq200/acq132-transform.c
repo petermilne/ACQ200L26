@@ -321,16 +321,45 @@ static int tb_get_blen_same_tblock(Tbxo start, Tbxo end)
 #undef PRTVAL
 }
 
+static int count_span_blocks_in_phase(int tb1, int tb2)
+/* return # of intervening blocks for case of very long pulse */
+{
+	struct Phase *phase;
+	struct TblockListElement* tle;
+	int in_the_span = 0;
+	int span = 0;
+
+	list_for_each_entry(phase, &DMC_WO->phases, list){
+		list_for_each_entry(tle, &phase->tblocks, list){
+			if (!in_the_span){
+				if (tle->tblock->iblock == tb1){
+					in_the_span = 1;
+				}
+			}else{
+				if (tle->tblock->iblock == tb2){
+					in_the_span = 0;
+					break;
+				}else{
+					++span;
+				}
+			}
+		}
+	}
+	return span;
+}
 static int tb_get_blen_other_tblock(Tbxo tbix1, Tbxo tbix2)
 /* we're ASSUMING maxlen < TBLOCK_LEN or 98304 samples */
 {
 	u32 tb1_bytes = TBLOCK_LEN/NROWS - TBOFF(tbix1);
 	u32 tb2_bytes = TBOFF(tbix2);
-
 	unsigned d_bytes = tb1_bytes + tb2_bytes;
+	int span_blocks;
 	unsigned d_sam;
 
-
+	span_blocks = count_span_blocks_in_phase(TBIX(tbix1), TBIX(tbix2));
+	if (span_blocks){
+		d_bytes += span_blocks * TBLOCK_LEN/NROWS;
+	}
 
 	d_bytes -= ROW_ES_SIZE;
 	d_sam = d_bytes / ROW_SAMPLE_SIZE;	
