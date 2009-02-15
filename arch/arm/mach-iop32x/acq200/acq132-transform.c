@@ -105,6 +105,9 @@ short* from1;
 short* from2;
 #endif
 
+/* cursor: encode as TBLOCK{31:24}, OFFSET{23:0} */
+
+
 #define MAXTBLOCKS (DG->bigbuf.tblocks.nblocks)
 #define TBLOCKCHSZ (MAXTBLOCKS * sizeof(ChannelData))
 #define NOTINMASK 0xffffffff
@@ -122,6 +125,39 @@ struct Bank {
 	unsigned id;
 	ChannelBankCursors bk_channelCursors;
 };
+
+
+/* encoding tbxo tblock index, offset */
+
+
+#define TBOFF(tb)	((tb)&~0xff000000U)
+#define TBIX(tb)	((tb) >> 24)
+
+static void * tbxo2va(u32 tb)
+{
+	unsigned tbix = TBIX(tb);
+	unsigned tboff = TBOFF(tb);
+
+	return va_buf(DG) + 
+		DG->bigbuf.tblocks.the_tblocks[tbix].offset + tboff;
+}
+
+
+static u32 va2tbxo(void *va)
+{
+	unsigned offset = va - va_buf(DG);
+	unsigned tbix = TBLOCK_INDEX(offset);
+	unsigned tboff = TBLOCK_OFFSET(offset);
+	unsigned tbxo = tbix<<24 | tboff;
+
+	if (acq132_transform_debug){
+		void* va2 = tbxo2va(tbxo);
+		dbg(1, "va:%p va2:%p tbxo:%08x %s",
+		    va, va2, tbxo, va==va2? "EQUAL": "ERROR: NOT EQUAL");
+	}
+
+	return tbxo;
+}
 
 void acq132_transform_row(
 	short *to, short *from, int nsamples, int channel_sam)
@@ -264,79 +300,106 @@ struct ES_INFO {
 #define BLOCK_SAM	ROW_SAM	
 
 
-static int tb_get_blen(unsigned start, unsigned end)
+static int tb_get_blen_same_tblock(unsigned start, unsigned end)
 {
-#define PRTVAL(x)	dbg(1, "%20s : %u", #x, x)
-	static int init;
-/* (((c2)-(c1))/sample_size() - 1) */
 	unsigned d_bytes = end - start;
 	unsigned d_sam;
-	const char *BRANCH;
 
-	if (acq200_debug>=1 && !init){
-		PRTVAL((unsigned)va_buf(DG));
-		PRTVAL(NROWS);
-		PRTVAL(ROW_SAMPLE_SIZE);
-		PRTVAL(ROW_ES_SIZE);
-		PRTVAL(ROW_SIZE);
-		PRTVAL(BLOCK_BYTES);
-		PRTVAL(BLOCK_SAM);
-		init = 1;
-
-	}
-
-	BRANCH = "deblocked";
 	d_bytes -= ROW_ES_SIZE;
 	d_sam = d_bytes / ROW_SAMPLE_SIZE;	
 
 /* @@todo : what about across tblocks? */
 
-	dbg(2, "%10s:start:%10u end:%10u db:%8u return %d", 
-	    BRANCH, start, end, d_bytes, d_sam);
+	dbg(2, "start:%10u end:%10u db:%8u return %d", 
+			start, end, d_bytes, d_sam);
 
 	return d_sam;
 #undef PRTVAL
 }
+
+static int tb_get_blen_other_tblock(unsigned tbix1, unsigned tbix2)
+/* we're ASSUMING maxlen < TBLOCK_LEN or 98304 samples */
+{
+	u32 tb1_bytes = TBLOCK_LEN - TBOFF(tbix1);
+	u32 tb2_bytes = TBOFF(tbix2);
+
+	unsigned d_bytes = tb1_bytes + tb2_bytes;
+	unsigned d_sam;
+
+
+
+	d_bytes -= ROW_ES_SIZE;
+	d_sam = d_bytes / ROW_SAMPLE_SIZE;	
+
+/* @@todo : what about across tblocks? */
+
+	dbg(2, "start:%10u end:%10u db:%8u return %d", 
+		tbix1, tbix2, d_bytes, d_sam);
+
+	return d_sam;
+#undef PRTVAL
+}
+
+
+
+static int tb_get_blen(unsigned start, unsigned end)
+{
+	u32 tbix1 = va2tbxo((void*)start);
+	u32 tbix2 = va2tbxo((void*)end);
+
+	if (likely(TBIX(tbix1) == TBIX(tbix2))){
+		return tb_get_blen_same_tblock(tbix1, tbix2);
+	}else{
+		return tb_get_blen_other_tblock(tbix1, tbix2);
+	}
+}
+
+
+
 #define TB_GET_BLEN(c2, c1)  tb_get_blen(c1, c2)
 
 static int already_known(unsigned ts)
 /* search back towards g_esm.base to see if ts already found 
-   catches the case of multiple ts in _same_ block
+	we're assuming that timestamps are always increasing ...
 */
 {
-	if (g_esm.es_cursor - g_esm.es_base > 2){
-		unsigned *cc = g_esm.es_cursor - 2;
-		for (; cc - g_esm.es_base > 0 && 
-				g_esm.es_cursor - cc < ROW_SAM*2; cc -= 2){
-			if (ts == *cc){
-				dbg(1, "backwards match [-%d] %08x", 
-				    (g_esm.es_cursor-cc)*2, ts);
-				return 1;
-			}
-		}
+	if (g_esm.es_cursor - g_esm.es_base >= 2){
+		unsigned tsm1 = g_esm.es_cursor[-1];
+		dbg(3, "ts:%10u tsm1:%10u %s", ts, tsm1,
+		    ts < tsm1? "YES": "NO - this is new");
+		return ts < tsm1;
 	}
+
 	return 0;
 }
 int remove_es(int sam, unsigned short* ch, void *cursor)
 /* NB: cursor points to start of pulse, AFTER ES */
 {
-	dbg(1, "sam:%6d %04x %04x %04x %04x %04x %04x %04x %04x",
-	    sam, ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7]);
+	const char* id = "none";
+	int rc = 1;
 
+	
 	if (g_esm.es_cursor){	
 		unsigned ts = ch[5] << 16 | ch[7];
-		if (likely(ts == *g_esm.es_cursor)){
-			/* expecting TS in groups */
-			return 1;
-		}else if (already_known(ts)){
+		if (already_known(ts)){
 			/* catch close bunched TS */
-			return 1;
+			id = "already_known";
+			rc = 1;
 		}else{
 			*g_esm.es_cursor++ = (unsigned)cursor;
 			*g_esm.es_cursor++ = ts;
+			id = "remove";
+			rc = 1;
 		}
+		dbg(1, 
+		    "sam:%6d ts:%8u "
+		    "%04x %04x %04x %04x %04x %04x %04x %04x %s ret:%d",
+		    sam, ts, 
+		    ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7],
+		    id,	rc);
 	}
-	return 1;
+
+	return rc;
 }
 
 static void timebase_debug(void)
