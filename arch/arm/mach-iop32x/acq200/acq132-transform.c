@@ -367,8 +367,8 @@ static int already_known(unsigned ts)
 	if (g_esm.es_cursor - g_esm.es_base > 1){
 		unsigned tsm1 = g_esm.es_cursor[-1].ts;
 		dbg(3, "ts:%10u tsm1:%10u %s", ts, tsm1,
-		    ts < tsm1? "YES": "NO - this is new");
-		return ts < tsm1;
+		    ts <= tsm1? "YES": "NO - this is new");
+		return ts <= tsm1;
 	}
 
 	return 0;
