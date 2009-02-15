@@ -324,7 +324,7 @@ static int tb_get_blen_same_tblock(Tbxo start, Tbxo end)
 static int tb_get_blen_other_tblock(Tbxo tbix1, Tbxo tbix2)
 /* we're ASSUMING maxlen < TBLOCK_LEN or 98304 samples */
 {
-	u32 tb1_bytes = TBLOCK_LEN - TBOFF(tbix1);
+	u32 tb1_bytes = TBLOCK_LEN/NROWS - TBOFF(tbix1);
 	u32 tb2_bytes = TBOFF(tbix2);
 
 	unsigned d_bytes = tb1_bytes + tb2_bytes;
@@ -337,8 +337,8 @@ static int tb_get_blen_other_tblock(Tbxo tbix1, Tbxo tbix2)
 
 /* @@todo : what about across tblocks? */
 
-	dbg(2, "start:%10u end:%10u db:%8u return %d", 
-		tbix1, tbix2, d_bytes, d_sam);
+	dbg(2, "start:%08x end:%08x 1:%10u 2:%10u db:%8u return %d", 
+	    tbix1, tbix2, tb1_bytes, tb2_bytes, d_bytes, d_sam);
 
 	return d_sam;
 #undef PRTVAL
@@ -357,7 +357,6 @@ static int tb_get_blen(Tbxo start, Tbxo end)
 
 
 
-#define TB_GET_BLEN(c2, c1)  tb_get_blen(c1, c2)
 
 static int already_known(unsigned ts)
 /* search back towards g_esm.base to see if ts already found 
@@ -420,10 +419,10 @@ static void timebase_debug(void)
 	while(++cursor < g_esm.es_cursor){
 		iburst++;
 
-	        info("burst [%4d] ts:0x%08x len:%d TB_GET_BLEN:%d",
+	        info("burst [%4d] ts:0x%08x len:%d tb_get_blen:%d",
 		     iburst, cursor->ts, 
 		     (cursor->va - burst_start.va)/sample_size(),
-			TB_GET_BLEN(cursor->tbxo, burst_start.tbxo));
+		     tb_get_blen(burst_start.tbxo, cursor->tbxo));
 		burst_start = *cursor;
 	}
 }
