@@ -617,7 +617,6 @@ static struct file_operations acq132_sfpga_load_ops = {
 
 
 
-
 #undef DTACQ_MACH_EVENT_ADJUST						
 #define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last)		\
 	dbg(1, "DTACQ_MACH_EVENT_ADJUST: isearch 0x%08x modulo 1024 %d %s %d", \
@@ -631,6 +630,66 @@ static struct file_operations acq132_sfpga_load_ops = {
 
 #define ACQ200_CUSTOM_FPGA_OPEN
 #include "acq200-fifo.c"
+
+
+#if (ISR_ADDS_ENDSTOP == 0)
+#error ACQ132 needs ISR_ADDS_ENDSTOP TRUE
+#endif
+
+static void dmc_handle_empties_acq132(struct DMC_WORK_ORDER *wo)
+/* acq132 needs to dblock data on the fly
+ * @todo: first assume 4 blocks. Then check the scanlist, may be less ..
+ */
+{
+	/* attempt to map all or remainder of wo into empties */
+	int dc = DMA_DCR_FROMDEVICE;
+	int nput = 0;
+	unsigned empty_offset;
+
+	while( !RB_IS_FULL(IPC->empties) &&
+		(empty_offset = wo->getNextEmpty(wo)) != ~1){
+
+		struct iop321_dma_desc *dmad = acq200_dmad_alloc();
+		u32 local_pa = wo->pa + empty_offset;
+
+		if (!dmad){
+			err("acq200_dmad_alloc() STARVE");
+			return;
+		}
+
+		dmad->PDA = DG->fpga.fifo.pa;
+		dmad->DD_FIFSTAT = 0;
+		dmad->LAD  = local_pa;
+		dmad->BC = DMA_BLOCK_LEN;
+		dmad->DC = dc;
+		dmad->NDA = 0;
+
+		if (nput < 3 || acq200_debug > 5){
+			dbg( 3, "rb_put %s", dmad_diag( dmad ) );
+		}
+
+		if (RB_IS_EMPTY(IPC->empties)){
+			dbg(1, "first DMAD: %s", dmad_diag(dmad));
+		}
+
+		rb_put( &IPC->empties, dmad );
+
+		if (++nput >= PUT_MAX_EMPTIES){
+			break;
+		}
+	}
+	if (nput){
+		dbg( 3,"direction %s rb_put %d", 
+		     wo->direction==PCI_DMA_TODEVICE?
+		     "outgoing" : "incoming", nput);
+	}
+	if (RB_IS_EMPTY(IPC->empties)){
+		finish_with_engines(-__LINE__);
+	}
+}
+
+
+
 
 int acq200_custom_fpga_open (struct inode *inode, struct file *file)
 {
@@ -1220,6 +1279,7 @@ static int __init acq132_fifo_init( void )
 	CAPDEF = acq132_createCapdef();
 	init_dg();
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
+	DMC_WO->handleEmpties = dmc_handle_empties_acq132;
 	init_phases();
 
 	acq200_eoc_tasklet1.data = (unsigned long)&IPC->is_dma[1].eoc;

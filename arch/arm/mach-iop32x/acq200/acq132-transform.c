@@ -404,7 +404,7 @@ int remove_es(int sam, unsigned short* ch, void *cursor)
 
 static void timebase_debug(void)
 {
-	unsigned *cursor = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset) + 1;
+	unsigned *cursor = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset);
 	unsigned burst_start = *cursor++;
 	unsigned ts1 = *cursor++;
 	unsigned ts = ts1;
@@ -542,17 +542,18 @@ static void acq132_transform_unblocked(
 	TBG(1, "99");
 }
 
-static void acq132_deblock(short *from, int nwords, int stride)
+static void acq132_deblock(short * const from, int nwords, int stride)
 {
-	void *to = BB_PTR(g_esm.es_deblock->tblock->offset);
+	void* const to = BB_PTR(g_esm.es_deblock->tblock->offset);
 	void *frm = from;
 	int row_off[MAX_ROWS];
 	int block;
 
-	
+	dbg(1, "00 block: %03d", TBLOCK_INDEX(frm-BB_PTR(0)));
+
 	for (block = 0; block != 4; ++block){
 		row_off[block] = DQ_BLOCK_OFF(block);	
-		dbg(1, "01b:%d", row_off[block]);
+		dbg(1+block, "01b:%d", row_off[block]);
 	}
 	
 	while(nwords > 0){
@@ -568,16 +569,21 @@ static void acq132_deblock(short *from, int nwords, int stride)
 		}
 	}
 
+	/* ES detection needs to know TBLOCK info ... this copy
+	 * could be a DMA of course, or, deblock should be done at source
+         * then this function can disappear
+	 */
+	memcpy(from, to, TBLOCK_LEN);
+ 
 	for (block = 0; block != 4; ++block){
-		dbg(1, "99b:%d", row_off[block]);
+		dbg(1+block, "99b:%d", row_off[block]);
 	}
        
 }
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
 	acq132_deblock(from, nwords, stride);
-	acq132_transform_unblocked(
-		to, BB_PTR(g_esm.es_deblock->tblock->offset), nwords, stride);
+	acq132_transform_unblocked(to, from, nwords, stride);
 }
 
 /** esmmnr = Event Signature Multi Rate */
@@ -863,8 +869,9 @@ static void transformer_es_onStart(void *unused)
 		return;
 	}else{
 		if ((g_esm.es_tble = reserveFreeTblock("ES")) == 0){
-			es_tblock = g_esm.es_tble->tblock->iblock;
 			return;
+		}else{
+			es_tblock = g_esm.es_tble->tblock->iblock;
 		}
 		if ((g_esm.es_deblock = reserveFreeTblock("DEBLOCK")) == 0){
 			return;
@@ -1103,7 +1110,7 @@ static ssize_t acq132_timebase_read (
 		return 0;
 	}
 
-	for (ii = esi.itb; ii < esi.nstamp_words; ii += 2){
+	for (ii = esi.itb; ii+2 <= esi.nstamp_words; ii += 2){
 		/* pick last_end from NEXT record */
 		unsigned this_end = esi.esi_base[ii+2+ESC_OFFSET];
 		unsigned blen = TB_GET_BLEN(this_end, ESI_BURST_START(esi));
@@ -1118,12 +1125,13 @@ static ssize_t acq132_timebase_read (
 			esi.itb += 2;
 		}
 	}
+#ifdef WHY_NOT_LET_IT_GO_THRU
 	*ESI(file) = esi;
 	err("returning -ENODEV (couldn't find an entry in range for sample %d",
 	    sample);
 
 	return -ENODEV;
-
+#endif
 ok:
 	dbg(1, "ok: here with sample:%d last:%d", sample, last);
 	dbg(1, "ok: esi.itb: %d esi.tb_total: %d", esi.itb, esi.tb_total);
