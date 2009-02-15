@@ -72,9 +72,6 @@ module_param(show_timebase_calcs, int, 0600);
 int time_stamp_size = sizeof(u32);
 module_param(time_stamp_size, int, 0444);
 
-int timebase_first_entry_is_zero = 0;
-module_param(timebase_first_entry_is_zero, int, 0644);
-
 #define TIMEBASE_ENCODE_GATE_PULSE_INDEX_MOD256 0
 #define TIMEBASE_ENCODE_GATE_PULSE		1
 
@@ -87,12 +84,22 @@ extern int stub_event_adjust;
 
 #define TBG if (acq132_transform_debug) dbg
 
+/* tbxo : encodes tblock index {31:24} offset {23:0} */
+
+typedef u32 Tbxo;
+
+struct ES_DESCRIPTOR {
+	void *va;
+	Tbxo tbxo;
+	u32 ts;
+	u32 spare;
+};
+
 static struct ES_META_DATA{
 	TBLE* es_tble;
 	TBLE* es_deblock;	/* to go when done at source */
-	unsigned *es_base;
-	unsigned *es_cursor;
-
+	struct ES_DESCRIPTOR *es_base;
+	struct ES_DESCRIPTOR *es_cursor;
 }
 	g_esm;
 
@@ -133,7 +140,7 @@ struct Bank {
 #define TBOFF(tb)	((tb)&~0xff000000U)
 #define TBIX(tb)	((tb) >> 24)
 
-static void * tbxo2va(u32 tb)
+static void * tbxo2va(Tbxo tb)
 {
 	unsigned tbix = TBIX(tb);
 	unsigned tboff = TBOFF(tb);
@@ -143,12 +150,12 @@ static void * tbxo2va(u32 tb)
 }
 
 
-static u32 va2tbxo(void *va)
+static Tbxo va2tbxo(void *va)
 {
 	unsigned offset = va - va_buf(DG);
 	unsigned tbix = TBLOCK_INDEX(offset);
 	unsigned tboff = TBLOCK_OFFSET(offset);
-	unsigned tbxo = tbix<<24 | tboff;
+	Tbxo tbxo = tbix<<24 | tboff;
 
 	if (acq132_transform_debug){
 		void* va2 = tbxo2va(tbxo);
@@ -275,14 +282,11 @@ static inline unsigned getTsclkNs(void)
 
 #define ES_MAGIC_WORD 0xaa55
 
-/* ES stored as vector [OFFSET0][TS0][OFFSET1][TS1] */
-#define ESC_OFFSET 0
-#define ESC_TS	 1
-
 struct ES_INFO {
-	unsigned *esi_base;	/* -> base of ES vector */
-	int nstamp_words;	/* total length of vector */
-	int itb;		/* cursor */
+	struct ES_DESCRIPTOR *esi_base;   /* base of ES vector */
+	struct ES_DESCRIPTOR *esi_cursor; /* start-> base of ES vector */
+	struct ES_DESCRIPTOR *esi_end;
+	int nstamps;		/* length of vector */
 	int tb_total;		/* cumulative samples so far */
 };
 
@@ -300,7 +304,7 @@ struct ES_INFO {
 #define BLOCK_SAM	ROW_SAM	
 
 
-static int tb_get_blen_same_tblock(unsigned start, unsigned end)
+static int tb_get_blen_same_tblock(Tbxo start, Tbxo end)
 {
 	unsigned d_bytes = end - start;
 	unsigned d_sam;
@@ -317,7 +321,7 @@ static int tb_get_blen_same_tblock(unsigned start, unsigned end)
 #undef PRTVAL
 }
 
-static int tb_get_blen_other_tblock(unsigned tbix1, unsigned tbix2)
+static int tb_get_blen_other_tblock(Tbxo tbix1, Tbxo tbix2)
 /* we're ASSUMING maxlen < TBLOCK_LEN or 98304 samples */
 {
 	u32 tb1_bytes = TBLOCK_LEN - TBOFF(tbix1);
@@ -342,15 +346,12 @@ static int tb_get_blen_other_tblock(unsigned tbix1, unsigned tbix2)
 
 
 
-static int tb_get_blen(unsigned start, unsigned end)
+static int tb_get_blen(Tbxo start, Tbxo end)
 {
-	u32 tbix1 = va2tbxo((void*)start);
-	u32 tbix2 = va2tbxo((void*)end);
-
-	if (likely(TBIX(tbix1) == TBIX(tbix2))){
-		return tb_get_blen_same_tblock(tbix1, tbix2);
+	if (likely(TBIX(start) == TBIX(end))){
+		return tb_get_blen_same_tblock(start, end);
 	}else{
-		return tb_get_blen_other_tblock(tbix1, tbix2);
+		return tb_get_blen_other_tblock(start, end);
 	}
 }
 
@@ -363,8 +364,8 @@ static int already_known(unsigned ts)
 	we're assuming that timestamps are always increasing ...
 */
 {
-	if (g_esm.es_cursor - g_esm.es_base >= 2){
-		unsigned tsm1 = g_esm.es_cursor[-1];
+	if (g_esm.es_cursor - g_esm.es_base > 1){
+		unsigned tsm1 = g_esm.es_cursor[-1].ts;
 		dbg(3, "ts:%10u tsm1:%10u %s", ts, tsm1,
 		    ts < tsm1? "YES": "NO - this is new");
 		return ts < tsm1;
@@ -386,8 +387,12 @@ int remove_es(int sam, unsigned short* ch, void *cursor)
 			id = "already_known";
 			rc = 1;
 		}else{
-			*g_esm.es_cursor++ = (unsigned)cursor;
-			*g_esm.es_cursor++ = ts;
+			struct ES_DESCRIPTOR es_descr;
+			es_descr.va = cursor;
+			es_descr.tbxo = va2tbxo(cursor);
+			es_descr.ts = ts;
+			es_descr.spare = 0;
+			*g_esm.es_cursor++ = es_descr;
 			id = "remove";
 			rc = 1;
 		}
@@ -404,25 +409,22 @@ int remove_es(int sam, unsigned short* ch, void *cursor)
 
 static void timebase_debug(void)
 {
-	unsigned *cursor = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset);
-	unsigned burst_start = *cursor++;
-	unsigned ts1 = *cursor++;
-	unsigned ts = ts1;
+	struct ES_DESCRIPTOR *cursor = g_esm.es_base;
+	struct ES_DESCRIPTOR burst_start = *cursor;
 	int iburst = 0;
 
-	if (ts1 != 0){
-		info("first timestamp %08x use as offset", ts1);
+	if (burst_start.ts != 0){
+		info("first timestamp %08x use as offset",burst_start.ts);
 	}
 	
-	while(cursor < g_esm.es_cursor){
-		unsigned burst_end = *cursor++;
+	while(++cursor < g_esm.es_cursor){
 		iburst++;
 
 	        info("burst [%4d] ts:0x%08x len:%d TB_GET_BLEN:%d",
-		     iburst, ts, (burst_end - burst_start)/sample_size(),
-			TB_GET_BLEN(burst_end, burst_start));
-		burst_start = burst_end;
-		ts = *cursor++;
+		     iburst, cursor->ts, 
+		     (cursor->va - burst_start.va)/sample_size(),
+			TB_GET_BLEN(cursor->tbxo, burst_start.tbxo));
+		burst_start = *cursor;
 	}
 }
 
@@ -877,8 +879,9 @@ static void transformer_es_onStart(void *unused)
 			return;
 		}
 
-		g_esm.es_base = g_esm.es_cursor = (unsigned*)
-					BB_PTR(g_esm.es_tble->tblock->offset);
+		g_esm.es_base = 
+		g_esm.es_cursor = (struct ES_DESCRIPTOR*)
+				BB_PTR(g_esm.es_tble->tblock->offset);
 		dbg(1, "g_esm.es_cursor reset %p", g_esm.es_base);
 		memset(g_esm.es_cursor, 0, TBLOCK_LEN);
 	}
@@ -1033,9 +1036,11 @@ void acq132_event_adjust(
 static void init_esi(struct file * file)
 {
 	struct ES_INFO *esi = ESI(file);
-	esi->esi_base = (unsigned*)BB_PTR(g_esm.es_tble->tblock->offset);
-	esi->nstamp_words = g_esm.es_cursor - g_esm.es_base;
-	dbg(1, "init entries %d", esi->nstamp_words/2);
+	esi->esi_cursor = 
+	esi->esi_base = g_esm.es_base;
+	esi->esi_end = g_esm.es_cursor;
+	esi->nstamps = g_esm.es_cursor - g_esm.es_base;
+	dbg(1, "init entries %d", esi->nstamps);
 }
 
 static int acq132_timebase_open(struct inode *inode, struct file *file)
@@ -1087,6 +1092,27 @@ Read:
 	(timebase_encoding==TIMEBASE_ENCODE_GATE_PULSE ? gate_time: \
 	 TS_ENCODE_GATE_PULSE_INDEX_MOD256(gate_time, sample_in_gate))
 
+
+static ssize_t acq132_timebase_read_copy(
+	char *buf, size_t len, u32 gate_time, u32 sample_in_gate)
+{
+	int ncopy = 0;
+	int sample = 0;
+
+	while(ncopy < len){
+		TSTYPE ts = TS_ENCODE(gate_time, sample_in_gate);
+		if (copy_to_user(buf+ncopy, &ts, sizeof(TSTYPE))){
+			return -EFAULT;
+		}else{
+			++sample_in_gate;
+			ncopy += sizeof(TSTYPE);
+			++sample;
+		}
+	}	
+
+	return sample;
+}
+
 static ssize_t acq132_timebase_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset
 	)
@@ -1095,82 +1121,47 @@ static ssize_t acq132_timebase_read (
 	int sample = *offset;
 	int maxsamples = SAMPLES;
 	int last = 0;
-
-	TSTYPE ts;
-	int ncopy = 0;
-	int ii;
-	unsigned gate_time;
-	unsigned sample_in_gate;
+	int copysam;
+	struct ES_DESCRIPTOR* searchp = esi.esi_cursor;
 
 	dbg(1, "kickoff with offset (sample) %d", sample);
-	dbg(2, "ES tblock: %d cursor %d / %d", 
-		g_esm.es_tble->tblock->iblock, esi.itb/2, esi.nstamp_words/2);
 
 	if (sample >= maxsamples){
 		return 0;
 	}
 
-	for (ii = esi.itb; ii+2 <= esi.nstamp_words; ii += 2){
+	while ( searchp++ < esi.esi_end - 1 ){
 		/* pick last_end from NEXT record */
-		unsigned this_end = esi.esi_base[ii+2+ESC_OFFSET];
-		unsigned blen = TB_GET_BLEN(this_end, ESI_BURST_START(esi));
-
-		dbg(3, "sample %d esi.tb_total %d start: %u end %u blen %d",
-		    sample, esi.tb_total, ESI_BURST_START(esi), this_end, blen);
+		unsigned blen = tb_get_blen(esi.esi_cursor->tbxo,searchp->tbxo);
 
 		if (sample < (last = esi.tb_total + blen)){
-			goto ok;
+			goto in_burst;
 		}else{
+			++esi.esi_cursor;
 			esi.tb_total += blen;
-			esi.itb += 2;
 		}
 	}
-#ifdef WHY_NOT_LET_IT_GO_THRU
-	*ESI(file) = esi;
-	err("returning -ENODEV (couldn't find an entry in range for sample %d",
-	    sample);
 
-	return -ENODEV;
-#endif
-ok:
+	last = maxsamples;
+
+in_burst:
 	dbg(1, "ok: here with sample:%d last:%d", sample, last);
-	dbg(1, "ok: esi.itb: %d esi.tb_total: %d", esi.itb, esi.tb_total);
+	dbg(1, "ok: esi.itb: %d esi.tb_total: %d", 
+			esi.esi_cursor-esi.esi_base, esi.tb_total);
 
-	if (timebase_first_entry_is_zero){
-		/* this is a hack to handle FPGA non-reset bug */
-		if (esi.esi_base[esi.itb+ESC_TS] >= esi.esi_base[0+ESC_TS]){
-			gate_time = esi.esi_base[esi.itb+ESC_TS] - 
-						esi.esi_base[0+ESC_TS];
-		}else{
-			gate_time = 0xffffffffU - esi.esi_base[0+ESC_TS];
-			gate_time += esi.esi_base[esi.itb+ESC_TS];
-		}
-	}else{
-		gate_time = esi.esi_base[esi.itb+ESC_TS];
-	}
-	sample_in_gate = sample - esi.tb_total;
 	last = min(last, maxsamples);
 
-	dbg(2, "copy_loop: esi.itb:%d sample:%d last:%d gate_time:%d",
-			esi.itb, sample, last, gate_time);
-
-	while (sample < last && len - ncopy > sizeof(TSTYPE)){
-		ts = TS_ENCODE(gate_time, sample_in_gate);
-		if (copy_to_user(buf+ncopy, &ts, sizeof(TSTYPE))){
-			return -EFAULT;
-		}else{
-			++sample;
-			++sample_in_gate;
-			ncopy += sizeof(TSTYPE);
-		}
-	}	
+	copysam = acq132_timebase_read_copy(buf, 
+			min((last-sample)*sizeof(TSTYPE), len),
+			esi.esi_cursor->ts, sample - esi.tb_total);
 
 	*ESI(file) = esi;
-	*offset = sample;
+	*offset = sample + copysam;
 
-	dbg(1, "99 cursor: %d returning %d", esi.itb, ncopy);
+	dbg(1, "99 cursor: %d returning %d",esi.esi_cursor-esi.esi_base,
+	    copysam*sizeof(TSTYPE));
 
-	return ncopy;
+	return copysam * sizeof(TSTYPE);
 }
 static ssize_t acq132_timebase_release(struct inode *inode, struct file *file)
 {
