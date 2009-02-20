@@ -72,6 +72,9 @@ module_param(show_timebase_calcs, int, 0600);
 int time_stamp_size = sizeof(u32);
 module_param(time_stamp_size, int, 0444);
 
+int time_stamp_adj = 2;
+module_param(time_stamp_adj, int, 0644);
+
 #define TIMEBASE_ENCODE_GATE_PULSE_INDEX_MOD256 0
 #define TIMEBASE_ENCODE_GATE_PULSE		1
 
@@ -1181,7 +1184,8 @@ in_burst:
 
 	copysam = acq132_timebase_read_copy(buf, 
 			min((last-sample)*sizeof(TSTYPE), len),
-			esi.esi_cursor->ts, sample - esi.tb_total);
+			esi.esi_cursor->ts - time_stamp_adj, 
+			sample - esi.tb_total);
 
 	*ESI(file) = esi;
 	*offset = sample + copysam;
