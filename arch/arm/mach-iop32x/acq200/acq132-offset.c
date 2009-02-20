@@ -18,8 +18,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#warning WORKTODO ACQ132 crib from ACQ196
-
 /*
  * From example at http://lwn.net/Articles/57373/
  * Copyright 2002, 2003 Jonathan Corbet <corbet-AT-lwn.net>
@@ -196,13 +194,8 @@ static inline unsigned short *key2offset(int ikey)
 {
 	int block = (ikey-1)/NCHANNELSBLOCK + 1;
 	int lchan = (ikey-1)%NCHANNELSBLOCK + 1;
-#if 0
-	int pchan = acq200_lookup_pchan(lchan);
 
-	return &offsets[block][pchan+1];
-#else
 	return &offsets[block][lchan];
-#endif
 }
 static void set_offset(int ikey, unsigned short offset)
 {
@@ -280,6 +273,8 @@ static void write_all(void)
 		}
 		set_chipsel();
 	}
+
+	*ACQ196_OFFSET_DACS = 0;
 }
 
 #define TMPSIZE 32
@@ -297,10 +292,6 @@ static int access_open(struct inode *inode, struct file *filp)
 static int hw_fudge(int lchan)
 {
 	switch(lchan){
-	case 61:
-		return 63;
-	case 63:
-		return 61;
 	default:
 		return lchan;
 	}
