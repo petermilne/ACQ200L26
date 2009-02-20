@@ -230,11 +230,13 @@ static ssize_t tblock_data_write(struct file *filp, const char *buf,
 #define SL_PUT_STATE(filp, value) (*_SL_STATE(filp) = (value))
 #define SL_GET_STATE(filp)        (*_SL_STATE(filp))
 
+#define SL_NOT_A_STATE	12345
+
 static int state_open(struct inode *inode, struct file *filp)
 {
 	filp->private_data = kzalloc(sizeof(struct StateListener)*2,GFP_KERNEL);
 	sl_init(SL(filp), 16);
-	SL_PUT_STATE(filp, DMC_WO_getState());
+	SL_PUT_STATE(filp, SL_NOT_A_STATE);
 	spin_lock(&DMC_WO->stateListeners.lock);
 	list_add_tail(&SL(filp)->list, &DMC_WO->stateListeners.list);
 	spin_unlock(&DMC_WO->stateListeners.lock);
@@ -261,7 +263,7 @@ static char *stateString(u32 state)
 	}
 }
 static int state_read(struct file *filp, char *buf,
-		size_t count, loff_t *offset)
+		      size_t count, loff_t *offset)
 /** report changes of state. If the state is the same, don't report */
 {
 	char sbuf[32];
@@ -271,15 +273,21 @@ static int state_read(struct file *filp, char *buf,
 	u32 sec;
 	int len;
 
-	do {
-		wait_event_interruptible(SL(filp)->waitq, 
+	if (state == SL_NOT_A_STATE){
+		/* report initial state on connect, no waiting */
+		scode = acq200_stateListenerMakeStatecode(DMC_WO_getState());
+	}else{
+		do {
+			wait_event_interruptible(
+				SL(filp)->waitq, 
 				!u32rb_is_empty(&SL(filp)->rb));
 
-		if (u32rb_is_empty(&SL(filp)->rb)){
-			return -EINTR;
-		}
-		u32rb_get(&SL(filp)->rb, &scode);
-	} while(SL_TO_STATE(scode) == state);
+			if (u32rb_is_empty(&SL(filp)->rb)){
+				return -EINTR;
+			}
+			u32rb_get(&SL(filp)->rb, &scode);
+		} while(SL_TO_STATE(scode) == state);
+	}
 	
 	state = SL_TO_STATE(scode);
 	tcode = SL_TO_TCODE(scode);

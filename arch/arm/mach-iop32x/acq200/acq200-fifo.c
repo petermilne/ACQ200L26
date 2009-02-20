@@ -3919,17 +3919,21 @@ void acq200_setDO6_bit(int ibit, int value)
 	*ACQ200_DIOCON = control;
 }
 
-
-static void alertStateListeners(enum STATE s) 
+u32 acq200_stateListenerMakeStatecode(enum STATE s)
 {
-	struct StateListener* sl;
 	struct timeval ts;
-	u32 scode = (u32)jiffies;
+	u32 scode;
 
 	do_gettimeofday(&ts);
 	scode = (ts.tv_sec % (3600 * 24)) * 100;
 	scode += ts.tv_usec/10000;
 	scode |= SL_FM_STATE(s);
+	return scode;
+}
+static void alertStateListeners(enum STATE s) 
+{
+	struct StateListener* sl;
+	u32 scode = acq200_stateListenerMakeStatecode(s);
 
 	spin_lock(&DMC_WO->stateListeners.lock);
 	/* now alert any listeners */
@@ -3967,6 +3971,7 @@ EXPORT_SYMBOL_GPL(acq200_add_end_of_shot_hook);
 EXPORT_SYMBOL_GPL(acq200_del_end_of_shot_hook);
 EXPORT_SYMBOL_GPL(acq200_add_ext_phase_handler);
 EXPORT_SYMBOL_GPL(acq200_del_ext_phase_handler);
+EXPORT_SYMBOL_GPL(acq200_stateListenerMakeStatecode);
 
 
 EXPORT_SYMBOL_GPL(DMC_WO);

@@ -1230,5 +1230,6 @@ extern
 int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset);
 extern unsigned getChannelNumSamples(int lchan);
 
+extern u32 acq200_stateListenerMakeStatecode(enum STATE s);
 #define NOLOOK_FOR_PIT	-1
 #endif /* ACQ200_FIFO_H__ */
