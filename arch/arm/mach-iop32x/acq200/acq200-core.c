@@ -365,10 +365,6 @@ static int decode_minor(
 		acq200_get_mumem_resource(&resource);
 		paddr = virt_to_phys((void*)resource.start);
 		len = resource.end - resource.start;
-
-		info( "MUMEM va 0x%08lx 0x%08lx", 
-		      (long)resource.start, (long)resource.end );
-		info( "MUMEM pa 0x%08x 0x%08x\n", paddr, len );
 		break;
         }case ACQ200_CORE_BIGBUF: {
 		struct resource resource;
@@ -376,10 +372,6 @@ static int decode_minor(
 		acq200_get_bigbuf_resource(&resource);
 		paddr = virt_to_phys((void*)resource.start);
 		len = resource.end - resource.start;
-
-		info( "MUMEM va 0x%08lx 0x%08lx", 
-		      (long)resource.start, (long)resource.end );
-		info( "MUMEM pa 0x%08x 0x%08x\n", paddr, len );
 		break;
 	}default:
 		return -ENODEV;
@@ -611,7 +603,48 @@ DECL_ACCESSOR_LED(3);
 DECL_ACCESSOR_LED(4);
 
 
-static  ssize_t show_bb_len(
+static ssize_t show_xx_pa(char * buf, struct resource *resource)
+{
+	u32 pa = (resource->start & ~0xf0000000) | ACQ200_RAMBASE;
+	return sprintf(buf,"0x%08x\n", pa);
+}
+
+static ssize_t show_bb_pa(
+	struct device * device, struct device_attribute *attr, char * buf)
+{
+	struct resource resource;
+
+	acq200_get_bigbuf_resource(&resource);
+        return show_xx_pa(buf, &resource);
+}
+
+static DEVICE_ATTR(bb_pa, S_IRUGO, show_bb_pa, 0);
+
+static ssize_t show_tbtmp_pa(
+	struct device * device, struct device_attribute *attr, char * buf)
+{
+	struct resource resource;
+
+	acq200_get_tblock_resource(&resource);
+	return show_xx_pa(buf, &resource);
+}
+
+static DEVICE_ATTR(tbtmp_pa, S_IRUGO, show_tbtmp_pa, 0);
+
+static ssize_t show_mumem_pa(
+	struct device * device, struct device_attribute *attr, char * buf)
+{
+	struct resource resource;
+
+	acq200_get_mumem_resource(&resource);
+	return show_xx_pa(buf, &resource);
+}
+
+static DEVICE_ATTR(mumem_pa, S_IRUGO, show_mumem_pa, 0);
+
+
+
+static ssize_t show_bb_len(
 	struct device * device, struct device_attribute *attr,char * buf)
 {
 	struct resource resource;
@@ -768,6 +801,9 @@ static void mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_led3);
 	DEVICE_CREATE_FILE(dev, &dev_attr_led4);
 	DEVICE_CREATE_FILE(dev, &dev_attr_bb_len);
+	DEVICE_CREATE_FILE(dev, &dev_attr_bb_pa);
+	DEVICE_CREATE_FILE(dev, &dev_attr_tbtmp_pa);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mumem_pa);
 	DEVICE_CREATE_FILE(dev, &dev_attr_debug);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pci_env);
 	DEVICE_CREATE_FILE(dev, &dev_attr_cpld_rev);
