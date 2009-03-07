@@ -72,6 +72,7 @@ module_param(verid, charp, 0444);
 int schedule_policy = DMA_CHANNEL_POLL_EZ;
 module_param(schedule_policy, int, 0644);
 
+
 /* FOUND emprically - this appears to be a Linux limit */
 #define MAX_ALLOC 32768    
 
@@ -83,6 +84,9 @@ static struct DMACPOOL {
 } DP;
 
 static struct DmaChannelSync acq200_is_dma[2];
+
+static u32 dmad_min;
+static u32 dmad_max;
 
 
 #define DMA_REGS_LEN (DMA_DCR+4)
@@ -346,13 +350,23 @@ static int __devinit map_local_resource(struct device * dev)
 
 	u32rb_init(&DP.rb, MAX_ALLOC);
 
+	dmad_max = 0;
+	dmad_min = 0xffffffffU;
+
 	while(!u32rb_is_full(&DP.rb)){
 		u32 item = (u32)_acq200_dmad_alloc();
 		if (item){
+			if (item < dmad_min){
+				dmad_min = item;
+			}
+			if (item > dmad_max){
+				dmad_max = item;
+			}
 			u32rb_put(&DP.rb, item);
 		}
 	}
-	info("acq200-dmac put %d descriptors", DP.rb.nput);
+	info("acq200-dmac put %d descriptors min:%08x max:%08x", 
+	     DP.rb.nput, dmad_min, dmad_max);
 	DP.rb.nput = DP.rb.nget = 0;
 	return 0;
 }
@@ -548,6 +562,15 @@ static ssize_t show_rb(
 static DEVICE_ATTR(rb_state, S_IRUGO, show_rb, 0);
 
 
+static ssize_t show_dmad_limits(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf(buf, "dmad_min %08x dmad_max %08x", dmad_min, dmad_max);
+}
+
+static DEVICE_ATTR(dmad_limits, S_IRUGO, show_dmad_limits, 0);
 
 static ssize_t show_dmac_errs(
 	struct device *dev, 
@@ -797,6 +820,7 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmac0_regs);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmac1_regs);
 	DEVICE_CREATE_FILE(dev, &dev_attr_rb_state);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_limits);
 
 	DEVICE_CREATE_CHANNEL_ACCESS_GROUP(dev, 0);
 	DEVICE_CREATE_CHANNEL_ACCESS_GROUP(dev, 1);

@@ -2628,6 +2628,14 @@ static int acq200_proc_block_stats(
  *
  ***********************************************************************/
 
+struct histogram {
+	unsigned *data;
+	int itotal;
+	char *title;
+	int nhisto;
+};
+
+
 #define NLINES 10
 #define HMARK  "*"
 #define HBLANK " "
@@ -2648,14 +2656,11 @@ int acq200_histo_line(
 
 	switch(iline){
 	case -1:
-		sprintf(a_line,INTROFMT RULER, "");
-		return a_line;
+		return sprintf(a_line,INTROFMT RULER, "");
 	case -2:
-		sprintf(a_line, INTROFMT BINS, "");
-		return a_line;
+		return sprintf(a_line, INTROFMT BINS, "");
 	case -3:
-		sprintf(a_line, TITLE, "", hg->title);
-		return a_line;
+		return sprintf(a_line, TITLE, "", hg->title);
 	default:
 		;
 	}
@@ -2678,7 +2683,7 @@ static char *histo_line(struct histogram *hg, int iline)
 {
 	static char a_line[80];
 
-	acq200_histo_line(a_line, 80, hf, iline);
+	acq200_histo_line(a_line, 80, hg, iline);
 	return a_line;
 }
 

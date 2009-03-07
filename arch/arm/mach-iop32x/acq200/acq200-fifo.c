@@ -171,6 +171,7 @@ static void increment_scc(struct SampleClockCounter *scc);
 static struct IPC* IPC;
 
 
+
 /*
  * ko Global Data  - exported at module end
  */
@@ -211,6 +212,9 @@ static void wake_dmc0(void)
 #include "acq200-pulse.c"
 
 static void onTrigger(void);
+
+static struct pci_mapping int_enable;
+
 
 
 static void acq200_global_mask_op(u32 mask, int maskon)
@@ -835,9 +839,7 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		/** @todo - try to trap a null pointer exception */
 		assert(pbuf);
 
-
-		if (pbuf->clidat){
-			
+		if (pbuf->clidat){			
 			/** return pbc to endstops, passing fifo_to_local
                          *  to regular downstream processing.
 			 */
@@ -850,7 +852,6 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 				goto no_clidat;
 			}
 
-
 #ifdef ACQ216
 			/** do not interfere with DMAD in flight! 
 			 *  this theory is DODGY because this code tinks with 
@@ -860,10 +861,12 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 				poll_dma_done();
 			}
 #endif
+/** @todo - surely a DMAD leak if multiple elements in chain? */
 			pbuf = pbc->the_chain[pbc->fifo_to_local];
 			pbc->the_chain[pbc->fifo_to_local] = 0;
 			rb_put(&IPC->endstops, &pbc->desc);
 		}
+
 	no_clidat:
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
@@ -900,6 +903,8 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		{
 			if (TBLOCK_OFFSET(offset) == 0 && 
 			    dmc_phase_add_tblock(phase, &offset) == 0){
+				err("drop out early");
+				acq200_dmad_free(pbuf);
 				break;
 			}
 			end_of_phase = woOnRefill(wo, 
@@ -918,6 +923,7 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		}
 
 		acq200_dmad_free(pbuf);
+
 		if (end_of_phase){
 			dbg(1, "phase_end d:%d l:%d", 
 			    phase->demand_len, phase_len(phase));
@@ -1222,7 +1228,10 @@ static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
 			dbg(1, "first DMAD: %s", dmad_diag(dmad));
 		}
 
-		rb_put( &IPC->empties, dmad );
+		if (rb_put( &IPC->empties, dmad ) == 0){
+			err("put to empties failed");
+			finish_with_engines(-__LINE__);
+		}
 
 		if (++nput >= PUT_MAX_EMPTIES){
 			break;
@@ -1863,6 +1872,7 @@ static void onTrigger(void)
 }
 static int soft_trigger_retry;
 
+static int fiq_regs_valid;
 
 static int fiq_init_action(void)
 {
@@ -1871,7 +1881,7 @@ static int fiq_init_action(void)
 	memset(&regs, 0, sizeof(regs));
 
 	regs.ARM_fp = (long)IOP321_DMA0_CCR;
-	regs.ARM_ip = (long)DG,
+	regs.ARM_ip = (long)DG;
 	regs.ARM_r8 = DG->head->pa;
 
 #ifdef PCI_FPGA
@@ -1890,12 +1900,44 @@ static int fiq_init_action(void)
 
 	set_fiq_regs(&regs);	
 	set_fpga_isr_steering(1);
+	fiq_regs_valid = 1;
 	return 0;
+}
+
+static void fiq_cleanup_action(void)
+/* after a shot, the FIQ may be holding a DMAD .. claw it back to avoid leak  */
+{
+	if (!fiq_regs_valid){
+		return;
+	}
+	if (DG->head == 0){
+		dbg(1, "head = 0, FIQ cleaned up, no action");
+	}else{
+		struct pt_regs regs;
+		struct iop321_dma_desc *dmad = DG->head;
+		u32 head_pa;
+
+		get_fiq_regs(&regs);
+		head_pa = regs.ARM_r8;
+
+		if (dmad == 0){
+			dbg(1, "STARV_DONE");
+		}else if (dmad->pa == head_pa){
+			dbg(1, "RECYCLE:dmad matches va %p pa 0x%08x", 
+			     dmad, dmad->pa);
+			acq200_dmad_free(dmad);		
+		}else{
+			err("NOT SURE: dmad %p ->pa 0x%0x head_pa %08x",
+			    dmad, dmad->pa, head_pa);
+		}				
+	}
 }
 
 static int try_fiq(void)
 {
 	int rc = 0;
+
+	fiq_regs_valid = 0;
 
 	if (DG->use_fiq){
 		fiq_init_action();
@@ -2100,6 +2142,7 @@ static int null_trigger_detect(void) {
 	return 0;
 }
 
+
 void clear_buffers(void)
 {
 	void* getNextEmpty = DMC_WO->getNextEmpty;
@@ -2126,7 +2169,10 @@ void clear_buffers(void)
 	acq200_rb_drain(&IPC->empties);
 	acq200_rb_drain(&IPC->active);
 	acq200_rb_drain(&IPC->endstops);
+	fiq_cleanup_action();
 	init_endstops(0);
+
+
 	/* leave endstops */
 	memset( &DG->stats, 0, sizeof(DG->stats));
 	acq200_dmad_clear();	
@@ -3445,40 +3491,21 @@ int acq200_fpga_open (struct inode *inode, struct file *file)
 	return rc;
 }
 
-static unsigned INTEN = ACQ_INTEN;
-
-static void init_endstops( int count )
+static void init_endstops(int count)
 /* call with count==0 to deallocate */
 {
 /*
  * this structure used to send a '1' to arm interrupt
  * need to have a 1 at offset [0], also need to keep pa for eventual free
  */
-/*
- * reserve a buffer, need a u32 to write to fpga, need to know its pa =>
- * using struct iop321_dma_desc is just a convenience to get some 
- * consistent-mapped memory and to get its pa
- */
-	static dma_addr_t inten_pa;
-	int rc;
 	int istop;
-
-	if (inten_pa == 0){
-		inten_pa = dma_map_single( 
-			DG->dev, &INTEN, sizeof(unsigned), DMA_TO_DEVICE);
-		dbg(1,"ICREN lbuf at %p pa 0x%08x value 0x%04x", 
-		     &INTEN, inten_pa, INTEN);
-	}
-
-	if (count == 0){
-		return;
-	}
 
 	for (istop = 0; istop != count; ++istop){
 		u32 inten = 0;
-		dmad = acq200_dmad_alloc();
+		struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 
 		if (!dmad){
+			err("no dmad");
 			return;
 		}
 
@@ -3496,16 +3523,20 @@ static void init_endstops( int count )
 		dmad->PUAD = 0;
 #ifdef PCI_FPGA
 		dmad->PDA = DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
-		dmad->LAD = inten_pa;
+		dmad->LAD = int_enable.pa;
 #else
 	/* mem to mem on PBI: source is PDA, dest is LAD */
-		dmad->PDA = inten_pa;
+		dmad->PDA = int_enable.pa;
 		dmad->LAD =  DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
 #endif
 		dmad->BC = sizeof(unsigned);
 		dmad->clidat = 0;
 
-		rc = rb_put( &IPC->endstops, dmad );
+		if (rb_put( &IPC->endstops, dmad ) == 0){
+			err("DMAD leak alert, return dmad");
+			acq200_dmad_free(dmad);
+			break;
+		}
 	}
 }
 
@@ -3555,6 +3586,16 @@ static int __devinit map_local_resource(void)
 	acq200_rb_init(&IPC->active,  RBLEN);
 	acq200_rb_init(&IPC->endstops, RBLEN);
        
+	int_enable.len = sizeof(unsigned);
+	int_enable.va = kmalloc(int_enable.len, GFP_KERNEL);
+
+	if (!int_enable.va){
+		BUG();
+	}
+	*(unsigned*)int_enable.va = ACQ_INTEN;
+	int_enable.pa =  dma_map_single(DG->dev, 
+			int_enable.va, int_enable.len, DMA_TO_DEVICE);
+	info("int_enable: va %p pa %08x", int_enable.va, int_enable.pa);
 
 	IPC->is_dma = acq200_dma_getDmaChannelSync();
 
