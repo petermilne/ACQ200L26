@@ -2638,15 +2638,11 @@ static int acq200_proc_block_stats(
 #define BINS   "0123456789abcdef"
 #define TITLE INTROFMT "%-16s"
 
-struct histogram {
-	unsigned *data;
-	int itotal;
-	char *title;
-};
 
-static char *histo_line(struct histogram *hg, int iline)
+int acq200_histo_line(
+	char a_line[], int maxline, struct histogram *hg, int iline
+	)
 {
-	static char a_line[80];
 	int ibin;
 	int threshold;
 
@@ -2665,7 +2661,7 @@ static char *histo_line(struct histogram *hg, int iline)
 	}
 
 	if (hg->itotal == 0){	       
-		for (ibin = 0, hg->itotal = 1; ibin != NHISTO; ++ibin){
+		for (ibin = 0, hg->itotal = 1; ibin != hg->nhisto; ++ibin){
 			hg->itotal += hg->data[ibin];
 		}
 	}
@@ -2673,9 +2669,16 @@ static char *histo_line(struct histogram *hg, int iline)
 	threshold = hg->itotal*iline/NLINES;
 	sprintf(a_line, INTROFMD, threshold);
 	
-	for (ibin = 0; ibin != NHISTO; ++ibin){
+	for (ibin = 0; ibin != hg->nhisto; ++ibin){
 		strcat(a_line, hg->data[ibin]>threshold? HMARK: HBLANK);
 	}
+	return strlen(a_line);
+}
+static char *histo_line(struct histogram *hg, int iline)
+{
+	static char a_line[80];
+
+	acq200_histo_line(a_line, 80, hf, iline);
 	return a_line;
 }
 
@@ -2688,27 +2691,32 @@ static int acq200_proc_coldpoint_histo(
 #if defined (ACQ216) || defined (WAV232)
 	struct histogram cold_fifo = {
 		.data = DG->stats.cold_fifo_histo,
-		.title = "cold fifo isr"
+		.title = "cold fifo isr",
+		.nhisto = NHISTO
 	};
 
 	struct histogram cold_fifo2 = {
 		.data = DG->stats.cold_fifo_histo2,
-		.title = "cold fifo eoc"
+		.title = "cold fifo eoc",
+		.nhisto = NHISTO
 	};
 #endif
 #if defined(ACQ196) || defined(ACQ132)
 	struct histogram hot_fifo = {
 		.data = DG->stats.hot_fifo_histo,
-		.title = "hot fifo isr"
+		.title = "hot fifo isr",
+		.nhisto = NHISTO
 	};
 	struct histogram ao_fifo = {
 		.data = DG->stats. ACQ196_AO_HISTO,
-		.title = "FAWG isr"
+		.title = "FAWG isr",
+		.nhisto = NHISTO
 	};
 #endif
 	struct histogram hot_fifo2 = {
 		.data = DG->stats.hot_fifo_histo2,
-		.title = "hot fifo eoc"
+		.title = "hot fifo eoc",
+		.nhisto = NHISTO
 	};
 
 	struct histogram *hg[] = {
@@ -3669,3 +3677,4 @@ void delete_proc_entries(void)
 }
 
 EXPORT_SYMBOL_GPL(acq200_getDIO6);
+EXPORT_SYMBOL_GPL(acq200_histo_line);
