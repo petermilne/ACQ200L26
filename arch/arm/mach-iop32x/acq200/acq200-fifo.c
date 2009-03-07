@@ -1177,13 +1177,10 @@ static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
 	unsigned empty_offset;
 
 	while( !RB_IS_FULL(IPC->empties) &&
-		(empty_offset = wo->getNextEmpty(wo)) != ~1){
+	       (empty_offset = wo->getNextEmpty(wo)) != ~1){
 
 		struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 		u32 local_pa = wo->pa + empty_offset;
-#if (ISR_ADDS_ENDSTOP == 0)
-		struct iop321_dma_desc *endstop = 0;
-#endif
 
 		if (!dmad){
 			err("acq200_dmad_alloc() STARVE");
@@ -1195,16 +1192,22 @@ static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
 		dmad->LAD  = local_pa;
 		dmad->BC = DMA_BLOCK_LEN;
 		dmad->DC = dc;
+		dmad->clidat = 0;
 
 #if (ISR_ADDS_ENDSTOP == 0)
-		if (!rb_get(&IPC->endstops, &endstop)){
-			err("STARVED for endstops");
-			finish_with_engines(- __LINE__);
+		{
+			struct iop321_dma_desc *endstop = 0;
+			if (!rb_get(&IPC->endstops, &endstop)){
+				err("STARVED for endstops");
+				acq200_dmad_free(dmad);
+				finish_with_engines(- __LINE__);
+				break;
+			}
+
+			dmad->NDA = endstop->pa;
+
+			rb_put(&IPC->endstops, endstop);
 		}
-
-		dmad->NDA = endstop->pa;
-
-		rb_put(&IPC->endstops, endstop);
 #else
 		dmad->NDA = 0;
 #endif
@@ -3442,6 +3445,8 @@ int acq200_fpga_open (struct inode *inode, struct file *file)
 	return rc;
 }
 
+static unsigned INTEN = ACQ_INTEN;
+
 static void init_endstops( int count )
 /* call with count==0 to deallocate */
 {
@@ -3454,29 +3459,19 @@ static void init_endstops( int count )
  * using struct iop321_dma_desc is just a convenience to get some 
  * consistent-mapped memory and to get its pa
  */
-	static struct iop321_dma_desc *lbuf;
-
-	struct iop321_dma_desc *dmad;
+	static dma_addr_t inten_pa;
 	int rc;
 	int istop;
 
-	if (count == 0){
-		if (lbuf != 0){
-			acq200_dmad_free(lbuf);
-			lbuf = 0;
-		}
-		return;
+	if (inten_pa == 0){
+		inten_pa = dma_map_single( 
+			DG->dev, &INTEN, sizeof(unsigned), DMA_TO_DEVICE);
+		dbg(1,"ICREN lbuf at %p pa 0x%08x value 0x%04x", 
+		     &INTEN, inten_pa, INTEN);
 	}
 
-	if ( lbuf == 0 ){
-		lbuf = acq200_dmad_alloc();
-/*
- * separate enable for DAC ??? WORKTODO 
- */
-		*(u32*)lbuf = ACQ_INTEN;
-		/* assert(offsetof(lbuf->pa, lbuf) != 0) */
-		dbg(1,"ICREN lbuf at %p pa 0x%08x value 0x%04x", 
-		     lbuf, lbuf->pa, *(u32*)lbuf );
+	if (count == 0){
+		return;
 	}
 
 	for (istop = 0; istop != count; ++istop){
@@ -3496,20 +3491,19 @@ static void init_endstops( int count )
 		}else{
 			inten = 0;
 		}
-		dmad->DC = DMA_DCR_TODEVICE | inten;
-		
-
+		dmad->DC = DMA_DCR_TODEVICE | inten;	       
 		dmad->NDA = 0;
 		dmad->PUAD = 0;
 #ifdef PCI_FPGA
 		dmad->PDA = DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
-		dmad->LAD = lbuf->pa;
+		dmad->LAD = inten_pa;
 #else
 	/* mem to mem on PBI: source is PDA, dest is LAD */
-		dmad->PDA = lbuf->pa;
+		dmad->PDA = inten_pa;
 		dmad->LAD =  DG->fpga.regs.pa+ACQ200_ICR_OFFSET;
 #endif
-		dmad->BC = 4;
+		dmad->BC = sizeof(unsigned);
+		dmad->clidat = 0;
 
 		rc = rb_put( &IPC->endstops, dmad );
 	}
