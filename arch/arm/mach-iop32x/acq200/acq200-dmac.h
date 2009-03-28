@@ -37,6 +37,10 @@ struct iop321_dma_desc
 #define DD_FIFSTAT PUAD   /* fifstat written to PUAD */
 };
 
+/* aliases for Memory to Memory */
+
+#define MM_SRC	PDA
+#define MM_DST	LAD
 
 struct acq200_dma_ring_buffer {
 	unsigned short iput;

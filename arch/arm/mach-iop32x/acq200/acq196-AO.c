@@ -774,9 +774,9 @@ static void prepareFawgDma(struct SawgBuffer *sb)
 		/* MEM2MEM from PDA to LAD */
 		dma_len = min(dma_len, limit-cursor);
 		dmad->NDA = 0;
-		dmad->PDA = sb->pa + (cursor - bp);
+		dmad->MM_SRC = sb->pa + (cursor - bp);
 		dmad->DD_FIFSTAT = 0;
-		dmad->LAD  = DG->fpga.fifo.pa;
+		dmad->MM_DST  = DG->fpga.fifo.pa;
 		dmad->BC = dma_len;
 		dmad->DC = DMA_DCR_MEM2MEM;	
 		

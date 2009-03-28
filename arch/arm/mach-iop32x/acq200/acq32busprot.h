@@ -10,11 +10,14 @@
  * Description: defines ACQ32 bus command protocol
  *
 <<<<<<< acq32busprot.h
- * $Id: acq32busprot.h,v 1.85.2.25 2007/04/18 14:54:45 pgm Exp $
+ * $Id: acq32busprot.h,v 1.85.2.28 2009/03/27 21:24:21 pgm Exp $
 =======
- * $Id: acq32busprot.h,v 1.85.2.25 2007/04/18 14:54:45 pgm Exp $
+ * $Id: acq32busprot.h,v 1.85.2.28 2009/03/27 21:24:21 pgm Exp $
 >>>>>>> 1.85.2.1
  * $Log: acq32busprot.h,v $
+ * Revision 1.85.2.28  2009/03/27 21:24:21  pgm
+ * SYNC2V_AO32
+ *
  * Revision 1.85.2.25  2007/04/18 14:54:45  pgm
  * *** empty log message ***
  *
@@ -390,7 +393,7 @@ The Host PC is the Master, ACQ32 is the Slave
 
 
 
-#define BP_REV            "$Revision: 1.85.2.25 $"
+#define BP_REV            "$Revision: 1.85.2.28 $"
 
 #define BP_MB_COMMAND     0
 #define BP_MB_A3          1
@@ -1083,9 +1086,26 @@ enum CLOCK_SOURCE {
 
 #define LLCV2_INIT_LAST 5
 
+/** LLCV2 ... host side buffer for host side initialization 
+ * treat as u32[index]
+ * allows up to 8 x AO32 cards
+ * each AO32 is represented by a non-zero PA
+ * AO32/DO6 values are presented in the AO vector ..
+ */
+#define LLCV2_INIT_MAGIC_AO32	0xfeedcade
+/*
+#define LLCV2_INIT_AI_HSBT 1
+#define LLCV2_INIT_AO_HSBS 2
+#define LLCV2_INIT_DO_HSBS 3
+#define LLCV2_INIT_STATUS_HSBT 4
+*/
+#define LLCV2_INIT_AO32PA0 5
+#define LLCV2_INIT_AO32_MAX 8
 
+#define LLCV2_INIT_AO32_LAST 13
 
 #define LLC200_INIT_MAGIC_MARKER 0x200cafe0
+
 
 /** LLC200_INIT_MASK change the parameter when its mask is set. */
 
@@ -1152,6 +1172,20 @@ struct LLC200_INIT  {
 
 /* offset in Output vector u32[index] */
 #define LLC_SYNC2V_DO       8
+
+/* offset 9 : spare  */
+
+/* and AO32s tag on at the back : */
+#define LLC_SYNC2V_AO32	    10
+
+/* AO32VEC is always 32AO + 64DO ... fitted or not */
+#define AO32_VECLEN	(32*sizeof(short)+8*sizeof(char))
+
+/* each AO32 card's AO+DO vector must be positioned here in the Output Vector: */
+#define INDEX_OF_LLC_SYNC2V_AO32(icard)	\
+	(LLC_SYNC2V_AO32 + (icard)*AO32_VECLEN/sizeof(u32))
+
+
 
 /* offset in Input vector u32[index] */
 
@@ -1302,6 +1336,7 @@ typedef struct HOST_REQUEST_DATA_RECORD {
 #define HRD_CHAN_EOF     0x0400
 #define HRD_CHECKED      0x4000    /* we have checked this one */
 #define HRD_ABS_PCI	 0x2000    /* pci is absolute address  */
+#define HRD_READ_NEXT	 0x1000	   /* ignore start, just return next data */
 
 #define HRD_CHANNEL(hrd)  (((hrd)->chan)&0x0ff)
 #define HRD_SPCLID(hrd)   (((hrd)->chan)&0x07f)

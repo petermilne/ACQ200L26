@@ -33,6 +33,8 @@
 #define FIFO_ONESAM          1
 #define DI_IN_1              1
 #define CYCLE_STEAL	     1
+#define AO32CPCI	     1
+
 
 /** @file acq100-llc.c acq1xxx low latency control kernel module.
  *  DMA should fire on HOT_NE, and it should be IMPOSSIBLE to get a 
@@ -159,7 +161,7 @@ module_param(pbi_cycle_steal, int, 0664);
 
 /** increment BUILD and VERID each build */
 #define BUILD 1069
-#define VERID "$Revision: 1.24 $ build B1070"
+#define VERID "$Revision: 1.24 $ build B1072"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -205,6 +207,9 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #if CYCLE_STEAL
 "ACQ196-500 "
 #endif
+#if AO32CPCI
+"AO32CPCI"
+#endif
 "\n";
 
 #define DBG dbg
@@ -238,6 +243,12 @@ char acq100_llc_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 #define AOCHAN 16
 
 #define CHANNEL_MASK (CAPDEF->channel_mask)
+
+
+#define AO32_TMP_MAXLEN \
+	(LLC_SYNC2V_AO32*sizeof(u32) + AO32_VECLEN*LLCV2_INIT_AO32_MAX)
+#define AO32_TMP_LEN(n_ao32) \
+	(LLC_SYNC2V_AO32*sizeof(u32) + AO32_VECLEN*(n_ao32))
 
 static int getNumChan(u32 cmask){
 	int nchan = 0;
@@ -282,6 +293,13 @@ static struct LlcDevGlobs {
 		int iodd; /* doorbell interrupt to host if set*/
 		int soft_trigger;
 		u32 dma_poll_holdoff; /* hold off dma poll 1 unit = 5nsec */
+
+		struct AO32SETTINGS {
+			u32 *tmp;
+			u32 tmp_pa;
+			int count;
+			u32 pa[LLCV2_INIT_AO32_MAX];
+		} ao32;
 	} settings;
 
 	u32 *llcv2_init_buf;
@@ -416,7 +434,28 @@ static int llc_onEntryScm(int entry_code)
 	return 0;
 }
 
-#define BLEN (LLCV2_INIT_LAST*sizeof(u32))
+static void pullAO32_targets(u32 *buf)
+{
+	int ii = 0;
+	
+	for (; ii < LLCV2_INIT_AO32_MAX && 
+		     buf[LLCV2_INIT_AO32PA0+ii] != 0; ++ii){
+		dg.settings.ao32.pa[ii] = buf[LLCV2_INIT_AO32PA0+ii];
+		dbg(2, "ao32.%d at 0x%08x", ii, dg.settings.ao32.pa[ii]);
+	}
+
+	if ((dg.settings.ao32.count = ii)){
+		dg.settings.ao32.tmp = kmalloc(AO32_TMP_MAXLEN, GFP_KERNEL);
+		dg.settings.ao32.tmp_pa = dma_map_single(
+			NULL, dg.settings.ao32.tmp, 
+			AO32_TMP_MAXLEN, PCI_DMA_BIDIRECTIONAL);
+		dbg(1, "tmp %p tmp_pa 0x%08x ao32_count %d", 
+			dg.settings.ao32.tmp, 
+		    dg.settings.ao32.tmp_pa, dg.settings.ao32.count);
+	}
+}
+#define BLEN (max(LLCV2_INIT_LAST,LLCV2_INIT_AO32_LAST)*sizeof(u32))
+
 
 static int checkLLCV2_INIT(void)
 /** if A4 is non zero, then it could be an init block. 
@@ -437,14 +476,19 @@ static int checkLLCV2_INIT(void)
 					 dmabuf, 0, remaddr, BLEN, 1);
 
 		dma_unmap_single(NULL, dmabuf, BLEN, PCI_DMA_FROMDEVICE);
-					
-		if (buf[LLCV2_INIT_MARKER] == LLCV2_INIT_MAGIC_MARKER){
+
+		switch(buf[LLCV2_INIT_MARKER]){
+		case LLCV2_INIT_MAGIC_AO32:
+			pullAO32_targets(buf);
+			/* fall thru */
+		case LLCV2_INIT_MAGIC_MARKER:
 			dg.settings.AI_target = buf[LLCV2_INIT_AI_HSBT];
 			dg.settings.AO_src    = buf[LLCV2_INIT_AO_HSBS];
 			dg.settings.DO_src    = buf[LLCV2_INIT_DO_HSBS];
 			dg.settings.STATUS_target = 
 				buf[LLCV2_INIT_STATUS_HSBT];
-		}else{
+			break;
+		default:
 			REPORT_ERROR("LLCV2_INIT not MAGIC 0x%08x\n",
 				     buf[LLCV2_INIT_MARKER]);
 			rc = -1;
@@ -523,6 +567,7 @@ static void llc_onExit(void)
 	}
 }
 
+#define MAXCHAIN	16
 #include "acq200-inline-dma.h"
 
 
@@ -556,12 +601,88 @@ static void dma_append_cycle_stealer(
 }
 #endif
 
-static void initAIdma(void)
-/** initialise AI dma channel */
-{
-	dma_cleanup(&ai_dma);
-	/** messaging regs can be in flight during conversion .. */
 
+static void initAIdma_SyncAO(void)
+{
+	if (dg.settings.AO_src){
+		struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
+
+		ao_dmad->NDA = 0;
+		ao_dmad->PDA = dg.settings.AO_src;
+		ao_dmad->PUAD = dg.settings.PUAD;
+		ao_dmad->LAD = DG->fpga.fifo.pa;
+		ao_dmad->BC = AO_BC;
+		ao_dmad->DC = DMA_DCR_PCI_MR;
+		dma_append_chain(&ai_dma, ao_dmad, "AO");
+	}
+	if (dg.settings.DO_src){
+		struct iop321_dma_desc *do_dmad = acq200_dmad_alloc();
+		do_dmad->NDA = 0;
+		do_dmad->PDA = dg.settings.DO_src;
+		do_dmad->PUAD = dg.settings.PUAD;
+		do_dmad->LAD = 0xac00000c;
+		do_dmad->BC = 8;
+		do_dmad->DC = DMA_DCR_PCI_MR;
+		dma_append_chain(&ai_dma, do_dmad, "DO");
+	}
+#if CYCLE_STEAL
+	if (pbi_cycle_steal){
+		dma_append_cycle_stealer(&ai_dma);
+	}
+#endif
+}
+
+
+static void initAIdma_AO32(void)
+/* AO32 : pull entire AO vector to local memory (to be allocated) *
+ * THEN do local AO32
+ * THEN do the slaves ... this is going to be a LONG CHAIN
+ */
+{
+	int ii;
+	int ao32_offset;	
+	struct iop321_dma_desc *ao_dmad;
+
+	struct iop321_dma_desc *tmp_dma = acq200_dmad_alloc();
+
+	dbg(1, "01");	
+	tmp_dma->NDA = 0;
+	tmp_dma->PDA = dg.settings.AO_src;
+	tmp_dma->PUAD = dg.settings.PUAD;
+	tmp_dma->LAD = dg.settings.ao32.tmp_pa;
+	tmp_dma->BC = AO32_TMP_LEN(dg.settings.ao32.count);
+	tmp_dma->DC = DMA_DCR_PCI_MR;
+	dma_append_chain(&ai_dma, tmp_dma, "aotmp");
+
+	ao_dmad = acq200_dmad_alloc();
+
+	ao_dmad->NDA = 0;
+	ao_dmad->MM_SRC = dg.settings.ao32.tmp_pa;
+	ao_dmad->PUAD = dg.settings.PUAD;
+	ao_dmad->MM_DST = DG->fpga.fifo.pa;
+	ao_dmad->BC = AO_BC;
+	ao_dmad->DC = DMA_DCR_MEM2MEM;
+	dma_append_chain(&ai_dma, ao_dmad, "AO16");
+
+	for (ii = 0, ao32_offset = LLC_SYNC2V_AO32*sizeof(u32); 
+	     ii < dg.settings.ao32.count; ++ii, ao32_offset += AO32_VECLEN){
+
+		ao_dmad = acq200_dmad_alloc();
+		ao_dmad->NDA = 0;
+		ao_dmad->PDA = dg.settings.ao32.pa[ii];
+		ao_dmad->PUAD = dg.settings.PUAD;
+		ao_dmad->LAD = dg.settings.ao32.tmp_pa + ao32_offset;
+		ao_dmad->BC = AO32_VECLEN;
+		ao_dmad->DC = DMA_DCR_PCI_MR;
+		dma_append_chain(&ai_dma, ao_dmad, "AO32");
+	}
+
+	dbg(1, "99 slaves %d", ii);
+}
+
+static void initAIdma_AI(void)
+{
+	/** messaging regs can be in flight during conversion .. */
 	if (dg.settings.STATUS_target){
 		struct iop321_dma_desc* status_dmad = acq200_dmad_alloc();
 
@@ -602,38 +723,26 @@ static void initAIdma(void)
 		di_dmad->DC = DMA_DCR_PCI_MW;
 		dma_append_chain(&ai_dma, di_dmad, "DI/STATUS");
 	}
+}
+static void initAIdma(void)
+/** initialise AI dma channel */
+{
+	dma_cleanup(&ai_dma);
 
+	initAIdma_AI();
+
+	dbg(1, "dg.sync_output %d dg.settings.ao32.count %d",
+	    dg.sync_output, dg.settings.ao32.count);
 
 	if (dg.sync_output){
-		if (dg.settings.AO_src){
-			struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
-
-			ao_dmad->NDA = 0;
-			ao_dmad->PDA = dg.settings.AO_src;
-			ao_dmad->PUAD = dg.settings.PUAD;
-			ao_dmad->LAD = DG->fpga.fifo.pa;
-			ao_dmad->BC = AO_BC;
-			ao_dmad->DC = DMA_DCR_PCI_MR;
-			dma_append_chain(&ai_dma, ao_dmad, "AO");
-		}
-		if (dg.settings.DO_src){
-			struct iop321_dma_desc *do_dmad = acq200_dmad_alloc();
-			do_dmad->NDA = 0;
-			do_dmad->PDA = dg.settings.DO_src;
-			do_dmad->PUAD = dg.settings.PUAD;
-			do_dmad->LAD = 0xac00000c;
-			do_dmad->BC = 8;
-			do_dmad->DC = DMA_DCR_PCI_MR;
-			dma_append_chain(&ai_dma, do_dmad, "DO");
-		}
-#if CYCLE_STEAL
-		if (pbi_cycle_steal){
-			dma_append_cycle_stealer(&ai_dma);
-		}
-#endif
+		initAIdma_SyncAO();
 	}
+
 	DMA_DISABLE(ai_dma);
 }
+
+
+
 
 static void initAOdma(void)
 /** initialise AO dma channel */
@@ -820,7 +929,9 @@ static void llPreamble2V(void)
 
 	}
 
-	if (dg.settings.AO_src){
+	if (dg.settings.ao32.count){
+		initAIdma_AO32();
+	}else if (dg.settings.AO_src){
 		struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
 
 		ao_dmad->NDA = 0;
@@ -2098,6 +2209,9 @@ static int acq100_llc_probe(struct device *dev)
 static int acq100_llc_remove(struct device *dev)
 {
 	kfree(dg.llcv2_init_buf);
+	if (dg.settings.ao32.tmp){
+		kfree(dg.settings.ao32.tmp);
+	}
 	rm_llc_procfs(dev);
 	return 0;
 }
