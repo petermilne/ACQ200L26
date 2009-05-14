@@ -230,7 +230,9 @@ static ssize_t tblock_data_write(struct file *filp, const char *buf,
 #define SL_PUT_STATE(filp, value) (*_SL_STATE(filp) = (value))
 #define SL_GET_STATE(filp)        (*_SL_STATE(filp))
 
+/** report initial state on first read. poll cancels this .. */
 #define SL_NOT_A_STATE	12345
+#define SL_NOT_A_STATE_CANCEL (SL_NOT_A_STATE+1)
 
 static int state_open(struct inode *inode, struct file *filp)
 {
@@ -326,6 +328,9 @@ static unsigned int state_poll(
 		poll_wait(file, &SL(file)->waitq, poll_table);
 	}
 	if (!u32rb_is_empty(&SL(file)->rb)){
+		if (SL_GET_STATE(file) == SL_NOT_A_STATE){
+			SL_PUT_STATE(file, SL_NOT_A_STATE_CANCEL);
+		}
 		return POLLIN | POLLRDNORM;
 	}else{
 		return 0;
