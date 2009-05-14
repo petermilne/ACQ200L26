@@ -119,8 +119,10 @@
 
 
 #include "asm/arch/iop321-irqs.h"
-#define DMACINTMASK0 (IRQ_IOP321_DMA0_EOT|IRQ_IOP321_DMA0_EOC|IRQ_IOP321_DMA0_ERR)
-#define DMACINTMASK1 (IRQ_IOP321_DMA1_EOT|IRQ_IOP321_DMA1_EOC|IRQ_IOP321_DMA1_ERR)
+#define DMACINTMASK0 \
+	(IRQ_IOP321_DMA0_EOT|IRQ_IOP321_DMA0_EOC|IRQ_IOP321_DMA0_ERR)
+#define DMACINTMASK1 \
+	(IRQ_IOP321_DMA1_EOT|IRQ_IOP321_DMA1_EOC|IRQ_IOP321_DMA1_ERR)
 
 
 
@@ -160,8 +162,10 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1069
-#define VERID "$Revision: 1.24 $ build B1072"
+#define BUILD 1073
+#define _VERID(build) "$Revision: 1.24 $ build " #build
+
+#define VERID _VERID(BUILD)
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -215,7 +219,7 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #define DBG dbg
 
 
-char acq100_llc_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
+char acq100_llc_copyright[] = "Copyright (c) 2004-2009 D-TACQ Solutions Ltd";
 
 
 /** size of fifo extension for sync2v */
@@ -477,6 +481,8 @@ static int checkLLCV2_INIT(void)
 
 		dma_unmap_single(NULL, dmabuf, BLEN, PCI_DMA_FROMDEVICE);
 
+		dg.settings.ao32.count = 0;
+
 		switch(buf[LLCV2_INIT_MARKER]){
 		case LLCV2_INIT_MAGIC_AO32:
 			pullAO32_targets(buf);
@@ -673,7 +679,7 @@ static void initAIdma_AO32(void)
 		ao_dmad->PUAD = dg.settings.PUAD;
 		ao_dmad->LAD = dg.settings.ao32.tmp_pa + ao32_offset;
 		ao_dmad->BC = AO32_VECLEN;
-		ao_dmad->DC = DMA_DCR_PCI_MR;
+		ao_dmad->DC = DMA_DCR_PCI_MW;
 		dma_append_chain(&ai_dma, ao_dmad, "AO32");
 	}
 
