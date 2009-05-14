@@ -97,6 +97,7 @@ extern int acq200_lookup_pchan(int lchannel);
 #define ES_SIZE  (sample_size()==SIZE_12C? ES_SIZE_12C: ES_SIZE_16C)
 
 #define EVENT_MAGIC_EXEMPT(ipair) (ipair>=6)
+#define EVENT_MAGIC_MIN_MATCH	2
 
 #elif defined(ACQ132)
 #define EVENT_MAGIC      0xaa55aa55
@@ -104,6 +105,7 @@ extern int acq200_lookup_pchan(int lchannel);
 
 #define ES_SIZE  (8*sizeof(short))
 #define EVENT_MAGIC_EXEMPT(ipair) ((ipair&1) == 1)
+#define EVENT_MAGIC_MIN_MATCH	3
 #else
 /* ACQ196 event appears to be 0xaa55fBxx B {123} */
 #define EVENT_MAGIC      0xaa55f000
@@ -112,6 +114,7 @@ extern int acq200_lookup_pchan(int lchannel);
 #define ES_SIZE  (sample_size())
 /* second half of event block is timestamp */
 #define EVENT_MAGIC_EXEMPT(ipair) ((ipair)%16 >= 7)
+#define EVENT_MAGIC_MIN_MATCH	3
 #endif
 
 #define EVENT_SOFT   0x40

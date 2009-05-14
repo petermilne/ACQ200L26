@@ -2632,6 +2632,14 @@ static void initPhaseDiagBufNotFound(int metric, int searchlen)
 	pdb.searchlen = searchlen;
 }
 
+static void copyDiags(unsigned* searchp, unsigned ileft)
+{
+	int ndiag = 3*DIAG_BASE*sizeof(long);
+	assert(ndiag <= sizeof(ES_DIAG_BUFFER));
+			
+	memcpy(ES_DIAG_BUFFER, searchp+ileft, ndiag);
+}
+
 static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 /* search next DMA_BLOCK_LEN of data for event word, 
  * return 1 and update iput if found 
@@ -2641,115 +2649,129 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 	unsigned istart = *first/USS;
 	unsigned max_search = istart + DMA_BLOCK_LEN/USS;
 	unsigned isL;         /* bracket ES Left */
-	unsigned isR;         /* bracket ES Right */
 	int matches = 0;
 	int iter = 0;
 
-#define INTERESTING \
-       (++iter < 3 || IS_EVENT_MAGIC(searchp[isL]) || iter%32==0)
+#define INTERESTING							\
+	(++iter < 3 || IS_EVENT_MAGIC(searchp[isL]) || iter%32==0)
 /*
  * identify event start, and fast forward to it
  */
 	for (isL = istart; isL < max_search; isL += ES_LONGS){
 
 		dbg((INTERESTING? 1: 2),
-			"%4d:off %08x max %08x d:%08x %s",
-			iter, isL*4, max_search*4, searchp[isL], 
-			IS_EVENT_MAGIC(searchp[isL])? "MAGIC": "");
+		    "%4d:off %08x max %08x d:%08x %s",
+		    iter, isL*4, max_search*4, searchp[isL], 
+		    IS_EVENT_MAGIC(searchp[isL])? "MAGIC": "");
 
-		if ((matches = IS_EVENT_MAGIC(searchp[isL]))){
+		if (IS_EVENT_MAGIC(searchp[isL])){
+			int is1, isx;
 
-			int valid;
-
-			while(isL >= istart && 
-			      IS_EVENT_MAGIC(searchp[isL])){
-				--isL;
-				++matches;
+			/* back off ES_LONGS, and search twice the length */
+			/* we require at least 2 matches to proceed */
+			if (isL > istart){		       	
+				isL -= ES_LONGS;
+			}else{
+				unsigned tboff = TBLOCK_OFFSET(*first);
+				unsigned backup = max(ES_SIZE, tboff);
+				isL -= backup/sizeof(long);
 			}
+
 			if (IS_EVENT_MAGIC(searchp[isL])){
-				err("FAILED to find beginning of event");
+				err("FAILED to find event START %d %d",
+				    istart, isL);
+				break;
 			}
-			++isL;            /* select first match */
-
-			if (!(matches > 1)){
-				if (!IS_EVENT_MAGIC(searchp[isL+1])){
-					err("false pos");
-					break;
-				}
+			for ( ; !IS_EVENT_MAGIC(searchp[isL]); ++isL){
+				;
 			}
-			{
-				unsigned ileft = max(isL-DIAG_BASE, 0U);
-				int ndiag = 3*DIAG_BASE*sizeof(long);
-				assert(ndiag <= sizeof(ES_DIAG_BUFFER));
-			
-				memcpy(ES_DIAG_BUFFER, searchp+ileft, ndiag);
-			}
-			valid = CHECK_ENTIRE_ES(&searchp[isL]);
-			*first = isL * USS;
-
-			{
-				int outsize = 0;
-
-				isR = isL + ES_LONGS;
-				while (IS_EVENT_MAGIC(searchp[isR]) &&
-				       IS_EVENT_MAGIC(searchp[isR+1]) ){
-					isR++;
-					outsize++;
-				}
 				
-				if (outsize){
-					err("WARNING: outsize sample");
-					pdb.outsize = outsize;
-				}
-				if (ilast) *ilast = isR * USS;
-			}
+			is1 = isL; isL = -1;
 
-			initPhaseDiagBufFound(valid, matches,
-				searchp[isL-1], 
-				searchp[isL],
-				searchp[isR-1],
-				searchp[isR],
-				*first, isL * USS);
-
-			DTACQ_MACH_EVENT_ADJUST(phase, isL, first, ilast);
-			
-
-#ifdef ACQ216
-			{
-				int offsetb = isL*USS;
-
-				if ((offsetb%ES_SIZE) != 0){
-					err("ES offset NOT on ES_SIZE %d "
-					    "boundary want:%08x got:%08x",
-					    ES_SIZE,
-					    offsetb& ~(ES_SIZE-1),
-					    offsetb);
+			for (isx = is1; isx - is1 < ES_LONGS*2; ++isx){
+				if (IS_EVENT_MAGIC(searchp[isx])){
+					if (isL == -1){
+						isL = isx;
+					}
+					++matches;
 				}
 			}
-			if (flood_es){
-				int ii;
 
-				  dbg(1, "flood_es:"
-				      " fill frm %p isL4 %08x ES_LONGS %d * %d",
-				      &searchp[isL], isL*USS, 
-					flood_es, ES_LONGS);
-
-				for (ii = 0; ii != ES_LONGS*flood_es; ++ii){
-					searchp[ii+isL] = 
-						((0xd000|ii*2) << 16) |
-						(0xd000|(ii*2+1));
-				}
-			}	
-#endif
-			if (first != 0 && ilast != 0){				
-				dbg(1, "return first %08x last %08x",
-				    *first, *ilast);
+			if (matches < EVENT_MAGIC_MIN_MATCH){
+				err("false pos");
+				continue;
+			}else{
+				goto match_good;
 			}
-			return 1;
 		}
 	}
-
+	
+not_found:
 	return 0;
+
+match_good: 
+	{
+		int outsize = 0;
+		unsigned isR;         /* bracket ES Right */
+		int valid = CHECK_ENTIRE_ES(&searchp[isL]);
+
+		copyDiags(searchp, max(isL-DIAG_BASE, 0U));
+
+		*first = isL * USS;
+
+		isR = isL + ES_LONGS;
+		while (IS_EVENT_MAGIC(searchp[isR]) &&
+		       IS_EVENT_MAGIC(searchp[isR+1]) ){
+			isR++;
+			outsize++;
+		}
+				
+		if (outsize){
+			err("WARNING: outsize sample");
+			pdb.outsize = outsize;
+		}
+		if (ilast) *ilast = isR * USS;
+
+		initPhaseDiagBufFound(valid, matches,
+				      searchp[isL-1], searchp[isL],
+				      searchp[isR-1], searchp[isR],
+				      *first, isL * USS);
+
+		DTACQ_MACH_EVENT_ADJUST(phase, isL, first, ilast);
+			
+#ifdef ACQ216
+		{
+			int offsetb = isL*USS;
+
+			if ((offsetb%ES_SIZE) != 0){
+				err("ES offset NOT on ES_SIZE %d "
+				    "boundary want:%08x got:%08x",
+				    ES_SIZE,
+				    offsetb& ~(ES_SIZE-1),
+				    offsetb);
+			}
+		}
+		if (flood_es){
+			int ii;
+
+			dbg(1, "flood_es:"
+			    " fill frm %p isL4 %08x ES_LONGS %d * %d",
+			    &searchp[isL], isL*USS, 
+			    flood_es, ES_LONGS);
+
+			for (ii = 0; ii != ES_LONGS*flood_es; ++ii){
+				searchp[ii+isL] = 
+					((0xd000|ii*2) << 16) |
+					(0xd000|(ii*2+1));
+			}
+		}	
+#endif
+		if (first != 0 && ilast != 0){				
+			dbg(1, "return first %08x last %08x",
+			    *first, *ilast);
+		}
+	}
+	return 1;
 }
 
 void find_es_anywhere(void)
