@@ -394,6 +394,60 @@ static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
 
 
+static ssize_t show_soft_fifo(
+	struct device * dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	u32 fifcon = *ACQ196_FIFCON;
+
+	sprintf(buf, "%d\n", (fifcon&ACQ196_FIFCON_SOFT_OFLOW) != 0);
+	return strlen(buf);
+
+}
+
+static ssize_t store_soft_fifo(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	int enable = 0;
+
+	if (sscanf(buf, "%d", &enable) == 1){
+		u32 fifcon = *ACQ196_FIFCON;
+
+		if (enable){
+			fifcon |= ACQ196_FIFCON_SOFT_OFLOW;
+		}else{
+			fifcon &= ~ACQ196_FIFCON_SOFT_OFLOW;
+		}
+		*ACQ196_FIFCON = fifcon;
+		return count;
+	}
+	return -1;
+}
+
+static DEVICE_ATTR(soft_fifo, S_IRUGO|S_IWUGO, show_soft_fifo, store_soft_fifo);
+
+
+static ssize_t show_soft_fifo_count(
+	struct device * dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	struct timeval ts;
+
+	do_gettimeofday(&ts);
+	sprintf(buf, "%d %d\n", ts.tv_sec % (3600*24), 
+				acq196_get_soft_fifo_count());
+	return strlen(buf);
+}
+
+static DEVICE_ATTR(soft_fifo_count, S_IRUGO, show_soft_fifo_count, 0);
+
+
+
+
 
 DEFINE_SIGNAL_ATTR(ao_trig);
 DEFINE_SIGNAL_ATTR(ao_clk);
@@ -412,6 +466,8 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
+	DEVICE_CREATE_FILE(dev, &dev_attr_soft_fifo);
+	DEVICE_CREATE_FILE(dev, &dev_attr_soft_fifo_count);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ao_trig);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ao_clk);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);

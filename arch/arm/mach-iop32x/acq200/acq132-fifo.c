@@ -209,7 +209,7 @@ void acq200_reset_fifo(void)
 {
 	acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, ACQ132_ADC_CTRL_FIFORES);
 	acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET, ACQ132_ADC_CTRL_FIFORES);
-	acq196_fifcon_init_all(0);
+	*FIFCON = 0;
 	acq196_fifcon_set_all(ACQ196_FIFCON_RESET_ALL);
 	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL);
 	*FIFSTAT = *FIFSTAT;

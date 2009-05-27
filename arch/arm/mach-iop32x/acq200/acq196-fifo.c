@@ -166,7 +166,7 @@ static unsigned check_fifstat(
 
 void acq200_reset_fifo(void)
 {
-	acq196_fifcon_init_all(0);
+	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL|ACQ196_FIFCON_ENABLE_ALL);
 	acq196_fifcon_set_all(ACQ196_FIFCON_RESET_ALL);
 	nsleep(fifo_reset_nsec);
 	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL);

@@ -88,6 +88,7 @@
 #define ACQ196_FIFCON_DAC_ENABLE  0x10000000
 #define ACQ196_FIFCON_DAC_LTIDE   0x0f000000
 
+#define ACQ196_FIFCON_SOFT_OFLOW  0x00010000
 #define ACQ196_FIFCON_ADC3_RESET  0x00002000
 #define ACQ196_FIFCON_ADC3_ENABLE 0x00001000
 #define ACQ196_FIFCON_ADC2_RESET  0x00000800
@@ -126,7 +127,7 @@
 #define ACQ196_FIFSTAT_ADC_TR     0x00200000  /* RO */
 #define ACQ196_FIFSTAT_ADC_CLKDLY 0x00100000  /* RO - delay from clk expired */
 #define ACQ196_FIFSTAT_LL_TIMET   0x00100000  /* alias "" */
-/* reserved                       0x00080000 */
+#define ACQ196_FIFSTAT_SOFT_OFLOW 0x00080000
 #define ACQ196_FIFSTAT_ADC3_NE    0x00040000
 #define ACQ196_FIFSTAT_ADC3_OVER  0x00020000
 #define ACQ196_FIFSTAT_ADC3_UNDER 0x00010000
@@ -226,10 +227,6 @@ static inline u32 acq196_syscon_clr_all(u32 flags){
 
 static inline u32 acq196_fifcon_set_all(u32 flags){
 	return *ACQ196_FIFCON |= flags;
-}
-
-static inline u32 acq196_fifcon_init_all(u32 flags){
-	return *ACQ196_FIFCON = flags;
 }
 
 static inline u32 acq196_fifcon_clr_all(u32 flags){
@@ -450,6 +447,11 @@ static inline void dac_softtrig(void) {
 	if ((*ACQ196_SYSCON_DAC & ACQ196_SYSCON_TRIGGERED) == 0){
 		__dac_softtrig();
 	}
+}
+
+static inline u32 acq196_get_soft_fifo_count(void)
+{
+	return *ACQ200_CLKDAT >> 16;
 }
 
 static inline u32 arch_get_int_clk_div(void)
