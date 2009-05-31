@@ -77,11 +77,12 @@ void acq200_releaseDCI(struct file *file)
 	kfree(file->private_data);
 }
 
-static struct TblockConsumer *newTBC(void)
+static struct TblockConsumer *newTBC(unsigned backlog_limit)
 {
 	struct TblockConsumer *tbc = 
 		kzalloc(sizeof(struct TblockConsumer), GFP_KERNEL);
-	
+
+	tbc->backlog_limit = backlog_limit;	
 	init_waitqueue_head(&tbc->waitq);
         INIT_LIST_HEAD(&tbc->tle_q);
 
@@ -1195,7 +1196,7 @@ static int dma_tb_open (
 	struct inode *inode, struct file *file)
 {
 	acq200_initDCI(file, 0);
-	DCI_TBC(file) = newTBC();
+	DCI_TBC(file) = newTBC(DG->bigbuf.tblocks.nblocks - 10);
 	DCI(file)->extract = dma_xx_extractor;
 	return 0;
 }
@@ -1225,7 +1226,10 @@ static unsigned int tb_poll(
 static ssize_t dma_tb_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset)
 /** read output a mu_rma descriptor. 
-     NB: returns data size, not descriptor size */
+     NB: returns data size, not descriptor size 
+     NB: tblock is mark as in_phase ie busy
+     NB: responsibility client to return - by reading to next block ..
+*/
 {
 	struct TblockConsumer *tbc = DCI_TBC(file);
 	size_t headroom = 0;
@@ -1261,6 +1265,9 @@ static ssize_t dma_tb_read (
 		if (list_empty(&tbc->tle_q)){
 			return -EINTR;
 		}
+		if (tbc->backlog){
+			--tbc->backlog;
+		}
 		tbc->c.tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
 		headroom = tbc->c.tle->tblock->length;
 		dbg(1, "file %p tbc->c.tle %p wait over headroom %d", 
@@ -1284,6 +1291,9 @@ static ssize_t dma_tb_read (
 
 static ssize_t status_tb_read ( 
 	struct file *file, char *buf, size_t len, loff_t *offset)
+/** output last tblock as string data.
+ * TB is NOT marked as in_phase (busy).
+ */
 {
 	struct TblockConsumer *tbc = DCI_TBC(file);
 	struct TblockListElement *tle;
@@ -1311,7 +1321,11 @@ static ssize_t status_tb_read (
 			);
 	}
 
+	if (tbc->backlog){
+		--tbc->backlog;
+	}
 	spin_lock(&DG->tbc.lock);
+
 	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
 		acq200_phase_release_tblock_entry(tle);
 	}else{
