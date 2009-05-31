@@ -153,6 +153,11 @@ module_param(max_dma, int, 0644);
 int eot_to_ticks = EOT_TO_TICKS;
 module_param(eot_to_ticks, int, 0644);
 
+
+/* for testing ONLY: truncates data dma bursts */
+int debug_dma_chunk_clip = INT_MAX;
+module_param(debug_dma_chunk_clip, int, 0644);
+
 #define DBDBG(lvl, format, args...) \
         if (acq200_databuf_debug>lvl ) info( "DBDBG:" format, ##args)
 
@@ -912,13 +917,19 @@ static ssize_t acq200_mu_inbound_read(
 	}
 }
 
+static int ipq_waiting(void)
+{
+	return downstream_is_set && !isEmpty(*IOP321_IPTPR, *IOP321_IPHPR);
+}
 
 unsigned int acq200_mu_inbound_poll(
 	struct file *file, struct poll_table_struct *poll_table)
 {
 	dbg(4, "01");
-	poll_wait(file, &mug.ip_waitq, poll_table );
-	if (downstream_is_set && !isEmpty(*IOP321_IPTPR, *IOP321_IPHPR)){
+	if (!ipq_waiting()){
+		poll_wait(file, &mug.ip_waitq, poll_table );
+	}
+	if (ipq_waiting()){
 		dbg(3, "POLLIN | POLLRDNORM");
 		return POLLIN | POLLRDNORM;
 	}else{
@@ -1126,6 +1137,11 @@ static int acq200mu_EOT_task(void *nothing)
 
 	unsigned iter = 0;
 
+/* this is going to be the top RT process */
+	struct sched_param param = { .sched_priority = 12 };
+
+	sched_setscheduler(current, SCHED_FIFO, &param);
+
 	while(!kthread_should_stop()) {
 		int new_chain_count;
 		int was_interrupted;
@@ -1303,7 +1319,7 @@ static int queue_data_dmad_remote_write(struct mu_rma* rma)
 		dmad->PDA	= pci_addr+cursor;
 		dmad->PUAD	= 0;
 		dmad->LAD	= dma_buf.laddr+cursor;
-		dmad->BC	= chunk_len;
+		dmad->BC	= min(chunk_len, debug_dma_chunk_clip);
 		dmad->DC	= dc;
 		dmad->clidat    = 0;
 
