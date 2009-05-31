@@ -154,6 +154,12 @@ module_param(init_dmac_count, int, 0644);
 int es_debug = 0;
 module_param(es_debug, int, 0600);
 
+int tbc_discards = 0;
+module_param(tbc_discards, int, 0644);
+
+int disregard_empty_tblocks = 0;
+module_param(disregard_empty_tblocks, int, 0644);
+
 #define DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 #define DMA_ERROR IOP321_CSR_ERR
 
@@ -590,13 +596,20 @@ static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 		struct TblockConsumer *tbc;
 
 		list_for_each_entry(tbc, clients, list){
-			TBLE* tle = TBLE_LIST_ENTRY(pool->next);
+			if (tbc->backlog_limit == 0 ||
+			    tbc->backlog_limit > tbc->backlog){
+			    
+				TBLE* tle = TBLE_LIST_ENTRY(pool->next);
+				++tbc->backlog;
 
-			atomic_inc(&tblock->in_phase);
-			tle->tblock = tblock;
+				atomic_inc(&tblock->in_phase);
+				tle->tblock = tblock;
 
-			list_move_tail(pool->next, &tbc->tle_q);
-			wake_up_interruptible(&tbc->waitq);	
+				list_move_tail(pool->next, &tbc->tle_q);
+				wake_up_interruptible(&tbc->waitq);	
+			}else{
+				tbc_discards++;
+			}
 		}
 	}
 	spin_unlock(&DG->tbc.lock);
@@ -614,7 +627,9 @@ static struct TblockListElement* dmc_phase_add_tblock(
 	dbg(2, "");
 
 	if (unlikely(list_empty(empty_tblocks))){
-		finish_with_engines(-__LINE__);
+		if (!disregard_empty_tblocks){		
+			finish_with_engines(-__LINE__);
+		}
 		return 0;				
 	}else{
 		struct TblockListElement* tle =	
@@ -1572,7 +1587,6 @@ static int acq200_dmc0_task(void *arg)
 	struct sched_param param = { .sched_priority = 10 };
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
-	current->flags |= PF_NOFREEZE;
 	
 	while(1){
 		int run_request;
@@ -2202,6 +2216,9 @@ static int acq200_fpga_fifo_write_open (struct inode *inode, struct file *file)
 }
 
 
+#ifndef ARCH_CDOG
+#define ARCH_CDOG(nothing)
+#endif
 
 
 static int _oneshot_wait_for_done(void)
@@ -2216,6 +2233,7 @@ static int _oneshot_wait_for_done(void)
 
 	dbg(2, "01");
 	acq200_cdog(CDOG_INIT);
+	ARCH_CDOG(CDOG_INIT);
 
 	for ( itry = 0; itry < MAXTRY; itry++, ++iloop){
 
@@ -2226,6 +2244,7 @@ static int _oneshot_wait_for_done(void)
 		if (DG->finished_with_engines){
 			return 0;
 		}else if (DG->stats.num_fifo_ints){
+			ARCH_CDOG(CDOG_REFRESH);
 			if (acq200_cdog(CDOG_REFRESH)){
 				return 0;
 			}else{
@@ -2673,7 +2692,7 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 				isL -= ES_LONGS;
 			}else{
 				unsigned tboff = TBLOCK_OFFSET(*first);
-				unsigned backup = max(ES_SIZE, tboff);
+				unsigned backup = max((unsigned)ES_SIZE, tboff);
 				isL -= backup/sizeof(long);
 			}
 
@@ -2706,7 +2725,7 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 		}
 	}
 	
-not_found:
+/* not_found: */
 	return 0;
 
 match_good: 
