@@ -406,6 +406,18 @@ static ssize_t show_soft_fifo(
 
 }
 
+extern void init_arbiter(void);
+
+static void soft_fifo_tweak_arbiter(int enable)
+{
+	if (enable){
+		*IOP321_IACR  = 0x00000082;/* CORE=HI DMA0=HI DMA1=LO ATU=LO */
+		*IOP321_MTTR1 = 0x40;      /* give FIQ a chance */
+		*IOP321_MTTR2 = 0x20;	   /* want low lat on DMA slice */
+	}else{
+		init_arbiter();
+	}
+}
 static ssize_t store_soft_fifo(
 	struct device * dev,
 	struct device_attribute *attr,
@@ -422,6 +434,8 @@ static ssize_t store_soft_fifo(
 			fifcon &= ~ACQ196_FIFCON_SOFT_OFLOW;
 		}
 		*ACQ196_FIFCON = fifcon;
+
+		soft_fifo_tweak_arbiter(enable);
 		return count;
 	}
 	return -1;
@@ -430,16 +444,35 @@ static ssize_t store_soft_fifo(
 static DEVICE_ATTR(soft_fifo, S_IRUGO|S_IWUGO, show_soft_fifo, store_soft_fifo);
 
 
+/* hack delta counting - this should really be a separate device
+ * with a per-path variable (how many folks are polling)
+ * This is quick 'n dirty, chances are only one poller anyway
+ */
 static ssize_t show_soft_fifo_count(
 	struct device * dev,
 	struct device_attribute *attr,
 	char *buf)
 {
 	struct timeval ts;
+	static int count0;
+	static long last_nz;
+	int count = acq196_get_soft_fifo_count();
+	int dc;
+	long secs;
 
+	if (likely(count >= count0)){
+		dc = count - count0;
+	}else{
+		dc = 0x10000 - count0 + count;
+	}
+	
 	do_gettimeofday(&ts);
-	sprintf(buf, "%d %d\n", ts.tv_sec % (3600*24), 
-				acq196_get_soft_fifo_count());
+	secs = ts.tv_sec % (3600*24);
+	sprintf(buf, "%6ld %6ld %6d %6d\n", secs, last_nz, count, dc);
+
+	last_nz = secs;
+	count0 = count;
+
 	return strlen(buf);
 }
 
@@ -551,6 +584,7 @@ int acq200_dumpregs_diag(char* buf, int len)
 	APPEND(ACQ196_WAVLIMIT);
 	APPEND(ACQ196_TCR_IMMEDIATE);
 	APPEND(ACQ196_TCR_LATCH);
+	APPEND(ACQ200_ICR);
 
 	return bp-buf;
 }
