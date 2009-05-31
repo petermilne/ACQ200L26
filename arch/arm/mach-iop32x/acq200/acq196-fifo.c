@@ -54,6 +54,10 @@ module_param(int_clk_calcmode, int, 0644);
 int fifo_reset_nsec = 1000;
 module_param(fifo_reset_nsec, int, 0600);
 
+/* force re-enable icr on overflow detect */
+int force_icr_hot_en = 1;
+module_param(force_icr_hot_en, int, 0600);
+
 #define AICHAN_DEFAULT 96
 
 
@@ -309,7 +313,56 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 
 
+static void _lost_enable_action(int sfc0, int sfc1)
+{
+	u32 fifstat = *ACQ196_FIFSTAT;
+	u32 icr = *ACQ200_ICR;
+	int delta;
 
+	if (likely(sfc1 > sfc0)){
+		delta = sfc1 - sfc0;
+	}else{
+		delta = 0x10000 + sfc1 - sfc0;
+	}
+
+	
+	if ((fifstat&ACQ196_FIFSTAT_HOT_HT) != 0){
+		if (force_icr_hot_en){
+			*ACQ200_ICR = icr|ACQ100_ICR_HOTEN;
+		}
+		err("HT fifsta:%08x icr:%08x,ICR:%08x sfc:%d FIQ:%d "
+		    "EOC:%d TBF:%d TBE:%d",
+		    fifstat, icr, *ACQ200_ICR, delta,
+		    DG->stats.num_fifo_ints,
+		    DG->stats.num_eoc_ints,
+		    free_block_count(),
+		    empty_block_count());
+	}
+}
+
+
+static void acq196_cdog_check(int cdog_code)
+{
+/* history: [0] = n-1, [1] = n-2 */
+	static int soft_fifo_count[2];
+	static int nz_count;
+
+	if (cdog_code == CDOG_REFRESH){
+		int sfc = acq196_get_soft_fifo_count();
+
+		if (sfc != soft_fifo_count[0]){
+			/* act every second non-zero */
+			if ((++nz_count & 0x1) == 0){
+				_lost_enable_action(soft_fifo_count[1], sfc);
+			}
+
+			soft_fifo_count[1] = soft_fifo_count[0];
+			soft_fifo_count[0] = sfc;
+		}else{
+			nz_count = 0;
+		}
+	}
+}
 
 
 
@@ -356,6 +409,8 @@ static struct DevGlobs acq196_dg = {
 
 
 #define MYDG &acq196_dg
+
+#define ARCH_CDOG(cdog_code)	acq196_cdog_check(cdog_code)
 
 #include "acq200-fifo.c"
 
