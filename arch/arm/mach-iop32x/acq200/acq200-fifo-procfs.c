@@ -38,6 +38,9 @@
 #include <asm-arm/arch-iop32x/acq200.h>
 
 
+int histo_clear_on_read = 0;		     /* reading histogram clears it */
+module_param(histo_clear_on_read, int, 0600);
+
 #define GTSR_COUNT_US  50
 #define GTSR_TCOUNT_US ((0x1000000/GTSR_COUNT_US)*0x100)
 
@@ -1161,6 +1164,18 @@ int free_block_count(void)
 	}
 	return iblock;
 }
+
+int empty_block_count(void)
+{
+	struct TblockListElement* tle;
+	int iblock = 0;
+
+	list_for_each_entry(tle, &DG->bigbuf.empty_tblocks, list){
+		++iblock;
+	}
+	return iblock;	
+}
+
 static ssize_t show_free_tblocks(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -2753,6 +2768,12 @@ static int acq200_proc_coldpoint_histo(
 			len += PRINTF( "%s", histo_line(hg[ig],-iline));
 		}
 		len += PRINTF("\n");
+	}
+
+	if (histo_clear_on_read && DMC_WO_getState == ST_RUN){
+		for (ig = 0; ig != NIG; ++ig){
+			memset(hg[ig]->data, 0, NHISTO*sizeof(unsigned));
+		}
 	}
 	return len;
 
