@@ -110,6 +110,8 @@ struct TblockConsumer {
 		unsigned cursor;
 	} c;
 	unsigned flags;
+	unsigned backlog;
+	unsigned backlog_limit;
 };
 
 struct DataConsumerBuffer {
@@ -559,9 +561,9 @@ struct DevGlobs {
 	int show_event;
 
 	struct BIGBUF {
-		spinlock_t tb_list_lock;	/* protects these lists: */
-		struct list_head free_tblocks;  /* unallocated */
-		struct list_head empty_tblocks; /* DMA_BLOCKS in empties Q */
+		spinlock_t tb_list_lock;	/* protects these lists:   */
+		struct list_head free_tblocks;  /* unallocated             */
+		struct list_head empty_tblocks; /* TBlocks ready for use   */
 		struct list_head pool_tblocks;  /* pool of tblock wrappers */
 		struct resource resource;
 		const struct Transformer** transformers;
@@ -1209,6 +1211,8 @@ extern unsigned acq200_getDIO32(void);
 extern void acq200_release_phases(void);
 extern void acq200_sort_free_tblocks(void);
 extern int free_block_count(void);
+extern int empty_block_count(void);
+
 /* StateListener defs */
 #define SL_TO_STATE(s) ((s) >> 28)
 #define SL_FM_STATE(s) ((s) << 28)
