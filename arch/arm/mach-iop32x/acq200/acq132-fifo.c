@@ -1282,8 +1282,6 @@ static int __init acq132_fifo_init( void )
 	DMC_WO->handleEmpties = dmc_handle_empties_acq132;
 	init_phases();
 
-	acq200_eoc_tasklet1.data = (unsigned long)&IPC->is_dma[1].eoc;
-
 	acq200_debug = acq200_fifo_debug;
 
 	info(ACQ132_VERID);
