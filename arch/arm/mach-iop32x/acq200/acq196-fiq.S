@@ -68,6 +68,16 @@
 #define CHECK_2B 0
 	
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
+	.endm
+
+#elif defined ACQ196H
+#define HOT2B 0x5
+#define CHECK_2B 1
+
+	.macro DO_CHECK_2B tmp, fifcon, not_2b
+	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT
+	cmp	\tmp, #HOT2B
+	blt	\not_2b
 	.endm	
 #else
 	/* regular ACQ196 */
@@ -82,14 +92,14 @@
 	
 #if DMA_BLOCK_LEN < 256
 #define CHECK_2B 0	
-#else	
-#define HOT3B 0x9	     /* for 96 channels */		
-#define CHECK_2B 3           /* Q Fourth block */		
+#else
+#define HOT2B 0x9	     /* for 96 channels */		
+#define CHECK_2B 3           /* Q Fourth block */
 #endif	
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
 	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT
-	cmp	\tmp, #HOT3B
+	cmp	\tmp, #HOT2B
 	blt	\not_2b
 	.endm
 #endif

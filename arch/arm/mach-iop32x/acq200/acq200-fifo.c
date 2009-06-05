@@ -1273,26 +1273,24 @@ static void tee_empties(int max_empties)
 }
 
 
-static irqreturn_t dma_irq_eot(int irq, void *dev_id)
-{
-	struct InterruptSync* is = (struct InterruptSync*)dev_id;
-	u32 flags = DMA_REG(is->regs,DMA_CSR);
-	DMA_REG(is->regs,DMA_CSR) = flags;
 
-	return IRQ_HANDLED;
+static void dma0_irq_eot_callback(struct InterruptSync *self, u32 flags)
+/* found emprically that failure to re-enable IRQ was related to
+ * unexpected eot interrupt of DMA0.
+ * So - fix it here ..
+ */
+{
+#ifdef ACQ196
+	__lost_enable_action();
+#endif
 } 
+
 
 
 
 static void acq200_dmc0(struct DMC_WORK_ORDER *wo);
 
-void acq200_eoc_bh1( unsigned long arg )
-{
 
-}
-
-
-DECLARE_TASKLET(acq200_eoc_tasklet1, acq200_eoc_bh1, 0);
 
 #if defined(ACQ196) || defined(ACQ132)
 void acq200_service_clock_counters(unsigned long unused) 
@@ -1460,23 +1458,6 @@ static void regular_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 
 
 
-static irqreturn_t dma_irq_eoc(int irq, void *dev_id)
-{
-	struct InterruptSync* is = (struct InterruptSync*)dev_id;
-	u32 flags = DMA_REG(is->regs,DMA_CSR);
-
-	DMA_REG(is->regs,DMA_CSR) = flags;
-	is->interrupted = 1;
-	    
-	if (is->isr_cb) is->isr_cb( is, 0 ); 
-
-	if ((DG->stats.num_eoc_ints++&0xfff) == 0){
-		*IOP321_GPOD ^= ACQ200_LED4;
-	}
-	return IRQ_HANDLED;
-}
-
-
 
 static int pci_abort(void)
 {
@@ -1540,6 +1521,9 @@ void acq200_dmc0(struct DMC_WORK_ORDER *wo)
 	if ((DG->stats.num_dmc_run++ & 0xfff) == 0){
 		*IOP321_GPOD ^= ACQ200_LED3;
 	}
+#ifdef ACQ196
+	__lost_enable_action();
+#endif
 }
 
 static void dmc0_timeout(unsigned long arg);
@@ -3610,6 +3594,30 @@ char acq200_fpga_driver_string[] = "D-TACQ fpga device";
 char acq200_fpga_driver_version[] = "1.1";
 char acq200_fpga_copyright[] = "Copyright (c) 2003 D-TACQ Solutions Ltd";
 
+static irqreturn_t dma_irq_eot(int irq, void *dev_id)
+{
+	struct InterruptSync* is = (struct InterruptSync*)dev_id;
+	u32 flags = DMA_REG(is->regs,DMA_CSR);
+	DMA_REG(is->regs,DMA_CSR) = flags;
+
+	if (is->isr_cb) is->isr_cb( is, 0 );
+	return IRQ_HANDLED;
+} 
+static irqreturn_t dma_irq_eoc(int irq, void *dev_id)
+{
+	struct InterruptSync* is = (struct InterruptSync*)dev_id;
+	u32 flags = DMA_REG(is->regs,DMA_CSR);
+
+	DMA_REG(is->regs,DMA_CSR) = flags;
+	is->interrupted = 1;
+	    
+	if (is->isr_cb) is->isr_cb( is, 0 ); 
+
+	if ((DG->stats.num_eoc_ints++&0xfff) == 0){
+		*IOP321_GPOD ^= ACQ200_LED4;
+	}
+	return IRQ_HANDLED;
+}
 
 
 static int __devinit map_local_resource(void)
@@ -3647,21 +3655,18 @@ static int __devinit map_local_resource(void)
 
 
 	IPC->is_dma[0].eoc.isr_cb = fifo_dma_irq_eoc_callback;
+	IPC->is_dma[0].eot.isr_cb = dma0_irq_eot_callback;
 	IPC->is_dma[1].eoc.isr_cb = regular_dma_irq_eoc_callback;
-
 
 
 #ifdef PGMCOMOUT
 	IPC->is_dma[0].eoc.tasklet = &acq200_eoc_tasklet0;
 #endif
-	IPC->is_dma[1].eoc.tasklet = &acq200_eoc_tasklet1;
+
 
 #ifdef PGMCOMOUT
 	acq200_eoc_tasklet0.data = (unsigned long)&IPC->is_dma[0].eoc;
 #endif
-	acq200_eoc_tasklet1.data = (unsigned long)&IPC->is_dma[1].eoc;
-
-
 	init_waitqueue_head(&IPC->finished_waitq);
 
 	acq200_tblock_init_top();

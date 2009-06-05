@@ -39,6 +39,7 @@ struct DmaChannel {
 
 
 #define DMA_REG(dmac, reg) ((dmac).regs[(reg)/sizeof(u32)])
+#define DMA_REGP(dmacp, reg) ((dmacp)->regs[(reg)/sizeof(u32)])
 
 
 #define DMA_FIRE(dmac) \

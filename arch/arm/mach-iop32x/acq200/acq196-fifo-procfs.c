@@ -465,10 +465,13 @@ static ssize_t show_soft_fifo_count(
 	}else{
 		dc = 0x10000 - count0 + count;
 	}
+
+	DG->stats.total_soft_fifo_count += dc;
 	
 	do_gettimeofday(&ts);
 	secs = ts.tv_sec % (3600*24);
-	sprintf(buf, "%6ld %6ld %6d %6d\n", secs, last_nz, count, dc);
+	sprintf(buf, "%6ld %10ld %6d\n", 
+		secs, DG->stats.total_soft_fifo_count, dc);
 
 	last_nz = secs;
 	count0 = count;

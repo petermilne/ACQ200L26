@@ -598,17 +598,33 @@ result = x;
 
 static int _show_measured_sample_rate(
 	char *buf, 
-	int maxbuf)
+	int maxbuf,
+	unsigned long long _elapsed_samples,
+	int process_ms,
+	int process_us)
 {
-	int process_us = calc_process_us();
+	unsigned srate;
 
-	if (process_us > 1000){
+	if (process_ms > 10000){
+		do_div(_elapsed_samples, process_ms);
+		srate = _elapsed_samples;
+		if (srate > 1000){
+			unsigned long long xx = srate;
+			unsigned khz = do_div(xx, 1000);
+			unsigned mhz = xx;
+
+			return snprintf(buf, maxbuf, "%2d.%03d MHz\n",
+					mhz, khz);
+		}else{
+			return snprintf(buf, maxbuf, "%d kHz\n", srate);
+		}
+	}else if (process_us > 1000){
 		int decimals = 
 			process_us > 100000? 1000:
 			process_us > 10000? 100: 10;
-		unsigned long long tot_samples = ELAPSED_SAMPLES;
+		unsigned long long tot_samples = _elapsed_samples;
 		unsigned long long xx = tot_samples * decimals;
-		unsigned srate;
+
 
 		do_div(xx, process_us);
 		srate = xx;
@@ -619,8 +635,8 @@ static int _show_measured_sample_rate(
 		}else{
 			process_us = calc_process_us();
 			if (process_us > 1000000){
-				process_us /= 1000;
-				xx = tot_samples;
+				/* 	process_us /= 1000; */
+				xx = tot_samples * 1000;
 				do_div(xx, process_us);
 				srate = xx;
 			}else{
@@ -643,8 +659,12 @@ static ssize_t show_measured_sample_rate(
 	struct device * dev, 
 	struct device_attribute *attr,
 	char * buf)
-{
-	return _show_measured_sample_rate(buf, 128);
+{	
+	int process_ms = 10*(DG->stats.end_jiffies-DG->stats.start_jiffies);
+	int process_us = calc_process_us();
+
+	return _show_measured_sample_rate(
+		buf, 128, ELAPSED_SAMPLES, process_ms, process_us);
 }
 
 static DEVICE_ATTR(measured_sample_rate, S_IRUGO,
@@ -2702,6 +2722,17 @@ static char *histo_line(struct histogram *hg, int iline)
 	return a_line;
 }
 
+int histo_is_empty(struct histogram *hg)
+{
+	int ii;
+	for (ii = hg->nhisto; ii--; ){
+		if (hg->data[ii]){
+			return 0;
+		}
+	}
+	
+	return 1;
+}
 static int acq200_proc_coldpoint_histo(
 	char *buf, char **start, off_t offset, int len,
                 int* eof, void* data )
@@ -2755,23 +2786,29 @@ static int acq200_proc_coldpoint_histo(
 
 	int iline;
 	int ig;
+	int nig = NIG;
 
+#if defined(ACQ196) || defined(ACQ132)
+	if (histo_is_empty(&ao_fifo)){
+		nig--;
+	}
+#endif
 	for ( iline = NLINES-1, len = 0; iline >= 0; --iline ){
-		for (ig = 0; ig != NIG; ++ig){
+		for (ig = 0; ig != nig; ++ig){
 			len += PRINTF("%s",   histo_line(hg[ig], iline));
 		}
 		len += PRINTF("\n");
 	}
 
 	for (iline = 1; iline <= 3; ++iline){
-		for (ig = 0; ig != NIG; ++ig){
+		for (ig = 0; ig != nig; ++ig){
 			len += PRINTF( "%s", histo_line(hg[ig],-iline));
 		}
 		len += PRINTF("\n");
 	}
 
-	if (histo_clear_on_read && DMC_WO_getState == ST_RUN){
-		for (ig = 0; ig != NIG; ++ig){
+	if (histo_clear_on_read && DMC_WO_getState() == ST_RUN){
+		for (ig = 0; ig != nig; ++ig){
 			memset(hg[ig]->data, 0, NHISTO*sizeof(unsigned));
 		}
 	}
@@ -3462,16 +3499,74 @@ static const char* getStatus(void)
 	}
 }
 
+struct RUNNING_STATS {
+	int fifo_int_rate;
+	int eoc_int_rate;
+	int elapsed_ms;
+	unsigned long long elapsed;
+};
 
+static void getRunningStats(struct RUNNING_STATS *stats)
+/* gives some instantaneous interrupt rate stats, useful for long pulse */
+/* ideally, we'd run this on a timer, and perhaps smooth the results */
+{
+	static struct timeval ts0;
+	static int fifo_ints0;
+	static int eoc_ints0;
+	static unsigned long elapsed0;
+
+	struct timeval ts1;
+	unsigned long long elapsed1;
+	do_gettimeofday(&ts1);
+
+	if (ts0.tv_sec && DG->stats.num_fifo_ints >= fifo_ints0){
+		int diffms;
+		unsigned long long msec;
+		unsigned long long xx;
+		if (ts1.tv_usec > ts0.tv_usec){
+			msec = ts1.tv_usec - ts0.tv_usec;
+		}else{
+			msec = 1000000 + ts1.tv_usec - ts0.tv_usec;
+		}
+		do_div(msec, 1000);
+
+		diffms = 1000*(ts1.tv_sec - ts0.tv_sec) + msec;
+
+		if (diffms == 0){
+			return;
+		}
+
+		stats->fifo_int_rate = 	(DG->stats.num_fifo_ints - fifo_ints0)/
+			diffms;	
+		xx = DG->stats.num_fifo_ints - fifo_ints0;
+		do_div(xx, diffms);
+		stats->fifo_int_rate = xx;
+
+		xx = DG->stats.num_eoc_ints - eoc_ints0;
+		do_div(xx, diffms);
+		stats->eoc_int_rate = xx;
+		
+		stats->elapsed_ms = diffms;
+		stats->elapsed = (elapsed1 = ELAPSED_SAMPLES) - elapsed0;
+	}else{
+		memset(stats, 0, sizeof(struct RUNNING_STATS));
+	}
+
+	ts0 = ts1;
+	fifo_ints0 = DG->stats.num_fifo_ints;
+	eoc_ints0 = DG->stats.num_eoc_ints;
+	elapsed0 = elapsed1;
+}
 
 static int acq200_proc_stat_timing(
 	char *buf, char **start, off_t offset, int len,
                 int* eof, void* data )
 {
-	int process_ms = 10*(DG->stats.end_jiffies-DG->stats.start_jiffies);
+	int process_ms = DG->stats.end_jiffies?
+		10*(DG->stats.end_jiffies-DG->stats.start_jiffies): 0;
 	int process_us = calc_process_us();
 	int iblock;
-	char nbuf[20];
+	char nbuf[20] = "---\n";
 #define PRINTF(fmt, args...) sprintf(buf+len, fmt, ## args)
 #define FMT "%30s: "
 #define DPRINTF( field, fmt ) \
@@ -3518,25 +3613,43 @@ static int acq200_proc_stat_timing(
 
         len += PRINTF("]\n");
 
-	LPRINTF("%d", "process msecs", process_ms );
-	if ( process_ms ){
+
+	if (process_ms > 0){
+		/* on completion */
+		LPRINTF("%d", "process msecs", process_ms );
 		LPRINTF("%d", "fifo ints/msec",
 			DG->stats.num_fifo_ints/process_ms);
 		LPRINTF("%d", "eoc ints/msec",
 			DG->stats.num_eoc_ints/process_ms);
-	}else{
-		LPRINTF("%c", "fifo ints/msec", 'X' );
-		LPRINTF("%c", "eoc ints/msec", 'X' );
-	}
-	LPRINTF("%d", "process usecs", process_us );
+		LPRINTF("%d", "process usecs", process_us );
 
-	if (DG->stats.num_fifo_ints){
-		LPRINTF("%d", "fifo usecs/int",
-			process_us/DG->stats.num_fifo_ints);
+		if (DG->stats.num_fifo_ints){
+			LPRINTF("%d", "fifo usecs/int",
+				process_us/DG->stats.num_fifo_ints);
+		}else{
+			LPRINTF("%c", "fifo usecs/int", 'X' );
+		}	
+		_show_measured_sample_rate(
+			nbuf, sizeof(nbuf), ELAPSED_SAMPLES, 
+			process_ms, process_us);
 	}else{
-		LPRINTF("%c", "fifo usecs/int", 'X' );
-	}	
-	_show_measured_sample_rate(nbuf, sizeof(nbuf));
+		struct RUNNING_STATS rstats;
+		
+		getRunningStats(&rstats);
+		if (rstats.elapsed_ms > 100){
+			LPRINTF("%d", "elapsed msecs", rstats.elapsed_ms);
+			LPRINTF("%d", "fifo ints/msec", rstats.fifo_int_rate);
+			LPRINTF("%d", "eoc ints/msec", rstats.eoc_int_rate);
+#if 0
+			if (rstats.elapsed > 1000){
+			        _show_measured_sample_rate(
+					nbuf, sizeof(nbuf), rstats.elapsed,
+					0, rstats.elapsed_ms*1000);
+			}
+#endif
+		}		
+	}
+
 	LPRINTF("%s", "measured sample rate", nbuf);
 
 	return len;

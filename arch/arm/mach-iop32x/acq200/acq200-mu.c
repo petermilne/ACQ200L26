@@ -55,7 +55,7 @@
 #define MU_LAZY_ALLOC	1
 
 static const char* VERID =
-	"$Revision: 1.6 $ Build 1003 " __DATE__ "\n"
+	"$Revision: 1.7 $ Build 1004 " __DATE__ "\n"
 	"Features:"
 #if (MU_LAZY_ALLOC)
 	"MU_LAZY_ALLOC "
@@ -108,11 +108,15 @@ int acq200_debug;
 #include "acq200-mu.h"
 
 #include "acq200-mu-app.h"
-#define MAXCHAIN MAX_RMA_GROUP
+#define MAXCHAIN 64
 #include "acq200-inline-dma.h"
 
+#define MAX_DMAD_ALLOC	1024
+#define MAX_DMADQ	(MAX_DMAD_ALLOC/2)
 
-
+/* DMAD marker - next one is a MFA, not a DMAD */
+#define DMAD_MFA_NEXT	0xffffffff
+#define NOT_A_MFA	0xffffffff
 
 #include <asm/arch/iop321.h>
 #include <asm/arch/iop321-irqs.h>
@@ -146,7 +150,7 @@ int dma1_IE = 1;
 module_param(dma1_IE, int, 0644);
 
 
-unsigned max_dma = 0;			/* 0 => no maximum */
+unsigned max_dma = 0x400;		/* works best with bust arbiter */
 module_param(max_dma, int, 0644);
 
 #define EOT_TO_TICKS (HZ/10)
@@ -157,6 +161,18 @@ module_param(eot_to_ticks, int, 0644);
 /* for testing ONLY: truncates data dma bursts */
 int debug_dma_chunk_clip = INT_MAX;
 module_param(debug_dma_chunk_clip, int, 0644);
+
+int maxchain_limit = MAXCHAIN;
+module_param(maxchain_limit, int, 0444);
+
+/* NB 16 appears to be the max, dies when bigger */
+int maxchain_clip = 16;
+module_param(maxchain_clip, int, 0644);
+
+
+static int maxchain(void) {
+	return min(maxchain_limit, maxchain_clip);
+}
 
 #define DBDBG(lvl, format, args...) \
         if (acq200_databuf_debug>lvl ) info( "DBDBG:" format, ##args)
@@ -461,17 +477,67 @@ static unsigned dmad_free_count;
 
 typedef struct iop321_dma_desc *DMAD;
 
+/** local DMAD POOL */
+static struct u32_ringbuffer DMAD_POOL;
+
+
 static inline struct iop321_dma_desc *dmad_alloc(void)
 {
-	++dmad_alloc_count;
-	return acq200_dmad_alloc();
+	struct iop321_dma_desc *dmad;
+
+	if (u32rb_get(&DMAD_POOL, (u32*)&dmad)){
+		++dmad_alloc_count;
+		return dmad;
+	}else{
+		BUG();
+		return 0;
+	}
 }
 
 void dmad_free(struct iop321_dma_desc* dmad)
 {
 	++dmad_free_count;
-	acq200_dmad_free(dmad);
+	u32rb_put(&DMAD_POOL, (u32)dmad);
 }
+
+void build_dmad_pool(void)
+{
+	u32rb_init(&DMAD_POOL, MAX_DMAD_ALLOC);
+
+	while(!u32rb_is_full(&DMAD_POOL)){
+		struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+
+		if (dmad){
+			u32rb_put(&DMAD_POOL, (u32)dmad);
+		}	
+	}
+}
+
+void free_dmad_pool(void)
+{
+	while(!u32rb_is_empty(&DMAD_POOL)){
+		struct iop321_dma_desc* dmad;
+		if (u32rb_get(&DMAD_POOL, (u32*)&dmad)){
+			acq200_dmad_free(dmad);
+		}else{
+			BUG();
+		}
+	}
+}
+
+
+static void mu_dma_cleanup(struct DmaChannel *dmac)
+{
+	int ic;
+	
+	for (ic = 0; ic < dmac->nchain; ++ic){
+		dmad_free(dmac->dmad[ic]);
+	}
+	dmac->nchain = 0;	
+}
+
+
+
 static ssize_t show_dmad_counts(	
 	struct device *dev, 
 	struct device_attribute *attr,
@@ -492,49 +558,7 @@ static ssize_t show_version(
 }
 static DRIVER_ATTR(version,S_IRUGO,show_version,0);
 
-struct EOT_stats {
-	unsigned new_chain;
-	unsigned interrupted;
-	unsigned timeout;
-	unsigned uptodate;
-	unsigned reload;
-	unsigned fire;
-} S_EOT_stats;
 
-
-static ssize_t set_EOT_stats(
-	struct device *dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	unsigned mask;
-
-	if (sscanf( buf, "0x%x", &mask ) == 1 && mask ==1){
-		memset(&S_EOT_stats, 0, sizeof(S_EOT_stats));		
-	}
-	return strlen(buf);
-}
-
-static ssize_t show_EOT_stats(
-	struct device *dev, 
-	struct device_attribute *attr,
-	char * buf
-	)
-{
-#define UF	"%5u"
-	return sprintf(buf, UF "," UF "," UF "," UF "," UF "," UF "\n",
-		       S_EOT_stats.new_chain,	
-		       S_EOT_stats.interrupted,	
-		       S_EOT_stats.timeout,	
-		       S_EOT_stats.uptodate,
-		       S_EOT_stats.reload,	
-		       S_EOT_stats.fire);
-}
-
-static DEVICE_ATTR(EOT_stats, S_IRUGO|S_IWUGO, show_EOT_stats, set_EOT_stats);
-
-
-#define UPSTATS(field, bf)  if (bf){ S_EOT_stats . field ++; }
 
 
 extern int iop32x_pci_bus_speed(void);
@@ -579,7 +603,6 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_mu_ipq_int_enable);
 	DEVICE_CREATE_FILE(dev, &dev_attr_OIMR);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_counts);
-	DEVICE_CREATE_FILE(dev, &dev_attr_EOT_stats);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pci_bus_speed);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pbi_bus_speed);
 
@@ -1060,7 +1083,6 @@ static int post_dmac_outgoing_request(
 	u32 bc
 	)
 {
-	
 	ADUMP( FN, (char*)buf->va, 80 );				
 
 	dma_sync_single_for_device(mug.dev, buf->laddr, bc, DMA_TO_DEVICE);
@@ -1074,25 +1096,6 @@ static int post_dmac_outgoing_request(
 
 
 
-static int print_chain(struct DmaChannel* channel, char* buf)
-{
-	int ic;
-	int len = 0;
-	struct iop321_dma_desc* desc = channel->dmad[0];
-	
-	len += sprintf(buf+len, "[ ] %8s %8s %8s %8s %8s %8s\n",
-		       "NDA", "PDA", "PUAD", "LAD", "BC", "DC");
-
-	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
-		len += sprintf(buf+len, 
-			       "[%d] %08x %08x %08x %08x %08x %08x %s\n",
-			       ic, 
-			       desc->NDA, desc->PDA, desc->PUAD,
-			       desc->LAD, desc->BC, desc->DC,
-			       channel->description[ic]);
-	}	
-	return len;
-}
 /** chaining DMA operation. Single work task does all, then no locking issues*/
 
 #define DMA_ISYNC acq200_dma_getDmaChannelSync()[1].eoc
@@ -1101,162 +1104,84 @@ static int print_chain(struct DmaChannel* channel, char* buf)
 
 DEFINE_DMA_CHANNEL(dma_channel, 1);
 static struct u32_ringbuffer DMADQ;
-static int new_chain_ready;
-static spinlock_t eot_lock = SPIN_LOCK_UNLOCKED;
 
-static DECLARE_WAIT_QUEUE_HEAD(show_dma_waitq);
-static enum DMA_START_MODE { D_OFF, D_FIRE, D_RELOAD } dma_start_mode;
 
-static ssize_t show_dma_channel(
-	struct device *dev, 
-	struct device_attribute *attr,
-	char * buf)
+#define IMARK	dbg(2, "%d", __LINE__)
+
+int longest_chain;
+
+static u32 run_dma_from_queue(void)
 {
-	enum DMA_START_MODE mode;
+	static int expecting_mfa = 0;
+	DMAD dmad;
+	u32 mfa = NOT_A_MFA;
+	u32 status;
+	int timeout;
 
-	if (wait_event_interruptible_timeout(
-		    show_dma_waitq, (mode = dma_start_mode) != D_OFF, 2*HZ)){
-		dma_start_mode = D_OFF;
-		sprintf(buf, "DMA_START %s\n", mode==D_FIRE? "D_FIRE":
-					mode==D_RELOAD? "D_RELOAD": "???");
-		print_chain(&dma_channel, buf+strlen(buf));
-		return strlen(buf);		
-	}else{
-		return -ETIMEDOUT;
+	while(dma_channel.nchain < maxchain() && 
+			u32rb_get(&DMADQ, (u32*)&dmad)){
+		if (expecting_mfa){
+			mfa = (u32)dmad;
+			expecting_mfa = 0;
+			break;
+		}else if (dmad == (DMAD)DMAD_MFA_NEXT){
+			expecting_mfa = 1;
+			continue;
+		}else{
+			dbg(2, "dmad append %p", dmad);
+			dma_append_chain(&dma_channel, dmad, "data");
+		}
 	}
+
+	if (dma_channel.nchain){
+		if (dma_channel.nchain > longest_chain){
+			longest_chain = dma_channel.nchain; 
+		}
+		dma_channel.dmad[dma_channel.nchain-1]->DC |= IOP321_DCR_IE;
+				
+		DMA_ARM(dma_channel);
+		DMA_FIRE(dma_channel);
+
+		timeout = wait_event_interruptible_timeout(
+			DMA_ISYNC.waitq, 
+			DMA_DONE(dma_channel, status), 9999) == 0;
+
+		if (timeout){
+			err("timeout on wait for DMA_DONE");
+		}
+		mu_dma_cleanup(&dma_channel);
+	}
+
+	return mfa;
 }
 
-static DEVICE_ATTR(dma_chain, S_IRUGO, show_dma_channel, 0);
+
 
 static int acq200mu_EOT_task(void *nothing)
+/* waits for DMADQ not empty and for completed DMA's */
 {
-	struct InterruptSync * isync = &DMA_ISYNC;
-	struct DmaChannel *ch = &dma_channel;
-	unsigned long flags;
-	u32 stat;
-
-	unsigned iter = 0;
-
 /* this is going to be the top RT process */
 	struct sched_param param = { .sched_priority = 12 };
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 
 	while(!kthread_should_stop()) {
-		int new_chain_count;
-		int was_interrupted;
 		int timeout = wait_event_interruptible_timeout(
-			isync->waitq, 
-			isync->interrupted || new_chain_ready ||
-				kthread_should_stop(),
+			DMA_ISYNC.waitq, !u32rb_is_empty(&DMADQ), 
 			eot_to_ticks) == 0;
-		int uptodate = 0;
-		u32 dar = DMA_REG(dma_channel, DMA_DAR);
 
-		dbg(timeout==0? 1: 3, "done wait [%8u] : %s %s %s %s",
-		    ++iter,
-		    isync->interrupted? "EOC": "",
-		    new_chain_ready? "NEW": "",
-		    timeout? "TIMEOUT": "",
-		    kthread_should_stop()? "STOP": "");
+		dbg(1, "%s", timeout? "TIMEOUT": "EVENT");
 
+		if (!u32rb_is_empty(&DMADQ)){
+			u32 mfa = run_dma_from_queue();
 
-		/** first, update dma_channel chain to reflect DMA state */
-
-		spin_lock_irqsave(&eot_lock, flags);
-		if ((was_interrupted = isync->interrupted) != 0){
-			isync->interrupted = 0;
-		}
-		spin_unlock_irqrestore(&eot_lock, flags);
-
-		UPSTATS(new_chain, new_chain_ready);
-		UPSTATS(timeout, timeout);
-		UPSTATS(interrupted, was_interrupted);
-
-
-#define IMARK	dbg(2, "%d", __LINE__)
-
-		if (was_interrupted || DMA_DONE(dma_channel, stat)){
-			int ic = 0;
-			for (; !uptodate && ic < dma_channel.nchain; ++ic){
-				DMAD dmad = dma_channel.dmad[ic];
-
-				if (dmad == 0){
-					IMARK;
-					continue;
-				}else if (dar == dmad->pa){
-					if (DMA_DONE(dma_channel, stat)){
-						IMARK;
-						uptodate = 1;
-						UPSTATS(uptodate, uptodate);
-					}else{
-						IMARK;
-						goto no_reset_chain;
-					}
-				}
-				/* else != pa - DMAC has gone past, free it */
-
-				/* here with completed dmad ... cleanup */
-				if (dmad->clidat){
-					dbg(2, "dmad %p POST %p", 
-							dmad, dmad->clidat);
-
-					acq200mu_post_ob((MFA)dmad->clidat);
-					/* critical: */
-					dmad->clidat = 0;
-				}
+			if (mfa != NOT_A_MFA){
 				IMARK;
-				dmad_free(dmad);
-				dma_channel.dmad[ic] = 0;
-			}
-/*	reset_chain: */
-			if (ic == dma_channel.nchain){
-				dma_channel.nchain = 0;
-			}
-			dar = 0;			/* NO RELOAD */
-		no_reset_chain:
-			;
-		}
-
-		spin_lock(&eot_lock);
-		if ((new_chain_count = new_chain_ready) != 0){
-			new_chain_ready = 0;
-		}
-		spin_unlock(&eot_lock);
-		/* now handle new requests */		
-
-		if (new_chain_count && 
-			MAXCHAIN - dma_channel.nchain > new_chain_count){
-			DMAD dmad;
-
-			while (u32rb_get(&DMADQ, (u32*)&dmad)){
-				dbg(2, "dmad append %p M:%p", 
-						dmad, dmad->clidat);
-				dma_append_chain(ch, dmad, "data");
-			}
-			ch->dmad[ch->nchain-1]->DC |= IOP321_DCR_IE;
-				
-			if (dar == 0){
+				acq200mu_post_ob(mfa);	
 				IMARK;
-				DMA_ARM(dma_channel);
-				DMA_FIRE(dma_channel);
-				IMARK;
-				UPSTATS(fire, 1);
-				dma_start_mode = D_FIRE;
-			}else{
-				IMARK;
-				DMA_RELOAD(dma_channel);
-				UPSTATS(reload, 1);
-				dma_start_mode = D_RELOAD;
 			}
-			wake_up_interruptible(&show_dma_waitq);
-		}else{
-			IMARK;
-			continue; /* no room, try later */
 		}
 	}
-
-#undef IMARK
 
 	err("requested to stop");
 	return 0;
@@ -1270,7 +1195,24 @@ static int acq200mu_queue_dma_desc(struct iop321_dma_desc* dmad)
  * answer, Q the DAR as well, then post all MFA' up to last DAR.
  * risk is, DAR has moved on ... in that case, just post the next one?.
  */
+	int pollcat = 0;
 
+	while(u32rb_is_full(&DMADQ)){
+		struct InterruptSync * isync = &DMA_ISYNC;
+
+		int timeout = wait_event_interruptible_timeout(
+			isync->waitq, 
+			!u32rb_is_full(&DMADQ),
+			eot_to_ticks) == 0;
+
+		if (timeout == 0){
+			dbg(1, "TIMEOUT");
+		}
+		if (pollcat > 10){
+			err("max pollcat exceeded");
+			break;
+		}
+	}
 	return u32rb_put(&DMADQ, (u32)dmad);
 }
 	
@@ -1370,14 +1312,10 @@ static ssize_t acq200_mu_remote_write_chain(
 			dbg(1, "MU_MAGIC_OB: %p M:%08x", dmad, mfa);
 			assert(mfa != 0); 
 
-			if (dmad){
-				dmad->clidat = (void*)mfa;
-				if (dma1_IE){
-					dmad->DC |= IOP321_DCR_IE;
-				}
-			}else{
-				acq200mu_post_ob(mfa);
-			}
+			acq200mu_queue_dma_desc(
+				(struct iop321_dma_desc*)DMAD_MFA_NEXT);
+			acq200mu_queue_dma_desc(
+				(struct iop321_dma_desc*)mfa);
 			rlen = 0;
 			break;
 		}
@@ -1390,9 +1328,6 @@ static ssize_t acq200_mu_remote_write_chain(
 		    dmad_count? "WAKEUP": "done");
 
 	if (dmad_count){
-		spin_lock(&eot_lock);
-		new_chain_ready = dmad_count;
-		spin_unlock(&eot_lock);
 		wake_up_interruptible(&DMA_ISYNC.waitq);
 	}
 
@@ -1958,6 +1893,39 @@ static int alloc_databufs(void)
 	return 0;
 }
 
+static ssize_t show_DMADQ(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return u32rb_printf(buf, &DMADQ);
+}
+static DEVICE_ATTR(DMADQ, S_IRUGO, show_DMADQ, 0);
+
+static ssize_t show_DMAD_POOL(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	return u32rb_printf(buf, &DMAD_POOL);
+}
+static DEVICE_ATTR(DMAD_POOL, S_IRUGO, show_DMAD_POOL, 0);
+
+static ssize_t show_chain_stats(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	int lc = longest_chain;
+	longest_chain = 0;
+	return sprintf(buf, 
+		"MAXCHAIN:%d sizeof dma_channel.dmad %d "
+		       "longest:%d\n",
+		       MAXCHAIN, sizeof(dma_channel.dmad), lc);
+	
+}
+static DEVICE_ATTR(chain_stats, S_IRUGO, show_chain_stats, 0);
+
 static ssize_t show_globs (
 	struct device *dev, 
 	struct device_attribute *attr,
@@ -2045,9 +2013,11 @@ static DEVICE_ATTR(downstream_window,
 
 static void mk_dev_sysfs(struct device *dev)
 {
-	DEVICE_CREATE_FILE(dev, &dev_attr_dma_chain);
 	DEVICE_CREATE_FILE(dev, &dev_attr_globs);
 	DEVICE_CREATE_FILE(dev, &dev_attr_downstream_window);
+	DEVICE_CREATE_FILE(dev, &dev_attr_DMADQ);
+	DEVICE_CREATE_FILE(dev, &dev_attr_DMAD_POOL);
+	DEVICE_CREATE_FILE(dev, &dev_attr_chain_stats);
 }
 
 
@@ -2113,7 +2083,8 @@ static int acq200_mu_probe(struct device * dev)
 		mug.rma_base = 0xdeadbeef;  /** set_downstream_window() */
 	}
 
-	u32rb_init(&DMADQ, 16);
+	build_dmad_pool();
+	u32rb_init(&DMADQ, MAX_DMADQ);
 
 	info(": va:%p pa:0x%08x len:%08x", 
 	     mug.host_base_va, mug.host_base_pa, mug.host_base_len);
@@ -2131,6 +2102,7 @@ static int acq200_mu_probe(struct device * dev)
 
 static int acq200_mu_remove(struct device * dev)
 {
+	free_dmad_pool();
 	free_databufs();
 	dma_unmap_single(dev, mug.mumem_dmad, mumem_len(), DMA_BIDIRECTIONAL);
 	unregister_chrdev(acq200_mu_major, "acq200-mu");

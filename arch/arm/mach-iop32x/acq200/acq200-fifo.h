@@ -547,6 +547,8 @@ struct DevGlobs {
 
 		unsigned long sendfile_bytes;
 		struct BDA bda_times;		
+
+		unsigned long total_soft_fifo_count;
 	} stats;
 	int shot;
 	

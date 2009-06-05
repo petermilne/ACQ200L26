@@ -58,6 +58,9 @@ module_param(fifo_reset_nsec, int, 0600);
 int force_icr_hot_en = 1;
 module_param(force_icr_hot_en, int, 0600);
 
+int icr_hot_en_count = 0;
+module_param(icr_hot_en_count, int, 0600);
+
 #define AICHAN_DEFAULT 96
 
 
@@ -313,6 +316,19 @@ static ssize_t acq200_fpga_fifo_read_buf_read (
 
 
 
+void __lost_enable_action(void)
+{
+	u32 fifstat = *ACQ196_FIFSTAT;
+
+	if ((fifstat&ACQ196_FIFSTAT_HOT_HT) != 0 &&
+	    (*IOP321_DMA0_CSR & IOP321_CSR_CAF) == 0 ){
+		u32 icr = *ACQ200_ICR;
+		*ACQ200_ICR = icr|ACQ100_ICR_HOTEN;
+		++icr_hot_en_count;
+	}
+}
+
+
 static void _lost_enable_action(int sfc0, int sfc1)
 {
 	u32 fifstat = *ACQ196_FIFSTAT;
@@ -329,6 +345,7 @@ static void _lost_enable_action(int sfc0, int sfc1)
 	if ((fifstat&ACQ196_FIFSTAT_HOT_HT) != 0){
 		if (force_icr_hot_en){
 			*ACQ200_ICR = icr|ACQ100_ICR_HOTEN;
+			++icr_hot_en_count;
 		}
 		err("HT fifsta:%08x icr:%08x,ICR:%08x sfc:%d FIQ:%d "
 		    "EOC:%d TBF:%d TBE:%d",
@@ -368,7 +385,11 @@ static void acq196_cdog_check(int cdog_code)
 
 static struct DevGlobs acq196_dg = {
 	.btype = BTYPE_ACQ216,
+#ifdef ACQ196H
+	.hitide = 4,
+#else
 	.hitide = 7,
+#endif
 	.max_alloc = 10240,
 	.busywait = 0,
 	.sample_read_start = 0,
@@ -954,8 +975,6 @@ static int __init acq196_fifo_init( void )
 	init_dg();
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	init_phases();
-
-	acq200_eoc_tasklet1.data = (unsigned long)&IPC->is_dma[1].eoc;
 
 	acq200_debug = acq200_fifo_debug;
 
