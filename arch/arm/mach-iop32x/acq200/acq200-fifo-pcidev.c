@@ -154,13 +154,7 @@ static int __init acq200_fifo_init( void )
 	init_dg();
 	init_phases();
 
-
-
-	acq200_eoc_tasklet1.data = (unsigned long)&IPC->is_dma[1].eoc;
-
-
 	info( "acq200_debug set %d\n", acq200_debug );
-
 
 	if ((rc = pci_register_driver( &acq200_fpga_driver )) < 0){
 		return rc;
