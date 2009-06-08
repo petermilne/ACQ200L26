@@ -153,11 +153,6 @@ module_param(dma1_IE, int, 0644);
 unsigned max_dma = 0x400;		/* works best with bust arbiter */
 module_param(max_dma, int, 0644);
 
-#define EOT_TO_TICKS (HZ/10)
-int eot_to_ticks = EOT_TO_TICKS;
-module_param(eot_to_ticks, int, 0644);
-
-
 /* for testing ONLY: truncates data dma bursts */
 int debug_dma_chunk_clip = INT_MAX;
 module_param(debug_dma_chunk_clip, int, 0644);
@@ -168,6 +163,12 @@ module_param(maxchain_limit, int, 0444);
 /* NB 16 appears to be the max, dies when bigger */
 int maxchain_clip = 16;
 module_param(maxchain_clip, int, 0644);
+
+
+#define DMA_TO_TICKS (HZ/10)
+int dma_to_ticks = DMA_TO_TICKS;
+module_param(dma_to_ticks, int, 0644);
+
 
 
 static int maxchain(void) {
@@ -1157,7 +1158,7 @@ static u32 run_dma_from_queue(void)
 
 
 
-static int acq200mu_EOT_task(void *nothing)
+static int acq200mu_dma_task(void *nothing)
 /* waits for DMADQ not empty and for completed DMA's */
 {
 /* this is going to be the top RT process */
@@ -1168,7 +1169,7 @@ static int acq200mu_EOT_task(void *nothing)
 	while(!kthread_should_stop()) {
 		int timeout = wait_event_interruptible_timeout(
 			DMA_ISYNC.waitq, !u32rb_is_empty(&DMADQ), 
-			eot_to_ticks) == 0;
+			dma_to_ticks) == 0;
 
 		dbg(1, "%s", timeout? "TIMEOUT": "EVENT");
 
@@ -1203,7 +1204,7 @@ static int acq200mu_queue_dma_desc(struct iop321_dma_desc* dmad)
 		int timeout = wait_event_interruptible_timeout(
 			isync->waitq, 
 			!u32rb_is_full(&DMADQ),
-			eot_to_ticks) == 0;
+			dma_to_ticks) == 0;
 
 		if (timeout == 0){
 			dbg(1, "TIMEOUT");
@@ -1343,14 +1344,14 @@ static ssize_t acq200_mu_remote_write_chain(
 }
 
 
-static void acq200_mu_EOT_start(int start)
+static void acq200_mu_dma_task_start(int start)
 {
 	static struct task_struct *the_worker;
 
 	if (start){
 		if (the_worker == 0){
 			the_worker = kthread_run(
-					acq200mu_EOT_task, NULL, "mu_EOT");
+					acq200mu_dma_task, NULL, "mu_dma");
 		}
 	}else{
 		if (the_worker != 0){
@@ -1479,7 +1480,7 @@ static int acq200_mu_null_open (struct inode *inode, struct file *file)
 static int acq200_mu_rma_open (struct inode *inode, struct file *file)
 {
 	dbg(1,  "null" );
-	acq200_mu_EOT_start(1);
+	acq200_mu_dma_task_start(1);
 	return 0;
 }
 	
@@ -1515,7 +1516,7 @@ static int acq200_mu_rma_release(
 	struct inode *inode, struct file *file)
 {
 	dbg(1, "" );
-	acq200_mu_EOT_start(0);
+	acq200_mu_dma_task_start(0);
 	return acq200_mu_release(inode, file);
 }
 
