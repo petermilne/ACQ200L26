@@ -41,6 +41,9 @@
 int histo_clear_on_read = 0;		     /* reading histogram clears it */
 module_param(histo_clear_on_read, int, 0600);
 
+int histo_log2_scaling = 0;
+module_param(histo_log2_scaling, int, 0644);
+
 #define GTSR_COUNT_US  50
 #define GTSR_TCOUNT_US ((0x1000000/GTSR_COUNT_US)*0x100)
 
@@ -694,6 +697,16 @@ static ssize_t store_user_abort(
 }
 static DEVICE_ATTR(user_abort, S_IRUGO|S_IWUGO,
 		   show_user_abort, store_user_abort);
+
+static ssize_t show_fifo_int_count(
+	struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%u\n", DG->stats.num_fifo_ints);
+}
+
+static DEVICE_ATTR(fifo_int_count, S_IRUGO, show_fifo_int_count, 0);
 
 static ssize_t show_cap_status(
 	struct device * dev, 
@@ -1453,6 +1466,7 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_pre_arm_hook);
 	DEVICE_CREATE_FILE(dev, &dev_attr_post_arm_hook);
 	DEVICE_CREATE_FILE(dev, &dev_attr_post_shot_hook);
+	DEVICE_CREATE_FILE(dev, &dev_attr_fifo_int_count);
 	DEVICE_MK_DEV_SYSFS(dev);
 }
 
@@ -2706,7 +2720,11 @@ int acq200_histo_line(
 		}
 	}
 
-	threshold = hg->itotal*iline/NLINES;
+	if (histo_log2_scaling && hg->itotal > (1<<NLINES)){
+		threshold = 0x4 << iline;
+	}else{
+		threshold = hg->itotal*iline/NLINES;
+	}
 	sprintf(a_line, INTROFMD, threshold);
 	
 	for (ibin = 0; ibin != hg->nhisto; ++ibin){

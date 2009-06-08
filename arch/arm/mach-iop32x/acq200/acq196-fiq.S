@@ -71,7 +71,7 @@
 	.endm
 
 #elif defined ACQ196H
-#define HOT2B 0x5
+#define HOT2B 0x4
 #define CHECK_2B 1
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b

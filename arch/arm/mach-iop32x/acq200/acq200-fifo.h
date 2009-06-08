@@ -506,8 +506,8 @@ struct DevGlobs {
 	struct stats {
 /* position the fields used by FIFO ISR first */
 /* BEWARE: this gets translated to asm. be very afraid */
-		int num_fifo_ints;
-		int dma_blocks[MAX_DMA_BLOCKS];		
+		unsigned num_fifo_ints;
+		unsigned dma_blocks[MAX_DMA_BLOCKS];		
 		unsigned cold_fifo_histo[NHISTO];
 		unsigned hot_fifo_histo[NHISTO];
 		unsigned hot_fifo_histo2[NHISTO];
@@ -520,12 +520,12 @@ struct DevGlobs {
 		unsigned long start_gtsr;
 		unsigned long end_gtsr;
 
-		int num_eoc_ints;
-		int num_eoc_bh;
-		int num_eoc_bh2;
+		unsigned num_eoc_ints;
+		unsigned num_eoc_bh;
+		unsigned num_eoc_bh2;
 		int num_eoc_nomatches;
-		int num_dmc_run;
-		int busy_pollcat;
+		unsigned num_dmc_run;
+		unsigned busy_pollcat;
 		int cdog_trips;
 		u32 dmac_flags[2];
 		int starve_line;
