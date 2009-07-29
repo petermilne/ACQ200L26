@@ -1320,18 +1320,11 @@ static ssize_t status_tb_read (
 			tle->sample_count
 			);
 	}
+	tbc->c.tle = tle;
 
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
-	spin_lock(&DG->tbc.lock);
-
-	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
-		acq200_phase_release_tblock_entry(tle);
-	}else{
-		DCI(file)->tle_current = tle;
-	}
-	spin_unlock(&DG->tbc.lock);	
 
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
@@ -1359,6 +1352,49 @@ static ssize_t status_tb_write(
 	return len;
 }
 
+static ssize_t status2_tb_read ( 
+	struct file *file, char *buf, size_t len, loff_t *offset)
+/** output last tblock as string data. Release previous block .. 
+ * TB is NOT marked as in_phase (busy).
+ */
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle;
+	char lbuf[80];
+	int rc;
+
+	if (tbc->c.tle){
+		spin_lock(&DG->tbc.lock);
+		acq200_phase_release_tblock_entry(tbc->c.tle);
+		spin_unlock(&DG->tbc.lock);	
+	}
+		
+	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
+
+	if (list_empty(&tbc->tle_q)){
+		return -EINTR;
+	}
+
+	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+
+	rc = snprintf(lbuf, len, "%03d\n", tle->tblock->iblock);
+
+	if (tbc->backlog){
+		--tbc->backlog;
+	}
+	spin_lock(&DG->tbc.lock);
+
+	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
+		acq200_phase_release_tblock_entry(tle);
+	}else{
+		DCI(file)->tle_current = tle;
+	}
+	spin_unlock(&DG->tbc.lock);	
+
+	COPY_TO_USER(buf, lbuf, rc);
+	return rc;
+}
+
 
 /**
  *  create acq200dmafs
@@ -1370,7 +1406,9 @@ static ssize_t status_tb_write(
 #define TD_SZ  (sizeof(struct tree_descr))
 
 /** files: head, channels * n, xxl, xxp, xx, tail */
-#define MY_NODES(nc)    (1+(nc)+3+1)
+/* the add a bit more for specials ... */
+#define NODE_HEADROOM	10	
+#define MY_NODES(nc)    (1+(nc)+NODE_HEADROOM+1)
 #define MY_FILES_SZ(nc) (MY_NODES(nc)*TD_SZ)
 #define MY_IDENTS_SZ(nc) (MY_NODES(nc)*sizeof(short))
 
@@ -1601,6 +1639,12 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
+	static struct file_operations dma_tbstatus2_ops = {
+		.open = dma_tb_open,
+		.read = status2_tb_read,
+		.release = dma_tb_release,
+		.poll = tb_poll
+	};
 
 	static struct tree_descr front = {
 		NULL, NULL, 0
@@ -1642,6 +1686,11 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.name = "tbstat";
 	src.ops = &dma_tbstatus_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
+	src.name = "tbstat2";
+	src.ops = &dma_tbstatus2_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
 
 	tcount = updateFiles(&S_DFD, &backstop, 0, tcount);
 	return simple_fill_super(sb, DMAFS_MAGIC, S_DFD.files);

@@ -203,7 +203,7 @@ static struct DevGlobs wav232_dg = {
 	.busywait = 0,           
 	.sample_read_start = 0,
 	.sample_read_stride = 1,
-	.bigbuf.tblocks.blocklen = TBLOCK_LEN,
+	.bigbuf.tblocks.blocklen = _TBLOCK_LEN,
 	.bigbuf.tblocks.blt = blt_memcpy,
 
 	.enable_from_eoc_isr = 1,

@@ -487,7 +487,7 @@ int acq200_phase_tblocks_diag(struct Phase* phase, char *buf)
 		tot_sample_count += tle->sample_count;
 		nsprint = sprintf(buf+len, "tblock:[%2d] %08x %s tsc:%8d %d\n",
 			       tle->tblock->iblock,
-			       tle->tblock->iblock*TBLOCK_LEN,
+				  tle->tblock->iblock*TBLOCK_LEN(DG),
 			       tle2string(tle),
 			       tot_sample_count,
 			       atomic_read(&tle->tblock->in_phase));

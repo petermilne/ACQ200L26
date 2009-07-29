@@ -974,11 +974,12 @@ static inline void usec_delay(unsigned usecs)
  * TBLOCK_LEN: pick a number divisible by 24, 32, 4096 ...
  */
 
-#define TBLOCK_LEN 0x600000   
+#define _TBLOCK_LEN 0x600000   
 
+#define TBLOCK_LEN(dg) ((dg)->bigbuf.tblocks.blocklen)
 
-#define TBLOCK_INDEX(offset) ((offset)/TBLOCK_LEN)
-#define TBLOCK_OFFSET(offset)  ((offset)%TBLOCK_LEN)
+#define TBLOCK_INDEX(offset) ((offset)/TBLOCK_LEN(DG))
+#define TBLOCK_OFFSET(offset)  ((offset)%TBLOCK_LEN(DG))
 #define IN_TBLOCK(tblock, offset) (TBLOCK_INDEX(offset) == (tblock)->iblock)
 
 

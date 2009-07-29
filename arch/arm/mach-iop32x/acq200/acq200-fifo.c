@@ -1642,7 +1642,7 @@ static void init_phase(struct Phase *phase, int len, int oneshot)
 	}else{
 		phase->demand_len = max(len, MINIMUM_RECYLE_SAMPLES);
 	}
-	phase->tblock_max_count = phase->demand_len/TBLOCK_LEN + 2;
+	phase->tblock_max_count = phase->demand_len/TBLOCK_LEN(DG) + 2;
 	phase->is_oneshot = oneshot;
 	phase->onPIT = onPIT_default;
 
@@ -2814,7 +2814,7 @@ static void shuffle_up(struct Phase* phase, int isearch)
 				actual_len = isearch - phase->start_off;
 				PLUG;
 			}else{
-				actual_len = TBLOCK_LEN - 
+				actual_len = TBLOCK_LEN(DG) - 
 					TBLOCK_OFFSET(phase->start_off);
 				PLUG;
 			}
@@ -2822,7 +2822,7 @@ static void shuffle_up(struct Phase* phase, int isearch)
 			actual_len += TBLOCK_OFFSET(isearch);
 			PLUG;
 		}else{
-			actual_len += TBLOCK_LEN;
+			actual_len += TBLOCK_LEN(DG);
 			PLUG;
 		}
 	}
@@ -2902,7 +2902,7 @@ void search_epos(struct Phase* phase, int search_metric)
 {
 	unsigned isearch = phase->start_off;
 	unsigned max_block = abs(search_metric)*MAX_SEARCH;
-	unsigned tb0_end = ((isearch&TBLOCK_LEN)+ TBLOCK_LEN);
+	unsigned tb0_end = ((isearch&TBLOCK_LEN(DG))+ TBLOCK_LEN(DG));
 
 #define MAX_BLOCKS  min((tb0_end - isearch)/DMA_BLOCK_LEN, max_block)
 	unsigned rem_blocks = max_block>MAX_BLOCKS? max_block - MAX_BLOCKS: 0;

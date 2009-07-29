@@ -916,7 +916,7 @@ static int lfawg_scan(char *def)
 			list_add_tail(&tble->list, &LFAWG.lfawg_tblocks);
 		}
 	}
-	return (current_block-first_block+1)*TBLOCK_LEN;
+	return (current_block-first_block+1)*TBLOCK_LEN(DG);
 }
 static struct SawgBuffer *lfawg_load(int lfawg_len)
 {
@@ -937,7 +937,7 @@ static struct SawgBuffer *lfawg_load(int lfawg_len)
 	dbg(1, "last: %p id %d", last, last->tblock->iblock);
 	memset(sb, 0, sizeof(sb));
 	sb->block = sb->cursor = (u32*)VA_TBLOCK(first->tblock);
-	sb->last = (u32*)(VA_TBLOCK(last->tblock)+TBLOCK_LEN);
+	sb->last = (u32*)(VA_TBLOCK(last->tblock)+TBLOCK_LEN(DG));
 	dbg(1, "dma_map_single %d", lfawg_len);
 	/* mapping leaks ... */
 	sb->pa = dma_map_single(DG->dev, sb->block,

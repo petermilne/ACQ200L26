@@ -1052,7 +1052,7 @@ static void appendNewPrepPhase(struct Spec* spec)
 
 	INIT_LIST_HEAD(&phase->tblocks);
 	phase->start_after = spec->start;
-	phase->tblock_max_count = phase->demand_len/TBLOCK_LEN + 2;
+	phase->tblock_max_count = phase->demand_len/TBLOCK_LEN(DG) + 2;
 	phase->is_oneshot = 1;
 	phase->onPIT = onPIT_default;
 	phase->onPhaseComplete = onPhaseComplete;

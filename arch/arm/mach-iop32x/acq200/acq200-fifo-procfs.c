@@ -899,7 +899,7 @@ static ssize_t store_mode(
 
 		unsigned prelen = samplesToBytes(pre);
 		unsigned postlen = samplesToBytes(post);
-		unsigned usable_len = len_buf(DG) - TBLOCK_LEN;
+		unsigned usable_len = len_buf(DG) - TBLOCK_LEN(DG);
 		
 
 		postlen = min(postlen, usable_len);
@@ -2061,7 +2061,7 @@ static ssize_t store_transformer(
 		}
 
 		if (nphases == 1 &&
-		    phase_len(phase) * sample_size() < 3*TBLOCK_LEN/2){
+		    phase_len(phase) * sample_size() < 3*TBLOCK_LEN(DG)/2){
 			acq200_fifo_part_transform(phase);
 			cursor = bb->tblocks.nblocks;
 			goto cursor_complete;
@@ -3534,7 +3534,7 @@ static void getRunningStats(struct RUNNING_STATS *stats)
 	static unsigned long elapsed0;
 
 	struct timeval ts1;
-	unsigned long long elapsed1;
+	unsigned long long elapsed1 ;
 	do_gettimeofday(&ts1);
 
 	if (ts0.tv_sec && DG->stats.num_fifo_ints >= fifo_ints0){
@@ -3566,6 +3566,7 @@ static void getRunningStats(struct RUNNING_STATS *stats)
 		
 		stats->elapsed_ms = diffms;
 		stats->elapsed = (elapsed1 = ELAPSED_SAMPLES) - elapsed0;
+		elapsed0 = elapsed1;
 	}else{
 		memset(stats, 0, sizeof(struct RUNNING_STATS));
 	}
@@ -3573,7 +3574,6 @@ static void getRunningStats(struct RUNNING_STATS *stats)
 	ts0 = ts1;
 	fifo_ints0 = DG->stats.num_fifo_ints;
 	eoc_ints0 = DG->stats.num_eoc_ints;
-	elapsed0 = elapsed1;
 }
 
 static int acq200_proc_stat_timing(

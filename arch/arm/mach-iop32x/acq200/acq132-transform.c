@@ -353,7 +353,7 @@ static int count_span_blocks_in_phase(int tb1, int tb2)
 static int tb_get_blen_other_tblock(Tbxo tbix1, Tbxo tbix2)
 /* we're ASSUMING maxlen < TBLOCK_LEN or 98304 samples */
 {
-	u32 tb1_bytes = TBLOCK_LEN/NROWS - TBOFF(tbix1);
+	u32 tb1_bytes = TBLOCK_LEN(DG)/NROWS - TBOFF(tbix1);
 	u32 tb2_bytes = TBOFF(tbix2);
 	unsigned d_bytes = tb1_bytes + tb2_bytes;
 	int span_blocks;
@@ -361,7 +361,7 @@ static int tb_get_blen_other_tblock(Tbxo tbix1, Tbxo tbix2)
 
 	span_blocks = count_span_blocks_in_phase(TBIX(tbix1), TBIX(tbix2));
 	if (span_blocks){
-		d_bytes += span_blocks * TBLOCK_LEN/NROWS;
+		d_bytes += span_blocks * TBLOCK_LEN(DG)/NROWS;
 	}
 
 	d_bytes -= ROW_ES_SIZE;
@@ -530,7 +530,7 @@ int acq132_transform_row_es(
 
 
 
-#define DQ_BLOCK_OFF(blk) (blk*TBLOCK_LEN/4)
+#define DQ_BLOCK_OFF(blk) (blk*TBLOCK_LEN(DG)/4)
 
 static void acq132_transform_unblocked(
 	short *to, short *from, int nwords, int stride)
@@ -606,7 +606,7 @@ static void acq132_deblock(short * const from, int nwords, int stride)
 	 * could be a DMA of course, or, deblock should be done at source
          * then this function can disappear
 	 */
-	memcpy(from, to, TBLOCK_LEN);
+	memcpy(from, to, TBLOCK_LEN(DG));
  
 	for (block = 0; block != 4; ++block){
 		dbg(1+block, "99b:%d", row_off[block]);
@@ -702,7 +702,7 @@ static void setChannelOffsets(void)
 		return;
 	}
 
-	offset1 = TBLOCK_LEN/sizeof(short)/shares;
+	offset1 = TBLOCK_LEN(DG)/sizeof(short)/shares;
 
 	for (chan = 0; chan < MAXCHAN; ++chan){		
 		if (channelSpeeds[chan]){
@@ -914,7 +914,7 @@ static void transformer_es_onStart(void *unused)
 		g_esm.es_cursor = (struct ES_DESCRIPTOR*)
 				BB_PTR(g_esm.es_tble->tblock->offset);
 		dbg(1, "g_esm.es_cursor reset %p", g_esm.es_base);
-		memset(g_esm.es_cursor, 0, TBLOCK_LEN);
+		memset(g_esm.es_cursor, 0, TBLOCK_LEN(DG));
 	}
 }
 
@@ -1006,7 +1006,7 @@ static void check_first_row(unsigned* first, unsigned* last)
 	}
 
 	for (block = 1; block < nblocks; ++block){
-		if (TBLOCK_OFFSET(*first) + block*ROW_SIZE < TBLOCK_LEN){
+		if (TBLOCK_OFFSET(*first) + block*ROW_SIZE < TBLOCK_LEN(DG)){
 			if (IS_EVENT_MAGIC(searchp[ifirst + block*ROW_LONGS])){
 				dbg(1, "got a magic going forward %d [Good]", 
 				    block);

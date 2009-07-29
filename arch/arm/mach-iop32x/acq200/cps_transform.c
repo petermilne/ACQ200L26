@@ -176,13 +176,13 @@ static void stash_sig(short *from)
 		++block_cursor;
 		SIG(block_cursor)->tblock->touched = 1;
 	}
-	if (sig_cursor + ROWLEN > TBLOCK_LEN){
+	if (sig_cursor + ROWLEN > TBLOCK_LEN(DG)){
 		if (++block_cursor > nsigtblocks){
 			err("not enough captive tblocks to store all sigs");
 			return;
 		}else{
 			SIG(block_cursor)->phase_sample_start = 
-					block_cursor*TBLOCK_LEN;
+				block_cursor*TBLOCK_LEN(DG);
 			SIG(block_cursor)->tblock->touched = 1;
 			sig_cursor = 0;
 		}

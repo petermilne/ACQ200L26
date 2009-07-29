@@ -397,7 +397,7 @@ static struct DevGlobs acq216_dg = {
 	.busywait = 0,
 	.sample_read_start = 0,
 	.sample_read_stride = 1,
-	.bigbuf.tblocks.blocklen = TBLOCK_LEN,
+	.bigbuf.tblocks.blocklen = _TBLOCK_LEN,
 	.bigbuf.tblocks.blt = blt_memcpy,
 
 	.enable_from_eoc_isr = 1,
@@ -527,8 +527,8 @@ static void acq216_event_adjust(
 	int ssu = ssb/sizeof(u32);
 /** @@todo .. what if trigger point is in PREVIOUS TBLOCK? */
 	unsigned tboffuss = TBLOCK_OFFSET(isearch*USS);
-	unsigned tblock_l = (TBLOCK_INDEX(isearch*USS) * TBLOCK_LEN)/USS;
-	unsigned tblock_r = tblock_l + (TBLOCK_LEN - 1)/USS;
+	unsigned tblock_l = (TBLOCK_INDEX(isearch*USS) * TBLOCK_LEN(DG))/USS;
+	unsigned tblock_r = tblock_l + (TBLOCK_LEN(DG) - 1)/USS;
 	unsigned tailroom = tboffuss/USS;
 	int cold_bytes = ACQ216_ES_COLD_QUADS(es) * 8;
 	int cold_samples = cold_bytes/ssb;
