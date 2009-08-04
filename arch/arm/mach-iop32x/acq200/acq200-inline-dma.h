@@ -103,13 +103,15 @@ static inline void dma_append_chain(
 	struct iop321_dma_desc* dmad,
 	const char *description)
 {
-	if (channel->nchain >= MAXCHAIN) BUG();
+	int nchain = channel->nchain;
 
-	if (channel->nchain){
-		channel->dmad[channel->nchain-1]->NDA = dmad->pa;
+	if (nchain >= MAXCHAIN) BUG();
+
+	if (nchain){
+		channel->dmad[nchain-1]->NDA = dmad->pa;
 	}
-	channel->dmad[channel->nchain] = dmad;
-	channel->description[channel->nchain] = description;
+	channel->dmad[nchain] = dmad;
+	channel->description[nchain] = description;
 	++channel->nchain;
 }
 

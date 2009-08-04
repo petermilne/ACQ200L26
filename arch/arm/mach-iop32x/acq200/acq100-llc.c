@@ -162,7 +162,7 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1073
+#define BUILD 1074
 #define _VERID(build) "$Revision: 1.24 $ build " #build
 
 #define VERID _VERID(BUILD)
@@ -304,10 +304,13 @@ static struct LlcDevGlobs {
 			int count;
 			u32 pa[LLCV2_INIT_AO32_MAX];
 		} ao32;
+
+		unsigned alt_VI_target;
 	} settings;
 
 	u32 *llcv2_init_buf;
 	int ai_dma_index;
+	
 
 	struct STATUS {
 		int is_triggered;
@@ -887,6 +890,7 @@ static void llPreamble(void)
 static void llPreamble2V(void)
 {
 	int ireg;
+	
 
 	dma_cleanup(&ai_dma);
 	dma_cleanup(&ao_dma);                 /** not used, clean up anyway */
@@ -913,8 +917,32 @@ static void llPreamble2V(void)
 		dbg(2, "init scratch LLC_SYNC2V_xx [%02d] %p = 0x%08x",
 		    ireg, &ACQ196_LL_AI_SCRATCH[ireg], marker);
 	}
-	if (dg.settings.AI_target || TRADITIONAL){
-		struct iop321_dma_desc* ai_dmad = acq200_dmad_alloc();
+
+	if (dg.settings.alt_VI_target){
+		struct iop321_dma_desc *ai_dmad = acq200_dmad_alloc();
+		struct iop321_dma_desc *vi_dmad = acq200_dmad_alloc();
+
+		ai_dmad->NDA = 0;
+		ai_dmad->PUAD = 0;
+		ai_dmad->PDA = DG->fpga.fifo.pa;
+		ai_dmad->LAD = pa_buf(DG);
+		ai_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
+		ai_dmad->DC = DMA_DCR_MEM2MEM;
+
+		dma_append_chain(&ai_dma, ai_dmad, "AI FIFO");
+
+		vi_dmad->NDA = 0;
+		vi_dmad->PDA = dg.settings.AI_target;
+		vi_dmad->PUAD = dg.settings.PUAD;
+		vi_dmad->LAD = pa_buf(DG);
+		vi_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
+		vi_dmad->DC = DMA_DCR_PCI_MW;
+
+		dg.ai_dma_index = ai_dma.nchain;
+		dma_append_chain(&ai_dma, vi_dmad, "VI HOST");
+		
+	}else if (dg.settings.AI_target || TRADITIONAL){
+		struct iop321_dma_desc *ai_dmad = acq200_dmad_alloc();
 		ai_dmad->NDA = 0;
         /** may also be set dynamically using traditional LLC_CSR_M_SETADDR */
 		ai_dmad->PDA = dg.settings.AI_target;  
@@ -937,7 +965,8 @@ static void llPreamble2V(void)
 
 	if (dg.settings.ao32.count){
 		initAIdma_AO32();
-	}else if (dg.settings.AO_src){
+	}
+	if (dg.settings.AO_src){
 		struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
 
 		ao_dmad->NDA = 0;
@@ -957,6 +986,17 @@ static void llPreamble2V(void)
 		}
 	}
 
+	if (dg.settings.alt_VI_target){
+		struct iop321_dma_desc *alt_dmad = acq200_dmad_alloc();
+		alt_dmad->NDA = 0;
+		alt_dmad->PDA = dg.settings.alt_VI_target;
+		alt_dmad->PUAD = dg.settings.PUAD;
+		alt_dmad->LAD = pa_buf(DG);
+		alt_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
+		alt_dmad->DC = DMA_DCR_PCI_MW;
+		/* Q at the end */
+		dma_append_chain(&ai_dma, alt_dmad, "VI ALT");
+	}
 	if (dg.settings.dma_poll_holdoff > 0){
 		dbg(1, "dmacPollCompletion_cp() selected");
 		dmacPollCompletion = dmacPollCompletion_cp;
@@ -2103,6 +2143,30 @@ static DEVICE_ATTR(dma_poll_holdoff, S_IWUGO|S_IRUGO,
 		   show_dma_poll_holdoff, set_dma_poll_holdoff);
 
 
+static ssize_t set_alt_VI_target(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned addr;
+	if (sscanf(buf, "0x%x", &addr) == 1){
+		dg.settings.alt_VI_target = addr;
+	}
+	return strlen(buf);
+}
+
+static ssize_t get_alt_VI_target(
+	struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "0x%08x\n", dg.settings.alt_VI_target);
+}
+
+
+static DEVICE_ATTR(alt_VI_target, S_IWUGO|S_IRUGO,
+		   get_alt_VI_target, set_alt_VI_target);
+
 /** test my ARM ASM! */
 static ssize_t show_timer0_count(
 	struct device *dev, 
@@ -2163,6 +2227,7 @@ static int mk_llc_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trigger);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
+	DEVICE_CREATE_FILE(dev, &dev_attr_alt_VI_target);
 
 	DEVICE_CREATE_HOST_BUF(dev, DO_src);
 	DEVICE_CREATE_HOST_BUF(dev, AO_src);
