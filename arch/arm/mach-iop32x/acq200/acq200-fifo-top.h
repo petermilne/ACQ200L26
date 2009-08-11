@@ -53,7 +53,9 @@
 
 #define FPGA_IS_PCI_DEVICE 0
 
-#elif defined ACQ
+#define ACQ_HAS_COUNTER	1
+
+
 #elif defined ACQ216
 
 
@@ -65,13 +67,24 @@
 #define FPGA_IS_PCI_DEVICE 1
 #define MAXCHAN 16
 
+#define ACQ_HAS_COUNTER	1
+
+#elif defined ACQ164
+
+#define DMA_BLOCK_LEN	1024
+#define ISR_ADDS_ENDSTOP 1
+#define FPGA_IS_PCI_DEVICE 0
+#define MAXCHAN		64
+#define ACQ_HAS_COUNTER	1
+#define ACQ_HAS_GATE	1
+
 #elif defined WAV232
 
 #define DMA_BLOCK_LEN 1024
 #define ISR_ADDS_ENDSTOP 1
 #define FPGA_IS_PCI_DEVICE 1
 
-#define GET_NEXT_EMPTY  wav232_getNextEmpty
+#define GET_NEXT_EMPTY wav232_getNextEmpty
 
 #elif defined ACQ132
 
@@ -82,6 +95,8 @@
 
 #define MAXCHAN 32
 
+#define ACQ_HAS_COUNTER	1
+#define ACQ_HAS_GATE	1
 #else
 
 #error Please ensure ACQxxx is defined

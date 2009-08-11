@@ -14,6 +14,7 @@ CONFIG_ARCH_DTACQ_ACQ196f=m
 CONFIG_ARCH_DTACQ_ACQ196c=m
 CONFIG_ARCH_DTACQ_ACQ196h=m
 CONFIG_ARCH_DTACQ_ACQ132=m
+CONFIG_ARCH_DTACQ_ACQ164=m
 CONFIG_ARCH_DTACQ_BRIDGE=m
 #CONFIG_ARCH_DTACQ_DMAC=m
 CONFIG_ARCH_DTACQ_MU=m
@@ -88,6 +89,8 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ196c) += acq196c.o
 obj-$(CONFIG_ARCH_DTACQ_ACQ196h) += acq196h.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ132) += acq132.o
+
+obj-$(CONFIG_ARCH_DTACQ_ACQ164) += acq164.o
 
 obj-$(CONFIG_ARCH_DTACQ_MU) += acq200-mu.o
 
@@ -172,6 +175,12 @@ acq216x-objs := acq216-fifo-x.o acq216-fiq-x.o \
 
 acq196-objs := acq196-fifo.o acq196-fiq.o \
 	acq196-fifo-procfs.o acq196-offset.o acq196-AO.o \
+	$(ACQ2XX_FIFO_COMMON)
+
+acq164-objs := acq164-fifo.o acq164-fiq.o \
+	acq164-fifo-procfs.o \
+	acq196-offset.o acq196-AO.o \
+	acq132-gated.o \
 	$(ACQ2XX_FIFO_COMMON)
 
 acq196m-objs := acq196-fifo-m.o acq196-fiq-m.o \

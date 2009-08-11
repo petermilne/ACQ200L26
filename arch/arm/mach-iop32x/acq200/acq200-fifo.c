@@ -1292,7 +1292,16 @@ static void acq200_dmc0(struct DMC_WORK_ORDER *wo);
 
 
 
-#if defined(ACQ196) || defined(ACQ132)
+#if defined(ACQ216)
+void acq200_service_clock_counters(unsigned long unused) 
+{
+/** we read Lreg FIRST to ensure it's earlier than Ireg ... 
+ *  32 bit counters make this easy 
+ */
+	DMC_WO->clock_count_latched = *ACQ216_TCR_LAT;
+	DMC_WO->clock_count_immediate = *ACQ216_TCR_IMM;
+}
+#elif defined(ACQ_HAS_COUNTER)
 void acq200_service_clock_counters(unsigned long unused) 
 {
 /** we read Lreg FIRST to ensure it's earlier than Ireg ... */
@@ -1326,16 +1335,7 @@ void acq200_service_clock_counters(unsigned long unused)
 	DMC_WO->clock_count_immediate = Icount;
 }
 #endif
-#if defined(ACQ216)
-void acq200_service_clock_counters(unsigned long unused) 
-{
-/** we read Lreg FIRST to ensure it's earlier than Ireg ... 
- *  32 bit counters make this easy 
- */
-	DMC_WO->clock_count_latched = *ACQ216_TCR_LAT;
-	DMC_WO->clock_count_immediate = *ACQ216_TCR_IMM;
-}
-#endif
+
 
 
 #ifdef ACQ216

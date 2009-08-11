@@ -694,11 +694,11 @@ struct CAPDEF {
 	struct Signal* ob_clk_src;
 	int pipeline_offset[4];       /* offset from trigger pos, samples */
 #endif
-#if defined(ACQ196) || defined(ACQ216) || defined(ACQ132)
+#if defined(ACQ_HAS_COUNTER)
 	struct Signal* counter_src;
 	int counter_update;
 #endif
-#if defined(ACQ132)
+#if defined(ACQ_HAS_GATE)
 	struct Signal* gate_src;
 #endif
 };

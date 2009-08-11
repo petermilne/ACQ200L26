@@ -323,6 +323,8 @@ static inline int acq132_getScanlistEntry(int n)
 	return BANK_A + (def&0x3);
 }
 
+
+
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx);
 void acq132_set_channel_mask(u32 channel_mask);
 

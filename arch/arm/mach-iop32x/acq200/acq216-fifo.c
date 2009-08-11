@@ -35,7 +35,10 @@
 #define FPGA_INT_MASK (1<<FPGA_INT)
 
 #define MTTR2	0xfe		/* maximse DMA block len on bus */
+
+#include "acq200-fifo-top.h"
 #include "acq200-fifo-local.h"
+
 
 #define AICHAN_DEFAULT 16
 
@@ -1534,7 +1537,6 @@ static int acq200_commitMasSyncTrig(struct Signal *signal)
 	*ACQ200_TRGCON = trgcon;
 	return 0;	
 }
-
 
 
 static struct CAPDEF* acq216_createCapdef(void)
