@@ -82,6 +82,57 @@ static ssize_t store_coding(
 static DEVICE_ATTR(coding, S_IRUGO|S_IWUGO, show_coding, store_coding);
 
 
+/* testmode id's :
+
+2, 3
+4, 5
+6, 7
+8, 9
+
+*/
+
+static void acq132_set_testmode(int enable)
+{
+	int dev;
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		u32 bankid = (dev+1)*2;		
+		u32 control = enable? (bankid<<16) | (bankid|1) : 0;
+
+		info( "%p = 0x%08x", ACQ132_ADC_TESTM(dev), control);
+		*ACQ132_ADC_TESTM(dev) = control;
+	}	
+}
+
+
+
+static int test_mode;
+
+static ssize_t show_testmode(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf,"%d\n", test_mode);
+}
+
+#define S_SIGNED "signed"
+#define S_UNSIGNED "unsigned"
+
+static ssize_t store_testmode(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	if (sscanf(buf, "%d", &test_mode)){
+		acq132_set_testmode(test_mode != 0);
+	}	
+	return strlen(buf);
+}
+
+static DEVICE_ATTR(testmode, S_IRUGO|S_IWUGO, show_testmode, store_testmode);
+
+
 /* @todo - single bit all channel control atm.
  * but simulate multi channel control
  */
@@ -833,6 +884,7 @@ static DEVICE_ATTR(ClkCounter, S_IRUGO, show_ClkCounter, 0);
 static void acq132_mk_dev_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
+	DEVICE_CREATE_FILE(dev, &dev_attr_testmode);
 	DEVICE_CREATE_FILE(dev, &dev_attr_FAWG_div);
 	DEVICE_CREATE_FILE(dev, &dev_attr_slow_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_AO_coding);
@@ -980,15 +1032,16 @@ static ssize_t set_daq_enable(
 }
 
 #define BANK_ENTRY(dev, cmask)	  { "BANK" #dev " " #cmask "\n", 0 }
-#define SPACER_ENTRY	  { "\n", 0 }
+#define SPACER_ENTRY	  { "|\n", 0 }
 #define REGS_LUT_ENTRY(n) { #n, n }
 
 #define ADC_REGS_ENTRY(dev, cmask)		\
 	BANK_ENTRY(dev, cmask),			\
-	REGS_LUT_ENTRY(ACQ132_ADC_TEST(dev)),	\
+	REGS_LUT_ENTRY(ACQ132_ADC_VERID(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_CTRL(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_RANGE(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_OSAM(dev)),   \
+	REGS_LUT_ENTRY(ACQ132_ADC_TESTM(dev)),\
 	SPACER_ENTRY
 
 static struct REGS_LUT {
@@ -1032,11 +1085,11 @@ int acq200_dumpregs_diag(char* buf, int len)
 
 
 #define APPEND_ADC(dev)				\
-	APPEND(ACQ132_ADC_TEST(dev));		\
+	APPEND(ACQ132_ADC_VERID(dev));		\
 	APPEND(ACQ132_ADC_CTRL(dev));		\
 	APPEND(ACQ132_ADC_RANGE(dev));		\
-	APPEND(ACQ132_ADC_OSAM(dev))		\
-
+	APPEND(ACQ132_ADC_OSAM(dev));		\
+	APPEND(ACQ132_ADC_TESTM(dev))		\
 
 	APPEND(ACQ132_BDR);
 	APPEND(ACQ196_FIFCON);

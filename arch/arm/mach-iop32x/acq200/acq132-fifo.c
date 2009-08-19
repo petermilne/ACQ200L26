@@ -340,8 +340,15 @@ static int _set_ob_clock(int khz)
 	static char fin_def[20];
 	static char *argv[6];
 	int ii;
-	int decim = khz < 4000? 4: 1;	/* ics min f = 4MHz */
-
+	/* min ics_527 output = 4MHz. for slower speed decimate ..
+         * but be careful NOT to overclock the ADC, could be 10MHz part ..
+	 */
+	int decim = 
+		(khz < 2000)? 4 :	/* SCLK < 2M * 4 < 10MHz Good! */
+		(khz < 3000)? 3 :	/* SCLK < 3M * 3 < 10MHz Good! */
+		(khz < 4000)? 2 :	/* SCLK < 4M * 2 < 10MHz Good! */
+		1;			/* SCLK = kHZ		       */
+	
 	sprintf(fin_def, "%d", acq200_clk_hz/1000);
 
 	acq132_setAllDecimate(decim);		

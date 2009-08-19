@@ -45,11 +45,13 @@
 
 #define ACQ132_ADC_CTRL_OFFSET	0x04
 
-#define ACQ132_ADC_TEST(dev)	ACQ132_ADC_REG(dev, 0x00)
+#define ACQ132_ADC_VERID(dev)	ACQ132_ADC_REG(dev, 0x00)
 #define ACQ132_ADC_CTRL(dev)	ACQ132_ADC_REG(dev, ACQ132_ADC_CTRL_OFFSET)
 #define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x08)
 #define ACQ132_ADC_OSAM(dev)	ACQ132_ADC_REG(dev, 0x0c)
 #define ACQ132_ADC_FIFSTA(dev)	ACQ132_ADC_REG(dev, 0x10)
+#define ACQ132_ADC_TESTM(dev) ACQ132_ADC_REG(dev, 0x14)
+
 
 #define BANK_A	0
 #define BANK_B  1
