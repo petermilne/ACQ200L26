@@ -53,9 +53,9 @@
  * NB BLOCKSIZE 4K
  */
 	
-#define HOTxB 	 6	/* overdrive by 8K */
+#define HOTxB 	 6
 			/* remember, we already moved one block */
-#define CHECK_2B 3	/* 3 additional blocks */
+#define CHECK_2B 1	/* 1 additional blocks */
 
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
