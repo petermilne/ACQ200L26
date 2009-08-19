@@ -66,6 +66,13 @@ void acq200_initDCI(struct file *file, int lchannel)
 		DCI(file)->pchan = acq200_lookup_pchan(lchannel);
 		DCI(file)->ssize = CSIZE;
 	}else{
+		int pchan;
+
+		for (pchan = 0; pchan < NCHAN; ++pchan){
+			if (acq200_pchanEnabled(pchan)){
+				DCI(file)->pchan = pchan;
+			}
+		}
 		DCI(file)->ssize = RSIZE;
 	}
 }

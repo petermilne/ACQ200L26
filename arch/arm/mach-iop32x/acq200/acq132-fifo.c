@@ -1120,6 +1120,28 @@ static int acq132_commitGateSrc(struct Signal* signal)
 	return 0;
 }
 
+extern int acq132_showGTSR(int enable);
+
+static int acq132_commitClkCounterSrc(struct Signal* signal)
+{
+	u32 clk_counter = *ACQ132_CLK_COUNTER;
+
+	clk_counter &= ~ACQ132_CLK_COUNTER_SRCMASK;
+
+	if (signal->DIx == 9){
+		/* use GTSR */
+		acq132_showGTSR(1);
+	}else{
+		if (signal->DIx >=0 && signal->DIx <= 7){
+		       clk_counter |= signal->DIx << ACQ132_CLK_COUNTER_SRCSHL;
+		       clk_counter |= ACQ132_CLK_COUNTER_SRC_DIO;
+		}
+		acq132_showGTSR(0);
+	}
+
+	*ACQ132_CLK_COUNTER = clk_counter;
+	return 0;
+}
 static struct CAPDEF* acq132_createCapdef(void)
 {
 	static struct CAPDEF _capdef = {
@@ -1175,6 +1197,9 @@ static struct CAPDEF* acq132_createCapdef(void)
 	capdef->ev[0] = createSignal(
 		"event0", 0, 7, 3, 0, 0, acq132_commitGateSrc);
 
+	capdef->clk_counter_src = createSignal(
+		"clk_counter_src", 0, 9, 8, 0, 0, acq132_commitClkCounterSrc);
+
 	return capdef;
 }
 
@@ -1197,10 +1222,113 @@ static struct device_driver acq132_fpga_driver;
 
 extern int init_arbiter(void);
 
+#define MAXCOUNT_SHFT	4
+#define MAXCOUNT	(1<<MAXCOUNT_SHFT)
+
+static struct CLKCOUNTER_STATE{
+	struct timer_list timeout;
+	unsigned previous;
+	unsigned nsamples;
+	unsigned totcount;
+	unsigned hz;
+	int please_stop;
+	unsigned (* getCount)(void);
+	unsigned zbuf[MAXCOUNT];
+	int ibuf;
+	int prescale;	
+} clk_state;
+
+#define CLK_INCR(cursor) ((1+(cursor)) & (MAXCOUNT-1))
+#define CLK_DECR(cursor) (((cursor)-1) & (MAXCOUNT-1))
 
 
+int acq132_showClkCounter(char *buf)
+{
+	unsigned showme[4];
+	int ifrom;
+	int ito = 4;
+
+	for (ifrom = clk_state.ibuf; ito--; ){
+		ifrom = CLK_DECR(ifrom);
+		showme[ito] = clk_state.zbuf[ifrom];			
+	}
+	
+	dbg(1, "zbuf %04x %04x %04x %04x",
+	    showme[0], showme[1], showme[2], showme[3]);
+	dbg(1, "delt %04x %04x %04x %04x",
+	    0, showme[1]-showme[0], showme[2]-showme[1], showme[3]-showme[2]);
+		
+	return sprintf(buf, "%u\n", clk_state.hz);
+}
 
 
+static unsigned acq132_getClkCounter(void)
+{
+	return (*ACQ132_CLK_COUNTER) & ACQ132_CLK_COUNTER_COUNT;
+}
+static unsigned iop32x_getGTSR(void)
+{
+	return (*IOP321_GTSR) & ACQ132_CLK_COUNTER_COUNT;
+}
+int acq132_showGTSR(int enable)
+{
+	if (enable){
+		clk_state.prescale = 1;
+		clk_state.getCount = iop32x_getGTSR;
+	}else{
+		clk_state.prescale = ACQ132_CLK_COUNTER_PRESCALE;
+		clk_state.getCount = acq132_getClkCounter;
+	}
+	return 0;
+}
+
+static void monitorClkCounter(unsigned long arg)
+{
+	unsigned cx = clk_state.getCount();
+	unsigned delta;
+
+	clk_state.zbuf[clk_state.ibuf] = cx;
+	clk_state.ibuf = CLK_INCR(clk_state.ibuf);
+	
+	if (cx < clk_state.previous){
+		delta = ACQ132_CLK_COUNTER_COUNT+1 - clk_state.previous + cx;
+	}else{
+		delta = cx - clk_state.previous;
+	}      
+	if (clk_state.nsamples < MAXCOUNT){
+		clk_state.nsamples++;
+		clk_state.totcount = 
+			(clk_state.totcount*clk_state.nsamples + delta)/
+				clk_state.nsamples;
+	}else{
+		unsigned tc = (clk_state.totcount*(MAXCOUNT-1) + delta)
+							>>MAXCOUNT_SHFT;
+		unsigned hz = tc * clk_state.prescale * HZ;
+
+		clk_state.totcount = tc;
+		clk_state.hz = hz;
+	}
+
+	if (!clk_state.please_stop){
+		clk_state.previous = cx;
+		clk_state.timeout.expires = jiffies + 1;
+		add_timer(&clk_state.timeout);
+	}
+}
+
+static void start_clkCounterMonitor(void)
+{
+	acq132_showGTSR(0);
+	init_timer(&clk_state.timeout);
+	clk_state.timeout.function = monitorClkCounter;
+	clk_state.timeout.expires = jiffies + 1;
+	add_timer(&clk_state.timeout);
+}
+
+static void stop_clkCounterMonitor(void)
+{
+	clk_state.please_stop = 1;
+}
 
 static void acq132_set_defaults(void)
 {
@@ -1226,6 +1354,7 @@ static int acq132_fpga_probe(struct device *dev)
 		}else{
 			mk_sysfs(&acq132_fpga_driver);
 			acq132_set_defaults();
+			start_clkCounterMonitor();
 		}
 		return rc;
 	}else{
@@ -1236,6 +1365,7 @@ static int acq132_fpga_probe(struct device *dev)
 
 static int acq132_fpga_remove(struct device *dev)
 {
+	stop_clkCounterMonitor();
 	acqX00_fpga_remove(dev, IRQ_ACQ100_FPGA);
 	return 0;
 }

@@ -701,6 +701,7 @@ struct CAPDEF {
 #if defined(ACQ_HAS_GATE)
 	struct Signal* gate_src;
 #endif
+	struct Signal* clk_counter_src;
 };
 
 

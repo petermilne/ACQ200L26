@@ -27,6 +27,7 @@
 /* custom regs */
 #define ACQ132_SFPGA_CONF	FPGA_REG(0x10)
 #define ACQ132_ICS527		FPGA_REG(0x18)
+#define ACQ132_CLK_COUNTER	FPGA_REG(0x4c)
 #define ACQ132_SCAN_LIST_DEF	FPGA_REG(0x50)
 #define ACQ132_SCAN_LIST_LEN	FPGA_REG(0x54)
 
@@ -54,6 +55,11 @@
 #define BANK_B  1
 #define BANK_C  2
 #define BANK_D  3
+
+#define MASK_A	0x000f000f
+#define MASK_B  0x00f000f0
+#define MASK_C  0x0f000f00
+#define MASK_D  0xf000f000
 
 #define BDR_MAGIC	0xdeadbeef
 
@@ -393,5 +399,14 @@ typedef unsigned * ChannelBankCursors[LRCH][QUADCH];
 
 int getChannelsInMask(int bank, ChannelBank channels);
 const char* acq132_getChannelSpeedMask(void);
+
+#define ACQ132_CLK_COUNTER_SRCMASK 0xf0000000
+#define ACQ132_CLK_COUNTER_SRCSHL  28
+#define ACQ132_CLK_COUNTER_SRC_DIO 0x80000000
+
+#define ACQ132_CLK_COUNTER_COUNT   0x000fffff
+#define ACQ132_CLK_COUNTER_PRESCALE	16
+#define ACQ132_CLK_COUNTER_ICSSRC	0x8
+
 #endif	/*  __ACQ132_H__ */
 

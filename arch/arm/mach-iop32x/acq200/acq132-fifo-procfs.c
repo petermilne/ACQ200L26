@@ -753,6 +753,7 @@ DEFINE_SIGNAL_ATTR(ao_clk);
 DEFINE_SIGNAL_ATTR(sync_trig_src);
 DEFINE_SIGNAL_ATTR(sync_trig_mas);
 DEFINE_SIGNAL_ATTR(gate_src);
+DEFINE_SIGNAL_ATTR(clk_counter_src);
 
 
 static ssize_t show_RGM(
@@ -815,6 +816,20 @@ static ssize_t store_ChannelSpeedMask(
 static DEVICE_ATTR(ChannelSpeedMask, S_IRUGO|S_IWUGO, 
 		   show_ChannelSpeedMask, store_ChannelSpeedMask);
 
+extern int acq132_showClkCounter(char *buf);
+
+static ssize_t show_ClkCounter(
+	struct device *dev,
+	struct device_attribute *attr,
+	char* buf)
+{
+	return acq132_showClkCounter(buf);
+}
+
+static DEVICE_ATTR(ClkCounter, S_IRUGO, show_ClkCounter, 0);
+
+
+
 static void acq132_mk_dev_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
@@ -831,6 +846,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
 	DEVICE_CREATE_FILE(dev, &dev_attr_gate_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clk_counter_src);
 	DEVICE_CREATE_OSAM_GROUP(dev);
 	DEVICE_CREATE_FILE(dev, &dev_attr_scanlist);
 	DEVICE_CREATE_FILE(dev, &dev_attr_gpg_mas);
@@ -839,15 +855,8 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
 	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ChannelSpeedMask);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
 }
-
-
-#define MASK_A	0x000f000f
-#define MASK_B  0x00f000f0
-#define MASK_C  0x0f000f00
-#define MASK_D  0xf000f000
-
-
 
 
 
@@ -862,10 +871,13 @@ int count_bits(unsigned mask) {
 	}
 	return count;
 }
-
-static int isValidMask(unsigned left, unsigned right)
+static int isValidMask(unsigned mm, int shr)
 {
+	unsigned left = mm >> (shr + 16);
+	unsigned right = (mm >> shr) & 0x0000ffff;
+
 	if (left != right){
+		dbg(1, "%x ! = %x\n", left<<16, right);
 		return 0;
 	}
 	switch(left){
@@ -874,9 +886,11 @@ static int isValidMask(unsigned left, unsigned right)
 	case MASK_4:
 		return 1;
 	default:
+		dbg(1, "%x not valid\n", left);
 		return 0;
 	}
 }
+
 
 /*
 Valid Channel Masks
@@ -905,33 +919,39 @@ eg
 */
 
 
-
 void acq200_setChannelMask(unsigned mask)
 {
 	unsigned mm;
 	int lchan;
+	unsigned vmask = 0;
 
-	if ((mm = mask&MASK_D) != 0 && isValidMask(mm>>16, mm>>0)){
-		mask |= mm;
+	if ((mm = mask&MASK_D) != 0 && isValidMask(mm, 12)){
+		vmask |= mm;
 	}
-	if ((mm = mask&MASK_C) != 0 && isValidMask(mm>>20, mm>>4)){
-		mask |= mm;
+	if ((mm = mask&MASK_C) != 0 && isValidMask(mm, 8)){
+		vmask |= mm;
 	}       
-	if ((mm = mask&MASK_B) != 0 && isValidMask(mm>>24, mm>>8)){
-		mask |= mm;
+	if ((mm = mask&MASK_B) != 0 && isValidMask(mm, 4)){
+		vmask |= mm;
 	}
-	if ((mm = mask&MASK_A) != 0 && isValidMask(mm>>28, mm>>12)){
-		mask |= mm;
-	}
-
-	for (lchan = mm = 1; mm; mm<<=1, lchan++){
-		acq200_setChannelEnabled(
-			acq200_lookup_pchan(lchan), (mm&mask) != 0);
+	if ((mm = mask&MASK_A) != 0 && isValidMask(mm, 0)){
+		vmask |= mm;
 	}
 
-	CAPDEF_set_nchan(count_bits(mask));
-	CAPDEF->channel_mask = mask;
-	acq132_set_channel_mask(mask);
+	dbg(1, "mask %08x vmask %08x %s", mask, vmask, mask==vmask?"OK":"ERR");
+
+	if (vmask == mask){
+		for (lchan = mm = 1; mm; mm<<=1, lchan++){
+			acq200_setChannelEnabled(
+				acq200_lookup_pchan(lchan), (mm&vmask) != 0);
+		}
+
+		CAPDEF_set_nchan(count_bits(vmask));
+		CAPDEF->channel_mask = vmask;
+		acq132_set_channel_mask(vmask);
+	}else{
+		err("mask not valid: 0x%08x good=0x%08x", mask, vmask);
+	}
 }
 
 
@@ -982,6 +1002,7 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ132_SYSCON),
 		REGS_LUT_ENTRY(ACQ132_SFPGA_CONF),
 		REGS_LUT_ENTRY(ACQ132_ICS527),
+		REGS_LUT_ENTRY(ACQ132_CLK_COUNTER),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_LEN),
 		SPACER_ENTRY,
@@ -1102,9 +1123,7 @@ static struct file_operations dump_regs_proc_fops = {
 };
 
 static void acq132_create_proc_entries(struct proc_dir_entry* root)
-{
-
-	
+{	
         struct proc_dir_entry *dump_regs_entry =
 		create_proc_entry("dump_regs", S_IRUGO, root);
 
