@@ -63,7 +63,7 @@ static unsigned iop32x_getGTSR(void)
 int clk_dj = 1;
 module_param(clk_dj, int, 0444);
 
-int clk_dj_max = 1;
+int clk_dj_max = 4;
 module_param(clk_dj_max, int, 0644);
 
 struct CLKCOUNTER_STATE {
