@@ -410,5 +410,7 @@ const char* acq132_getChannelSpeedMask(void);
 #define ACQ132_CLK_COUNTER_PRESCALE	16
 #define ACQ132_CLK_COUNTER_ICSSRC	0x8
 
+void acq132_start_clkCounterMonitor(void);
+void acq132_stop_clkCounterMonitor(void);
 #endif	/*  __ACQ132_H__ */
 
