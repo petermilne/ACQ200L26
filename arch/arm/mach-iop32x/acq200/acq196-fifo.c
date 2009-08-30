@@ -700,11 +700,11 @@ static int _acq196_commitEvX(
 {
 	u32 syscon = *reg;
 	
-	syscon &= ~(ACQ196_SYSCON_EV_MASK << shift);
+	syscon &= ~(ACQ100_SYSCON_EV_MASK << shift);
 	
 	if (signal->is_active){
 		u32 rising = signal->rising? 
-			ACQ196_SYSCON_EV_RISING: ACQ196_SYSCON_EV_FALLING;
+			ACQ100_SYSCON_EV_RISING: ACQ100_SYSCON_EV_FALLING;
 
 		syscon |= ((rising | acq196_lineCode(signal->DIx)) << shift);
 	}	
@@ -915,7 +915,7 @@ static int acq196_fpga_probe(struct device *dev)
 	init_pbi(dev);
 	init_arbiter();
 
-	if (*ACQ196_BDR == ACQ196_BDR_DEFAULT){
+	if (*ACQ196_BDR == ACQ100_BDR_DEFAULT){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");

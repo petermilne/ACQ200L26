@@ -52,4 +52,4 @@ cscope.*
 *.orig
 *.rej
 *.proj
-
+SNDB4/*

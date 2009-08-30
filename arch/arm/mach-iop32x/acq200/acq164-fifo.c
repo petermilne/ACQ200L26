@@ -38,7 +38,7 @@
 #include "acq200-fifo-local.h"
 
 #include "acq200-fifo.h"
-#include "acq132.h"
+#include "acq164.h"
 
 
 #include "acq196-AO.h"
@@ -76,10 +76,10 @@ module_param(rgm_with_es, int, 0600);
 int acq164_trigger_debug = 0;
 module_param(acq164_trigger_debug, int, 0600);
 
-
+#ifdef PGMCOMOUT
 /* acq132-gated.c */
 extern struct file_operations acq132_gate_pulse_ops;
-
+#endif
 
 void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 
@@ -87,17 +87,17 @@ void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 #define AICHAN_DEFAULT 32
 
 
-#define HOT_FIFO_FULL_ENTRIES(fifstat) (((fifstat)&ACQ196_FIFSTAT_HOTPOINT)>>1)
+#define HOT_FIFO_FULL_ENTRIES(fifstat) (((fifstat)&ACQ164_FIFSTAT_HOTPOINT)>>1)
 #define COLD_FIFO_FULL_ENTRIES(fifcon) ((fifcon)&1)
 #define HOT_FIFO_FREE_ENTRIES(fifstat) (0x10-HOT_FIFO_FULL_ENTRIES(fifstat))
 #define COLD_FIFO_FREE_ENTRIES(fifcon) ((fifcon)&1)
 
 
-#define FIFCON  ACQ196_FIFCON
-#define FIFSTAT ACQ196_FIFSTAT
-#define SYSCON  ACQ196_SYSCON_ADC
+#define FIFCON  ACQ164_FIFCON
+#define FIFSTAT ACQ164_FIFSTAT
+#define SYSCON  ACQ164_SYSCON
 
-#define FIFCON_COLDUNDER ACQ196_FIFSTAT_UNDER
+#define FIFCON_COLDUNDER ACQ164_FIFSTAT_UNDER
 
 #define ACQ_INTEN ACQ100_ICR_HOTEN
 #define DAC_INTEN ACQ100_ICR_DACEN
@@ -124,12 +124,12 @@ void disable_acq(void)
 {
 
 	dbg(DISABLE_ACQ_DEBUG, "");
-	acq196_syscon_clr_all(ACQ196_SYSCON_ACQEN);
+	acq164_syscon_clr(ACQ164_SYSCON_ACQEN);
 }
 void enable_acq(void)
 {
 	dbg(DISABLE_ACQ_DEBUG, "");
-	acq196_syscon_set_all(ACQ196_SYSCON_ACQEN);
+	acq164_syscon_set(ACQ164_SYSCON_ACQEN);
 }
 
 
@@ -137,12 +137,12 @@ void enable_acq(void)
         if (acq164_trigger_debug)					\
 		dbg(1, "%4d S: 0x%08x FC: 0x%08x FX: 0x%08x %s",	\
 		    __LINE__,						\
-		    *SYSCON, *ACQ196_FIFCON, *FIFSTAT, s)
+		    *SYSCON, *ACQ164_FIFCON, *FIFSTAT, s)
 
 
-static int acq196_trigger_detect(void)
+static int acq164_trigger_detect(void)
 {
-	return (*SYSCON & ACQ196_SYSCON_TRIGGERED) != 0;
+	return (*ACQ164_SYSCON & ACQ164_SYSCON_TRIGGERED) != 0;
 }
 
 static unsigned check_fifstat(
@@ -150,7 +150,7 @@ static unsigned check_fifstat(
 /* returns 1 if trigger handled */
 /** @todo this needs refactoring with the ACQ216 version ! */
 {
-	int adc_ev = fifstat&ACQ132_FIFSTAT_ADC_EV;
+	int adc_ev = fifstat&ACQ164_FIFSTAT_ADC_EVX;
 
 	dbg(3, "F%08x %s %s", fifstat,
 	    adc_ev? "TR":"tr", wo->looking_for_pit? "LOOKING":"-");
@@ -166,7 +166,7 @@ static unsigned check_fifstat(
 			onEvent(wo, fifstat, offset);	/* (1) */
 		}
 
-		*FIFSTAT = ACQ132_FIFSTAT_ADC_EV;	/* (2) */
+		*ACQ164_FIFSTAT = ACQ164_FIFSTAT_ADC_EVX;	/* (2) */
 
 		if (wo->looking_for_pit){
 			dbg(2, "EVENT %08x at 0x%08x", fifstat, *offset);
@@ -192,101 +192,14 @@ static unsigned check_fifstat(
 
 void acq200_reset_fifo(void)
 {
-	*FIFCON = 0;
-	acq196_fifcon_set_all(ACQ196_FIFCON_RESET_ALL);
-	acq196_fifcon_clr_all(ACQ196_FIFCON_RESET_ALL);
-	*FIFSTAT = *FIFSTAT;
+	*ACQ164_FIFCON = 0;
+	acq164_fifcon_set(ACQ164_FIFCON_ADCX_RESET);
+	acq164_fifcon_clr(ACQ164_FIFCON_ADCX_RESET);
+	*ACQ164_FIFSTAT = *ACQ164_FIFSTAT;
 }
 
-#define GMC_ROOLS_OK     /* error in hw spec - clkdiv out by one */
-#ifdef GMC_ROOLS_OK
-#define CLKDIV_OFFSET 0  /* observed by GMC */
-#else
-#define CLKDIV_OFFSET 1  /* fpga spec */
-#endif
-
-static void __setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
-{
-#define MAXDIV    0x0000fffe
-	if ( clkdiv > MAXDIV ) clkdiv = MAXDIV;
-	if ( clkdiv < 2 )      clkdiv = 2;
-
-	acq196_syscon_clr_all(ACQ196_SYSCON_EXTCLK);
-	*ACQ196_CLKCON &= ~ACQ196_CLKCON_CS_MASK;
-	*ACQ196_CLKCON |= clksel;
-	*ACQ200_CLKDAT = clkdiv;
-
-	acq200_clk_hz = masterclk / (clkdiv - CLKDIV_OFFSET);
-
-	if ((int_clk_calcmode&INT_CLK_CALC_ROUNDING) != 0){
-		acq200_clk_hz = acq200_rounding(
-			acq200_clk_hz, PRECISION(clkdiv));
-	}
-
-	dbg( 1, "set:%7d Hz clkdiv 0x%08x act 0x%08x %d Hz MCLK: %ld Hz\n",
-	     hz, clkdiv, *ACQ200_CLKDAT, acq200_clk_hz, masterclk);
-
-	intclock_actual_rate = acq200_clk_hz;
-}
-/*                    12345xxx */
-#define MASTERCLK_100 99999000  
-
-#define MASTERCLK MASTERCLK_100
 
 
-static struct IntClkConsts {
-	long masterclk;
-	u32  clksel;
-} intclk[2] = {
-	{
-		.masterclk = MASTERCLK_100,
-		.clksel    = ACQ196_CLKCON_CS_66M
-	}
-};
-#define MAXSEL 1
-
-
-static void _setIntClkHz( int hz )
-{
-	int actual[2];
-	int isel;
-	u32 clkdiv;
-	int deltamin = MASTERCLK;
-	int imin = 0;
-	int delta;
-	int maxsel = MAXSEL;
-
-
-	if ( hz < 1 ){
-		hz = 1;
-	}else if ( hz > MASTERCLK/2 ){
-		hz = MASTERCLK/2;
-	}
-
-	for (isel = 0; isel != maxsel; ++isel){
-		clkdiv = intclk[isel].masterclk/hz + 1;
-		actual[isel] = intclk[isel].masterclk/(clkdiv-CLKDIV_OFFSET);
-/*
- * bias to nearest clk BELOW
- */
-		if (actual[isel] > hz){
-			clkdiv += 1;
-			actual[isel] = 
-				intclk[isel].masterclk/(clkdiv-CLKDIV_OFFSET);
-		}
-		delta = abs(hz - actual[isel]);
-		if (delta < deltamin ){
-			deltamin = delta;
-			imin = isel;
-		}
-	}
-
-	dbg(1, "set:%d clkdiv:%d actual:%d", hz, clkdiv, actual[0]);	
-
-	__setIntClkHz(clkdiv, 
-		      intclk[imin].masterclk, intclk[imin].clksel,
-		      hz);
-}
 
 
 // ./ob_calc_527 --fin 20000  32000
@@ -337,7 +250,8 @@ static int set_ob_clock(int hz)
 	if (hz < 1000000){
 		return -1;
 	}
-	_setIntClkHz(obclock_input_rate);
+	reg_set_field(ACQ164_CLKCON, ACQ164_CLKCON_CS_SHIFT, 
+		      ACQ164_CLKCON_XX, ACQ164_CLKCON_32768);
 	return _set_ob_clock(hz/1000);
 }
 void acq200_setIntClkHz( int hz )
@@ -347,7 +261,7 @@ void acq200_setIntClkHz( int hz )
 	}else if (DG->use_ob_clock && set_ob_clock(hz) == 0){
 		;
 	}else{
-		_setIntClkHz(hz);
+		err("Failed to set OB clock");
 	}
 }
 static int fifo_read_init_action(void);
@@ -359,7 +273,7 @@ static int fifo_read_init_action(void);
  */
 
 #if DMA_BLOCK_LEN == 4096
-#define ACQ196_FIFO_NBLOCKS(fifcon) (1)
+#define ACQ164_FIFO_NBLOCKS(fifcon) (1)
 #else
 /*
  * fifcon 0..31 => 8K
@@ -368,9 +282,9 @@ static int fifo_read_init_action(void);
  * roundup to be sure
  */
 
-#define HOTPOINT(fifstat) ((fifstat)&ACQ196_FIFSTAT_HOTPOINT)
+#define HOTPOINT(fifstat) ((fifstat)&ACQ164_FIFSTAT_HOTPOINT)
 #define NEWPOINT(point) ((point)>>1)
-#define ACQ196_FIFO_NBLOCKS(fifstat)  ((NEWPOINT(HOTPOINT(fifstat))-1)>>1)
+#define ACQ164_FIFO_NBLOCKS(fifstat)  ((NEWPOINT(HOTPOINT(fifstat))-1)>>1)
 #endif
 
 /*
@@ -380,7 +294,7 @@ static int fifo_read_init_action(void);
 
 #define GET_FIFO_NBLOCKS(nblocks, fifstat)		\
 	do {						\
-		nblocks = ACQ196_FIFO_NBLOCKS(fifstat); \
+		nblocks = ACQ164_FIFO_NBLOCKS(fifstat); \
 		nblocks = min(3, nblocks);		\
 	} while(0)
 
@@ -544,9 +458,11 @@ int acq200_custom_fpga_open (struct inode *inode, struct file *file)
 	int rc = 0;
 
 	switch(iminor){
+#ifdef PGMCOMOUT
 	case ACQ132_GATE_PULSE_LOAD:
 		file->f_op = &acq132_gate_pulse_ops;
 		break;
+#endif
 	default:
 		return acq200_fpga_open(inode, file);
 	}
@@ -571,7 +487,7 @@ static void enable_acq164_start(void)
 	DBGSF("TEMPORARY: blip enable");
 	disable_acq();
 
-	if (acq196_trigger_detect()){
+	if (acq164_trigger_detect()){
 		err("WOAAH - triggered already, an not yet enabled not good\n"
 		    "FIFCON: 0x%08x\n"
 		    "FIFSTAT:0x%08x\n"
@@ -582,7 +498,7 @@ static void enable_acq164_start(void)
 	DBGSF("set ACQEN");
 	enable_acq();
 
-	if (acq196_trigger_detect()){
+	if (acq164_trigger_detect()){
 		err("WOAAH - triggered already, not good\n"
 		    "FIFCON: 0x%08x\n"
 		    "FIFSTAT:0x%08x\n"
@@ -591,14 +507,14 @@ static void enable_acq164_start(void)
 		finish_with_engines(-__LINE__);
 	}
 
-	DMC_WO->trigger_detect = acq196_trigger_detect;
+	DMC_WO->trigger_detect = acq164_trigger_detect;
 
 	DBGSF("set events");
 	signalCommit(CAPDEF->ev[0]);
 
 
 	DBGSF("FINAL:next enable FIFCON");
-	enable_fifo(CAPDEF->channel_mask);
+	enable_fifo();
 
 	preEnable();
 
@@ -635,21 +551,21 @@ static int enable_soft_trigger(void)
 	    soft_trigger_retry < MAXRETRY;
 	    ++soft_trigger_retry) {
 		DBGSF("set SOFTTRIG");
-		acq196_syscon_set_all(ACQ196_SYSCON_SOFTTRIG);
+		acq164_syscon_set(ACQ164_SYSCON_SOFTTRIG);
 		DBGSF("clr SOFTTRIG");
-		acq196_syscon_clr_all(ACQ196_SYSCON_SOFTTRIG);
+		acq164_syscon_clr(ACQ164_SYSCON_SOFTTRIG);
 		DBGSF("should be triggered");
 		nwait = 0;
 
 		do {
-			if (acq196_trigger_detect()){
+			if (acq164_trigger_detect()){
 				return 1;
 			}
 
 			/**
 			 *  some FPGA's don't support TRIGGERED - fallback:
 			 */
-			if ((*ACQ196_FIFSTAT&ACQ196_FIFSTAT_HOT_NE) != 0){
+			if ((*ACQ164_FIFSTAT&ACQ164_FIFSTAT_HOT_NE) != 0){
 				return 1;				
 			}
 			if (nwait > 10){
@@ -673,7 +589,7 @@ static int enable_hard_trigger(void)
 
 	signalCommit(CAPDEF->trig);
 
-	while(!acq196_trigger_detect()){
+	while(!acq164_trigger_detect()){
 		if (DG->finished_with_engines){
 			return -1;
 		}
@@ -710,26 +626,25 @@ static int fifo_read_init_action(void)
 	DG->fiferr = 0;
 
 	dbg(1, "%10s reset: F:0x%08x S:0x%08x",
-	    "BEFORE", *FIFSTAT, acq196_getSyscon());
+	    "BEFORE", *FIFSTAT, acq164_getSyscon());
 
 	*ACQ200_ICR = 0;
 
-	acq196_fifcon_clr_all(ACQ196_FIFCON_HOT_HITIDE);
-	acq196_fifcon_set_all(HITIDE);
+	reg_set_field(ACQ164_FIFCON, 0, ACQ164_FIFCON_HOT_HITIDE, HITIDE);
 
 	dbg(1, "%10s reset: F:0x%08x S:0x%08x", 
-	    "AFTER", *FIFSTAT, acq196_getSyscon());
+	    "AFTER", *FIFSTAT, acq164_getSyscon());
 
 
 /*
  * pgm 20040125: keep soft trigger high (then it cannot be construed as
  * a falling edge on DAQEN?
  */
-	dbg(DISABLE_ACQ_DEBUG, "ACQ196_SYSCON_SOFTTRIG|ACQ196_SYSCON_ACQEN");
-	acq196_syscon_set_all(ACQ196_SYSCON_SOFTTRIG|ACQ196_SYSCON_ACQEN);
+	dbg(DISABLE_ACQ_DEBUG, "ACQ164_SYSCON_SOFTTRIG|ACQ164_SYSCON_ACQEN");
+	acq164_syscon_set(ACQ164_SYSCON_SOFTTRIG|ACQ164_SYSCON_ACQEN);
 
 	dbg(1, "%10s reset: F:0x%08x S:0x%08x", 
-	    "ENABLED", *ACQ196_FIFCON, acq196_getSyscon());
+	    "ENABLED", *ACQ164_FIFCON, acq164_getSyscon());
 
 	if (DG->activate_event_on_arm){
 		struct Phase* phase = DMC_WO->now;
@@ -799,9 +714,9 @@ static void init_pbi(struct device *dev)
 	DG->fpga.regs.pa = ACQ200_FPGA_P;
 	DG->fpga.regs.len = 0x400;
 	DG->fpga.regs.va = (void*)ACQ200_FPGA;
-	DG->fpga.fifo.pa = ACQ200_FPGA_P+ACQ196_FIFO_OFFSET;
+	DG->fpga.fifo.pa = ACQ200_FPGA_P+ACQ164_FIFO_OFFSET;
 	DG->fpga.fifo.len = 0x400;
-	DG->fpga.fifo.va = (void*)(ACQ200_FPGA+ACQ196_FIFO_OFFSET);
+	DG->fpga.fifo.va = (void*)(ACQ200_FPGA+ACQ164_FIFO_OFFSET);
 }
 
 static int _acq196_commitEvX(
@@ -811,13 +726,13 @@ static int _acq196_commitEvX(
 {
 	u32 syscon = *reg;
 	
-	syscon &= ~(ACQ196_SYSCON_EV_MASK << shift);
+	syscon &= ~(ACQ100_SYSCON_EV_MASK << shift);
 	
 	if (signal->is_active){
 		u32 rising = signal->rising? 
-			ACQ196_SYSCON_EV_RISING: ACQ196_SYSCON_EV_FALLING;
+			ACQ100_SYSCON_EV_RISING: ACQ100_SYSCON_EV_FALLING;
 
-		syscon |= ((rising | acq196_lineCode(signal->DIx)) << shift);
+		syscon |= ((rising | acq100_lineCode(signal->DIx)) << shift);
 	}	
 
 	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
@@ -829,14 +744,16 @@ static int _acq196_commitEvX(
 static int acq196_commitTrg(struct Signal* signal)
 {
 	return _acq196_commitEvX(
-		signal, ACQ196_SYSCON_ADC, ACQ196_SYSCON_TRG_SHIFT);
+		signal, ACQ164_SYSCON, ACQ164_SYSCON_TRG_SHIFT);
 }
 
 static int acq196_commitAOTrg(struct Signal* signal)
 {
 	return _acq196_commitEvX(
-		signal, ACQ196_SYSCON_DAC, ACQ196_SYSCON_TRG_SHIFT);
+		signal, ACQ100_SYSCON_DAC, ACQ164_SYSCON_TRG_SHIFT);
 }
+
+#ifdef BADPORT
 
 static int acq196_commitAXClk(struct Signal* signal, volatile u32* reg)
 {
@@ -859,31 +776,31 @@ static int acq196_commitAXClk(struct Signal* signal, volatile u32* reg)
 	*reg = syscon;	
 	return 0;
 }
-
+#endif
 
 static int acq196_commitAIClk(struct Signal* signal)
 {
-	return acq196_commitAXClk(signal, ACQ196_SYSCON_ADC);
+	return -1;
+//	return acq196_commitAXClk(signal, ACQ196_SYSCON_ADC);
 }
 
 static int acq196_commitAOClk(struct Signal* signal)
 {
-	return acq196_commitAXClk(signal, ACQ196_SYSCON_DAC);
+	return -1;
+//	return acq196_commitAXClk(signal, ACQ196_SYSCON_DAC);
 }
 
 static int acq196_commitMasClk(struct Signal* signal)
 {
-	u32 clkcon = *ACQ196_CLKCON;
+	u32 clkcon = *ACQ164_CLKCON;
 	
-	clkcon &= ~(ACQ196_CLKCON_OCS_MASK|ACQ196_CLKCON_CLKMAS);
+	clkcon &= ~(ACQ164_CLKCON_OCS_MASK);
 
 	if (signal->is_active){
                 /* @@todo WARNING starts D0 == 0 */
-		clkcon |= 
-			ACQ196_CLKCON_OCS_DOx(signal->DIx)|
-			ACQ196_CLKCON_CLKMAS;
+		clkcon |= signal->DIx;
 	}
-	*ACQ196_CLKCON = clkcon;
+	*ACQ164_CLKCON = clkcon;
 	return 0;
 }
 
@@ -891,17 +808,18 @@ static int acq196_commitMasClk(struct Signal* signal)
 
 static int acq196_commitIntClkSrc(struct Signal* signal)
 {
-	u32 clkcon = *ACQ196_CLKCON;
+	u32 clkcon = *ACQ164_CLKCON;
 	
-	clkcon &= ~(ACQ196_CLKCON_CS_MASK);
+	clkcon &= ~(ACQ164_CLKCON_CS_MASK);
 
 	if (signal->is_active){
-		clkcon |= ACQ196_CLKCON_CS_DIx(signal->DIx);
+		clkcon |= signal->DIx;	/* @@todo */
 	}
-	*ACQ196_CLKCON = clkcon;
+	*ACQ164_CLKCON = clkcon;
 	return 0;
 }
 
+#ifdef BADPORT
 static int acq196_commitSyncTrigSrc(struct Signal* signal)
 {
 	u32 clkcon = *ACQ196_CLKCON;
@@ -931,16 +849,6 @@ static int acq196_commitMasSyncTrig(struct Signal *signal)
 	return 0;	
 }
 
-static int acq216_commitTcrSrc(struct Signal* signal)
-{
-	u32 clkcon = *ACQ216_TCR_IMM;
-	
-	clkcon &= ~ACQ216_TCR_TCS_MASK;	
-	clkcon |= signal->DIx<<ACQ216_TCR_TCS_SHL;
-
-	*ACQ216_TCR_IMM = clkcon;	
-	return 0;
-}
 
 static int acq164_commitGateSrc(struct Signal* signal)
 {
@@ -960,6 +868,20 @@ static int acq164_commitGateSrc(struct Signal* signal)
 	*ACQ132_SYSCON = syscon;
 	return 0;
 }
+#endif
+
+
+static int acq216_commitTcrSrc(struct Signal* signal)
+{
+	u32 clkcon = *ACQ216_TCR_IMM;
+	
+	clkcon &= ~ACQ216_TCR_TCS_MASK;	
+	clkcon |= signal->DIx<<ACQ216_TCR_TCS_SHL;
+
+	*ACQ216_TCR_IMM = clkcon;	
+	return 0;
+}
+
 
 static struct CAPDEF* acq164_createCapdef(void)
 {
@@ -998,24 +920,26 @@ static struct CAPDEF* acq164_createCapdef(void)
 		"mas_clk", 0, 5, 1, 0, 0,acq196_commitMasClk);
 	capdef->mas_clk->is_output = 1;
 
+#ifdef BADPORT
 	capdef->sync_trig_src = createSignal(
 		"sync_trig_src", 3, 5, 3, 0, 0, acq196_commitSyncTrigSrc);
 
 	capdef->sync_trig_mas = createSignal(
 		"sync_trig_mas", 3, 5, 3, 0, 0, acq196_commitMasSyncTrig);
 	capdef->sync_trig_mas->is_output = 1;
-
+#endif
 	capdef->counter_src = 
 		createSignal("counter_src", 0, 6, 6,0, 1, acq216_commitTcrSrc);
 	/** @todo how to action? */
 	capdef->counter_src->has_internal_option = 1;
 
+#ifdef BADPORT
 	capdef->gate_src = createLevelSignal(
 		"gate_src", 0, 7, 7, 0, 0, acq164_commitGateSrc);
 	/* warning: it's the same thing ... */
 	capdef->ev[0] = createSignal(
 		"event0", 0, 7, 3, 0, 0, acq164_commitGateSrc);
-
+#endif
 	return capdef;
 }
 
@@ -1041,12 +965,14 @@ extern int init_arbiter(void);
 void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 {
 	u32 ics527 = 0;
-	ics527 |= to_mask(ACQ132_ICS527_FDW, FDW);
-	ics527 |= to_mask(ACQ132_ICS527_RDW, RDW);
-	ics527 |= to_mask(ACQ132_ICS527_CLKDIV, R);
-	ics527 |= to_mask(ACQ132_ICS527_S1S0, Sx);
+	ics527 |= to_mask(ACQ100_ICS527_FDW, FDW);
+	ics527 |= to_mask(ACQ100_ICS527_RDW, RDW);
+#ifdef BADPORT
+	ics527 |= to_mask(ACQ100_ICS527_CLKDIV, R);
+#endif
+	ics527 |= to_mask(ACQ100_ICS527_S1S0, Sx);
 
-	*ACQ132_ICS527 = ics527;
+	*ACQ164_ICS527 = ics527;
 
 	acq200_clk_hz = ob_clock_def.actual/ACQ164_DECIM * 1000;
 }
@@ -1058,6 +984,7 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 static void acq164_set_defaults(void)
 {
 /* ICS527 - make "null modem" 4 /4 - works for 1..2MHz clocks */
+        err("2MHz is likely to be a bad idea ..");
 	acq132_set_obclock(6, 0, 2, 2);
 }
 
@@ -1070,8 +997,8 @@ static int acq164_fpga_probe(struct device *dev)
 	init_arbiter();
 
 	/* two reads allows for wedged PBI bus on jtag load */
-	if (*ACQ196_BDR == ACQ196_BDR_DEFAULT || 
-	    *ACQ196_BDR == ACQ196_BDR_DEFAULT    ){
+	if (*ACQ164_BDR == ACQ100_BDR_DEFAULT || 
+	    *ACQ164_BDR == ACQ100_BDR_DEFAULT    ){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");
@@ -1081,7 +1008,7 @@ static int acq164_fpga_probe(struct device *dev)
 		}
 		return rc;
 	}else{
-		err("DEVICE NOT FOUND 0x%p=0x%08x", ACQ196_BDR, *ACQ196_BDR);
+		err("DEVICE NOT FOUND 0x%p=0x%08x", ACQ164_BDR, *ACQ164_BDR);
 		return -ENODEV;
 	}
 }
@@ -1196,12 +1123,12 @@ acq164_fifo_exit_module(void)
 void acq164_set_obclock(int FDW, int RDW, int R, int Sx)
 {
 	u32 ics527 = 0;
-	ics527 |= to_mask(ACQ132_ICS527_FDW, FDW);
-	ics527 |= to_mask(ACQ132_ICS527_RDW, RDW);
-	ics527 |= to_mask(ACQ132_ICS527_CLKDIV, R);
-	ics527 |= to_mask(ACQ132_ICS527_S1S0, Sx);
+	ics527 |= to_mask(ACQ100_ICS527_FDW, FDW);
+	ics527 |= to_mask(ACQ100_ICS527_RDW, RDW);
+//	ics527 |= to_mask(ACQ132_ICS527_CLKDIV, R);
+	ics527 |= to_mask(ACQ100_ICS527_S1S0, Sx);
 
-	*ACQ132_ICS527 = ics527;
+	*ACQ164_ICS527 = ics527;
 
 	acq200_clk_hz = ob_clock_def.actual/ACQ164_DECIM * 1000;
 }

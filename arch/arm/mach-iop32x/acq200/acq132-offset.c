@@ -51,8 +51,7 @@
 #define LFS_MAGIC 0xa132a132
 
 #define TD_SZ  (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+1+1)*TD_SZ)
-
+#define MY_FILES_SZ(numchan) ((2+(numchan)+1+1)*TD_SZ)
 
 
 #define DACX 0
@@ -63,6 +62,8 @@
 #define NDACSBLOCK 4
 #define NDACSCHIP  8
 
+/* convert ino to channel - ch01 is at ino 2 */
+#define INO2CH(ch) (int)((ch) - 1)  
 /*
  * map chip, dac to channel in block
  */
@@ -224,24 +225,24 @@ static unsigned short lookup_offset(int block, int chip, int dac)
 
 static inline void set_chipsel(void)
 {
-	*ACQ196_OFFSET_DACS = ACQ196_OFFSET_DACS_CHIPSEL;
+	*ACQ100_OFFSET_DACS = ACQ100_OFFSET_DACS_CHIPSEL;
 
 	dbg(1, "write %08x readback %08x",
-	    ACQ196_OFFSET_DACS_CHIPSEL, *ACQ196_OFFSET_DACS);
+	    ACQ100_OFFSET_DACS_CHIPSEL, *ACQ100_OFFSET_DACS);
 }
 
 
 static inline void write_data(int dac, unsigned short opair[])
 {
-	u32 addr = dac << ACQ196_OFFSET_DACS_ASHIFT;
+	u32 addr = dac << ACQ100_OFFSET_DACS_ASHIFT;
 	u32 control = 
-		((opair[DACX] | addr) << ACQ196_OFFSET_DACS_XSHIFT) |
-		((opair[DACY] | addr) << ACQ196_OFFSET_DACS_YSHIFT);
+		((opair[DACX] | addr) << ACQ100_OFFSET_DACS_XSHIFT) |
+		((opair[DACY] | addr) << ACQ100_OFFSET_DACS_YSHIFT);
 	u32 status;
 
-	*ACQ196_OFFSET_DACS = control;
+	*ACQ100_OFFSET_DACS = control;
 	
-	while((status = *ACQ196_OFFSET_DACS)&ACQ196_OFFSET_DACS_HSHAKE){
+	while((status = *ACQ100_OFFSET_DACS)&ACQ100_OFFSET_DACS_HSHAKE){
 		dbg(3, "polling HSHAKE %08x", status);
 	}
 
@@ -274,17 +275,19 @@ static void write_all(void)
 		set_chipsel();
 	}
 
-	*ACQ196_OFFSET_DACS = 0;
+	*ACQ100_OFFSET_DACS = 0;
 }
 
 #define TMPSIZE 32
 
 static int access_open(struct inode *inode, struct file *filp)
 {
-	if (inode->i_ino == 0 || inode->i_ino > MAXCHAN){
+	int ch = INO2CH(inode->i_ino);
+
+	if (ch < 1 || ch > MAXCHAN){
 		return -ENODEV;
 	}
-	filp->private_data = (void*)inode->i_ino;
+	filp->private_data = (void*)ch;
 	return 0;
 }
 
@@ -415,6 +418,7 @@ static int offsetfs_fill_super (struct super_block *sb, void *data, int silent)
 	static char names[MAXCHAN+1][4];
 
 	int ichan;
+	int fn = 0;	/* file number in fs */
 
 	for (ichan = 1; ichan <= MAXCHAN; ++ichan){
 		sprintf(names[ichan], "%02d", ichan);
@@ -422,16 +426,17 @@ static int offsetfs_fill_super (struct super_block *sb, void *data, int silent)
 
 	my_files = kmalloc(MY_FILES_SZ(NCHAN), GFP_KERNEL);
 
-	memcpy(&my_files[0], &front, TD_SZ);
+	memcpy(&my_files[fn++], &front, TD_SZ);
+	memcpy(&my_files[fn++], &front, TD_SZ);
 	
-	for (ichan = 1; ichan <= NCHAN; ++ichan){
-		my_files[ichan].name = names[ichan];
-		my_files[ichan].ops  = &access_ops;
-		my_files[ichan].mode = S_IWUSR|S_IRUGO;
+	for (ichan = 1; ichan <= NCHAN; ++ichan, fn++){
+		my_files[fn].name = names[ichan];
+		my_files[fn].ops  = &access_ops;
+		my_files[fn].mode = S_IWUSR|S_IRUGO;
 	}
 
-	memcpy(&my_files[ichan++], &commit, TD_SZ);
-	memcpy(&my_files[ichan++], &backstop, TD_SZ);
+	memcpy(&my_files[fn++], &commit, TD_SZ);
+	memcpy(&my_files[fn++], &backstop, TD_SZ);
 	
 	return simple_fill_super(sb, LFS_MAGIC, my_files);
 }

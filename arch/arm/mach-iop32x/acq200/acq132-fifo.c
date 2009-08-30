@@ -977,13 +977,13 @@ static int _acq196_commitEvX(
 {
 	u32 syscon = *reg;
 	
-	syscon &= ~(ACQ196_SYSCON_EV_MASK << shift);
+	syscon &= ~(ACQ100_SYSCON_EV_MASK << shift);
 	
 	if (signal->is_active){
 		u32 rising = signal->rising? 
-			ACQ196_SYSCON_EV_RISING: ACQ196_SYSCON_EV_FALLING;
+			ACQ100_SYSCON_EV_RISING: ACQ100_SYSCON_EV_FALLING;
 
-		syscon |= ((rising | acq196_lineCode(signal->DIx)) << shift);
+		syscon |= ((rising | acq100_lineCode(signal->DIx)) << shift);
 	}	
 
 	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
@@ -995,13 +995,13 @@ static int _acq196_commitEvX(
 static int acq196_commitTrg(struct Signal* signal)
 {
 	return _acq196_commitEvX(
-		signal, ACQ196_SYSCON_ADC, ACQ196_SYSCON_TRG_SHIFT);
+		signal, ACQ100_SYSCON, ACQ132_SYSCON_TRG_SHIFT);
 }
 
 static int acq196_commitAOTrg(struct Signal* signal)
 {
 	return _acq196_commitEvX(
-		signal, ACQ196_SYSCON_DAC, ACQ196_SYSCON_TRG_SHIFT);
+		signal, ACQ100_SYSCON_DAC, ACQ100_SYSCON_TRG_SHIFT);
 }
 
 static int acq196_commitAXClk(struct Signal* signal, volatile u32* reg)
@@ -1239,8 +1239,8 @@ static int acq132_fpga_probe(struct device *dev)
 
 	acq132_register_transformers();
 	/* two reads allows for wedged PBI bus on jtag load */
-	if (*ACQ196_BDR == ACQ196_BDR_DEFAULT || 
-	    *ACQ196_BDR == ACQ196_BDR_DEFAULT    ){
+	if (*ACQ132_BDR == ACQ100_BDR_DEFAULT || 
+	    *ACQ132_BDR == ACQ100_BDR_DEFAULT    ){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");
@@ -1251,7 +1251,7 @@ static int acq132_fpga_probe(struct device *dev)
 		}
 		return rc;
 	}else{
-		err("DEVICE NOT FOUND 0x%p=0x%08x", ACQ196_BDR, *ACQ196_BDR);
+		err("DEVICE NOT FOUND 0x%p=0x%08x", ACQ132_BDR, *ACQ132_BDR);
 		return -ENODEV;
 	}
 }

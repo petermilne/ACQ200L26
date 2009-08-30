@@ -19,8 +19,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#warning WORKTODO ACQ132 crib of ACQ196
-
 /* NB: fifcon in case ACQ132, ACQ196 is actually FIFO_STATUS !! */
 	
 #define DTACQ_MACH 2

@@ -19,11 +19,17 @@
 #ifndef __ACQ132_H__
 #define __ACQ132_H__
 
-#include "acq196.h"
-#define ACQ132_BDR	ACQ196_BDR
-#define ACQ132_FIFCON	ACQ196_FIFCON
-#define ACQ132_FIFSTAT  ACQ196_FIFSTAT
-#define ACQ132_SYSCON	ACQ196_SYSCON_ADC
+#define HAS_OB_CLOCK 1
+#include "acq100.h"
+#include "acq196.h"		/* @@todo : want to eliminate 1966 refs */
+
+
+
+
+#define ACQ132_BDR		FPGA_REG(0x00)
+#define ACQ132_FIFCON		FPGA_REG(0x04)
+#define ACQ132_FIFSTAT		FPGA_REG(0x08)
+#define ACQ132_SYSCON		FPGA_REG(0x0c)
 /* custom regs */
 #define ACQ132_SFPGA_CONF	FPGA_REG(0x10)
 #define ACQ132_ICS527		FPGA_REG(0x18)
@@ -90,6 +96,12 @@
 
 /* obsoleted by rev 3 */
 #define ACQ132_SYSCON_RANGE_HI 0x00800000
+
+
+#define ACQ132_SYSCON_EV0_SHIFT 8
+#define ACQ132_SYSCON_EV1_SHIFT 12
+#define ACQ132_SYSCON_TRG_SHIFT 16
+
 
 
 #define ACQ132_FIFSTAT_ADC_EV	0x00400000	/* Event or Gate (RGM) */
@@ -340,16 +352,6 @@ void acq132_set_channel_mask(u32 channel_mask);
 int acq132_getRGM(void);
 void acq132_setRGM(int enable);
 
-struct OB_CLOCK_DEF {
-	int demand;
-	int actual;
-	int FDW;
-	int RDW;
-	int R;
-	int Sx;
-};
-
-extern struct OB_CLOCK_DEF ob_clock_def;
 
 #include <asm/delay.h>
 

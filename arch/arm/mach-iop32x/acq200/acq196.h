@@ -19,12 +19,7 @@
 #ifndef __ACQ196_H__
 #define __ACQ196_H__
 
-#ifdef __ASSEMBLER__
-#define FPGA_REG(offset)   offset
-#else
-#define FPGA_REG(offset) ((volatile u32*)((unsigned)ACQ200_FPGA+offset))
-#endif
-
+#include "acq100.h"
 
 /*
  * cold FIFO 8K. 
@@ -45,10 +40,9 @@
 #endif
 #define ACQ196_CLKCON   FPGA_REG( 0x1c )
 #define ACQ200_CLKDAT   FPGA_REG( 0x20 )
-
-#define ACQ200_DIOCON   FPGA_REG( 0x24 )
-#define ACQ196_OFFSET_DACS FPGA_REG(0x28)
-#define ACQ196_WAVLIMIT FPGA_REG(0x2c)
+#define ACQ196_DIOCON	ACQ200_DIOCON		/* FPGA_REG(0x24) */
+#define ACQ196_OFFSET_DACS ACQ100_OFFSET_DACS	/* FPGA_REG(0x28) */
+#define ACQ196_WAVLIMIT	ACQ100_WAVLIMIT		/* FPGA_REG(0x2c) */
 
 /* standard FW - pulse generator */
 #define ACQ196_PGCSS	FPGA_REG(0x30)
@@ -68,8 +62,7 @@
 #define ACQ196_LL_AO_SCRATCH FPGA_REG(0x4c)
 #define ACQ196_LL_AI_SCRATCH FPGA_REG(0xc0)
 
-#define ACQ200_ICR_OFFSET 0x80
-#define ACQ200_ICR     FPGA_REG( ACQ200_ICR_OFFSET )
+
 
 #define ACQ196_FIFO_OFFSET     0x00100000
 #define ACQ196_WAVEFORM_OFFSET 0x00200000
@@ -78,8 +71,6 @@
 /*
  * FIELDS
  */
-
-#define ACQ196_BDR_DEFAULT 0xdeadbeef
 
 
 #define ACQ196_FIFCON_DAC_IE      0x80000000
@@ -187,17 +178,6 @@
 #define ACQ196_SYSCON_SOFTTRIG  0x00000002
 #define ACQ196_SYSCON_ACQEN     0x00000001
 
-#define ACQ196_SYSCON_EV_MASK    0xf
-#define ACQ196_SYSCON_EV_DISABLE 0x0
-#define ACQ196_SYSCON_EV_RISING  0x8
-#define ACQ196_SYSCON_EV_FALLING 0x0
-#define ACQ196_SYSCON_EV_DI0     0x1
-#define ACQ196_SYSCON_EV_DI1     0x2
-#define ACQ196_SYSCON_EV_DI2     0x3
-#define ACQ196_SYSCON_EV_DI3     0x4
-#define ACQ196_SYSCON_EV_DI4     0x5
-#define ACQ196_SYSCON_EV_DI5     0x6
-#define ACQ196_SYSCON_EV_RES1    0x7
 
 #define ACQ196_SYSCON_EV0_SHIFT 8
 #define ACQ196_SYSCON_EV1_SHIFT 12
@@ -276,13 +256,6 @@ static inline u32 acq196_syscon_dac_clr(u32 flags){
 #define ACQ196_CLKCON_OCS_SHIFT 0
 #define ACQ196_CLKCON_OCS_DOx(x) ((x) << ACQ196_CLKCON_OCS_SHIFT)
 
-#define ACQ200_DIOCON_SETOUT    0x00ff0000
-#define ACQ200_DIOCON_OUTDAT    0x0000ff00
-#define ACQ200_DIOCON_INPDAT    0x000000ff
-
-#define ACQ200_DIOCON_SETOUT_SHL 16
-#define ACQ200_DIOCON_OUTDAT_SHL 8
-#define ACQ200_DIOCON_INPDAT_SHL 0
 
 
 #define ACQ196_TCR_MASK         0x00000fff   /* 12 bit counter */
@@ -322,9 +295,6 @@ static inline u32 acq196_syscon_dac_clr(u32 flags){
 
 
 #ifndef __ASSEMBLER__
-
-extern int disable_acq_debug;
-#define DISABLE_ACQ_DEBUG (!disable_acq_debug)
 
 extern void disable_acq(void);
 extern void enable_acq(void);
@@ -373,10 +343,6 @@ static inline void stop_capture(void)
 }
 
 
-static inline u32 acq196_lineCode(int DIx)
-{
-	return DIx + 1; 
-}
 
 static inline void acq196_set_adc_clkdly(u8 clkdly)
 {
@@ -393,26 +359,7 @@ static inline u8 acq196_get_adc_clkdly(void)
 }
 
 
-#define ACQ196_OFFSET_DACS_CHIPSEL 0x80000000
-#define ACQ196_OFFSET_DACS_HSHAKE  0x40000000
 
-#define ACQ196_OFFSET_DACS_ADDRX   0xf
-
-
-#define ACQ196_OFFSET_DACS_ADDR0   0x0
-
-#define DACA 0x1
-#define DACB 0x2
-#define DACC 0x3
-#define DACD 0x4
-#define DACE 0x5
-#define DACF 0x6
-#define DACG 0x7
-#define DACH 0x8
-
-#define ACQ196_OFFSET_DACS_XSHIFT  16
-#define ACQ196_OFFSET_DACS_YSHIFT   0
-#define ACQ196_OFFSET_DACS_ASHIFT  10
 
 
 static inline void __dac_reset(void) {
@@ -464,13 +411,13 @@ static inline u32 arch_set_int_clk_div(u32 clkdiv)
 	return *ACQ200_CLKDAT = clkdiv;
 }
 
+static inline u32 acq196_lineCode(int DIx)
+{
+	return DIx + 1;
+}
 
 #endif /* __ASSEMBLER__ */
 
-#define ACQ196_WAVLIMIT_FAWG_DIV   0x00ff0000U
-#define ACQ196_WAVLIMIT_WAVLIMIT   0x000001ffU
-
-#define ACQ196_WAVLIMIT_FAWG_DIV_SHL 16
 
 #define ACQ196_MACCON_REF_3SHL  20
 #define ACQ196_MACCON_REF_2SHL  18
@@ -486,43 +433,6 @@ static inline u32 arch_set_int_clk_div(u32 clkdiv)
 
 #ifndef __ASSEMBLER__
 
-static inline void setFAWG_DIV(unsigned div) {
-	u32 limit = *ACQ196_WAVLIMIT;
-
-	div = max(div, 1U);
-	div = min(div, 256U);
-	
-	/** factor 2 adjust reflects realite' */
-	div *= 2;
-	
-	limit &= ~(0xff << ACQ196_WAVLIMIT_FAWG_DIV_SHL);
-	limit |= (div-1) << ACQ196_WAVLIMIT_FAWG_DIV_SHL;
-
-	*ACQ196_WAVLIMIT = limit;
-}
-static inline unsigned getFAWG_DIV(void) {
-	unsigned div = (((*ACQ196_WAVLIMIT & ACQ196_WAVLIMIT_FAWG_DIV) >>
-		ACQ196_WAVLIMIT_FAWG_DIV_SHL) + 1);
-	/** factor 2 adjust reflects realite' */	
-	return div / 2;
-}
-
-static inline void setWAVLIMIT(unsigned limit) {	
-	u32 acq196_wavlimit = *ACQ196_WAVLIMIT;
-
-	limit -= 1;
-	limit = min(limit, ACQ196_WAVLIMIT_WAVLIMIT);
-
-	acq196_wavlimit &= ~ACQ196_WAVLIMIT_WAVLIMIT;
-	acq196_wavlimit |= limit;
-
-	*ACQ196_WAVLIMIT = acq196_wavlimit;	
-}
-
-static inline unsigned getWAVLIMIT(void)
-{
-	return *ACQ196_WAVLIMIT&ACQ196_WAVLIMIT_WAVLIMIT;
-}
 static inline void acq100_set_maccon_ref(unsigned bank, unsigned select) {
 	*ACQ196_MACCON &= 
 		~(ACQ196_MACCON_REF_SEL_MASK <<ACQ196_MACCON_REFSHL(bank));
@@ -548,13 +458,6 @@ static inline unsigned acq100_get_maccon_ref(unsigned bank) {
 #define ACQ216_TCR_IMM  ACQ196_TCR_IMMEDIATE
 #define ACQ216_TCR_LAT  ACQ196_TCR_LATCH
 
-#define ACQ216_TCR_RUNNING  0x80000000
-#define ACQ216_TCR_UPDCTRL  0x18000000
-#define ACQ216_TCR_TCS_MASK 0x07000000
-#define ACQ216_TCR_COUNTER  0x00000fff
-
-#define ACQ216_TCR_TCS_SHL 24
-#define ACQ216_TCR_UPDCTRL_SHL 27
 
 
 
@@ -594,4 +497,17 @@ static inline unsigned acq100_get_maccon_ref(unsigned bank) {
 #define ACQ196_RGATE_MODE_COMB  3	/* combined transient, gated */
 
 
+/* PORT: temporary */
+#define ACQ196_OFFSET_DACS_CHIPSEL  ACQ100_OFFSET_DACS_CHIPSEL 
+#define ACQ196_OFFSET_DACS_HSHAKE   ACQ100_OFFSET_DACS_HSHAKE  
+
+#define ACQ196_OFFSET_DACS_ADDRX    ACQ100_OFFSET_DACS_ADDRX   
+#define ACQ196_OFFSET_DACS_ADDR0    ACQ100_OFFSET_DACS_ADDR0   
+
+#define ACQ196_OFFSET_DACS_XSHIFT   ACQ100_OFFSET_DACS_XSHIFT  
+#define ACQ196_OFFSET_DACS_YSHIFT   ACQ100_OFFSET_DACS_YSHIFT
+#define ACQ196_OFFSET_DACS_ASHIFT   ACQ100_OFFSET_DACS_ASHIFT
+
+
+  
 #endif /* acq196.h */
