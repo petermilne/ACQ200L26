@@ -30,9 +30,6 @@
 #define ACQ196
 #define ACQ_IS_INPUT 1
 
-#define FPGA_INT   IRQ_ACQ100_FPGA
-#define FPGA_INT_MASK (1<<FPGA_INT)
-
 #include "acq200-fifo-top.h"
 
 #include "acq200_debug.h"
@@ -128,6 +125,18 @@ static	int plut[] = {
 		[31] = 16,
 		[32] = 32 
 };
+
+static int hw_fudge(int lchan)
+{
+	switch(lchan){
+	case 61:
+		return 63;
+	case 63:
+		return 61;
+	default:
+		return lchan;
+	}
+}
 
 int acq200_lookup_pchan(int lchannel)
 {
@@ -300,17 +309,6 @@ static int access_open(struct inode *inode, struct file *filp)
 }
 
 
-static int hw_fudge(int lchan)
-{
-	switch(lchan){
-	case 61:
-		return 63;
-	case 63:
-		return 61;
-	default:
-		return lchan;
-	}
-}
 
 static ssize_t access_read(struct file *filp, char *buf,
 		size_t count, loff_t *offset)

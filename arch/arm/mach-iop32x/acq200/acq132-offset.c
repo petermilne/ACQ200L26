@@ -116,6 +116,14 @@ static const int *plut = __plut;
 static int nlut = __PLUT_ELEMS;
 
 
+static int hw_fudge(int lchan)
+{
+	switch(lchan){
+	default:
+		return lchan;
+	}
+}
+
 void acq200_setChannelLut(const int *lut, int _nlut)
 {
 	if (lut){
@@ -292,13 +300,6 @@ static int access_open(struct inode *inode, struct file *filp)
 }
 
 
-static int hw_fudge(int lchan)
-{
-	switch(lchan){
-	default:
-		return lchan;
-	}
-}
 
 static ssize_t access_read(struct file *filp, char *buf,
 		size_t count, loff_t *offset)
