@@ -34,7 +34,7 @@
 #define DI_IN_1              1
 #define CYCLE_STEAL	     1
 #define AO32CPCI	     1
-
+#define WDT		     1
 
 /** @file acq100-llc.c acq1xxx low latency control kernel module.
  *  DMA should fire on HOT_NE, and it should be IMPOSSIBLE to get a 
@@ -214,6 +214,9 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #if AO32CPCI
 "AO32CPCI"
 #endif
+#if WDT
+"WDT "
+#endif
 "\n";
 
 #define DBG dbg
@@ -306,6 +309,7 @@ static struct LlcDevGlobs {
 		} ao32;
 
 		unsigned alt_VI_target;
+		unsigned wdt_bit;
 	} settings;
 
 	u32 *llcv2_init_buf;
@@ -1023,7 +1027,25 @@ static void llPostamble(void)
 }
 
 
+static void wdt_short_action(volatile u32 *reg, unsigned short wdt_bit)
+{
+	unsigned short xx = *reg;
+	xx ^= wdt_bit;
+	*reg = xx;
+}
 
+static void wdt_action(unsigned wdt_bit)
+{
+	unsigned short xa = wdt_bit;
+	unsigned short xb = wdt_bit >> 16;
+
+	if (xa){
+		wdt_short_action(RTM_DIO_DATA_A, xa);
+	}
+	if (xb){
+		wdt_short_action(RTM_DIO_DATA_B, xb);
+	}
+}
 
 #define IS_TRIGGERED(trig) \
      ((trig) || ((trig) = (*ACQ196_SYSCON_ADC&ACQ196_SYSCON_TRIGGERED) != 0))
@@ -1636,6 +1658,7 @@ static void llc_loop_sync2V(int entry_code)
 					}
 					REPORT_TINST2V;
 					dg.status.cmd_counts.READCTR++;
+					wdt_action(dg.settings.wdt_bit);
 				}
 
 				csr &= ~LLC_CSR_S_TCYCLE;
@@ -2167,6 +2190,28 @@ static ssize_t get_alt_VI_target(
 static DEVICE_ATTR(alt_VI_target, S_IWUGO|S_IRUGO,
 		   get_alt_VI_target, set_alt_VI_target);
 
+static ssize_t set_wdt_bit(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned wdt_bit;
+	if (sscanf(buf, "0x%x", &wdt_bit) == 1){
+		dg.settings.wdt_bit = wdt_bit;
+	}
+	return strlen(buf);
+}
+
+static ssize_t get_wdt_bit(
+	struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "0x%08x\n", dg.settings.wdt_bit);
+}
+
+static DEVICE_ATTR(wdt_bit, S_IWUGO|S_IRUGO, get_wdt_bit, set_wdt_bit);
+
 /** test my ARM ASM! */
 static ssize_t show_timer0_count(
 	struct device *dev, 
@@ -2228,6 +2273,7 @@ static int mk_llc_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
 	DEVICE_CREATE_FILE(dev, &dev_attr_alt_VI_target);
+	DEVICE_CREATE_FILE(dev, &dev_attr_wdt_bit);
 
 	DEVICE_CREATE_HOST_BUF(dev, DO_src);
 	DEVICE_CREATE_HOST_BUF(dev, AO_src);
