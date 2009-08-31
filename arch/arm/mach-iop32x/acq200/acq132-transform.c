@@ -45,7 +45,7 @@
 
 
 #include "acq196-AO.h"
-#include "acq196-offset.h"
+
 
 int stub_transform;
 module_param(stub_transform, int, 0664);

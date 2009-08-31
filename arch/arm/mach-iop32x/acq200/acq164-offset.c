@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------- */
-/* acq132-offset.c offset control for acq132                                 */
+/* acq164-offset.c offset control for acq164                                 */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
@@ -27,7 +27,7 @@
 #define REVID "$Revision: 1.4 $ B102\n"
 
 #define DTACQ_MACH 2
-#define ACQ132
+#define ACQ164
 #define ACQ_IS_INPUT 1
 
 
@@ -47,18 +47,18 @@
 #include <asm/uaccess.h>	/* copy_to_user */
 
 
-#define LFS_MAGIC 0xa132a132
+#define LFS_MAGIC 0xa164a164
 
 #define TD_SZ  (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((2+(numchan)+1+1)*TD_SZ)
 
 
-#define MAXCHAN 32
+#define MAXCHAN 64
 
 #define DACX 0
 #define DACY 1
 
-#define MAXBLOCKS  1
+#define MAXBLOCKS  2
 #define NCHANNELSBLOCK 32
 #define NDACSBLOCK 4
 #define NDACSCHIP  8
@@ -91,25 +91,41 @@ static const int MAP[NDACSBLOCK+1][NDACSCHIP+1] = {
 
 
 static	const int __plut[] = {
-/* index: memory order 1:32 
- * value: nameplate order 1:32 
+/* index: nameplate order 1:32
+ * value: memory order 1:32 
  */
-	[ 1] =  1, [ 2] = 17,
-	[ 3] =  2, [ 4] = 18,
-	[ 5] =  3, [ 6] = 19,
-	[ 7] =  4, [ 8] = 20,
-	[ 9] =  5, [10] = 21,
-	[11] =  6, [12] = 22,
-	[13] =  7, [14] = 23,
-	[15] =  8, [16] = 24,
-	[17] =  9, [18] = 25,
-	[19] = 10, [20] = 26,
-	[21] = 11, [22] = 27,
-	[23] = 12, [24] = 28,
-	[25] = 13, [26] = 29,
-	[27] = 14, [28] = 30,
-	[29] = 15, [30] = 31,
-	[31] = 16, [32] = 32
+	[ 1] = 1,
+	[ 2] = 5,
+	[ 3] = 9,
+	[ 4] = 13,
+	[ 5] = 2,
+	[ 6] = 6,
+	[ 7] = 10,
+	[ 8] = 14,
+	[ 9] = 3,
+	[10] = 7,
+	[11] = 11,
+	[12] = 15,
+	[13] = 4,
+	[14] = 8,
+	[15] = 12,
+	[16] = 16,
+	[17] = 17,
+	[18] = 21,
+	[19] = 25,
+	[20] = 29,
+	[21] = 18,
+	[22] = 22,
+	[23] = 26,
+	[24] = 30,
+	[25] = 19,
+	[26] = 23,
+	[27] = 27,
+	[28] = 31,
+	[29] = 20,
+	[30] = 24,
+	[31] = 28,
+	[32] = 32
 };
 #define __PLUT_ELEMS (sizeof(__plut)/sizeof(int))
 
@@ -135,35 +151,45 @@ void acq200_setChannelLut(const int *lut, int _nlut)
 		nlut = __PLUT_ELEMS;
 	}
 }
+
 int acq200_lookup_pchan(int lchannel)
-/** lchannel in = 1:32 nameplate order return 0:32 memory order */
 {
+	int block = ((lchannel-1)/32);
+	int index = lchannel - block*32;
+
+	return block*32 + plut[index] - 1;
+}
+
+int acq200_lookup_lchan(int pchan)
+{
+	int block = ((pchan-1)/32);
+	int match = ((pchan-1)%32) + 1;
 	int index = 1;
 
-	for (; index <= nlut; ++index){
-		if (plut[index] == lchannel){
-			return index -1;
+	for (; index <= 32; ++index){
+		if (plut[index] == match){
+			return block * 32 + index;
 		}
 	}
 	return -1;
 }
 
-int acq200_lookup_lchan(int pchan)
-/* lookup pchan = 0:31 return 1:32 nameplate */
-{
-	return plut[pchan+1];
-}
+
 
 static unsigned short offsets[MAXBLOCKS+1][NCHANNELSBLOCK+1];
 
 
 static inline unsigned short *key2offset(int ikey)
-/* ikey 1..32. in this case, NO pchan lookup is required */
+/* ikey 1..64 */
 {
 	int block = (ikey-1)/NCHANNELSBLOCK + 1;
 	int lchan = (ikey-1)%NCHANNELSBLOCK + 1;
+	int pchan = acq200_lookup_pchan(lchan);
 
-	return &offsets[block][lchan];
+	dbg(1, "key2offset key %d block %d lchan %d pchan %d",
+	    ikey, block, lchan, pchan);
+
+	return &offsets[block][pchan+1];
 }
 static void set_offset(int ikey, unsigned short offset)
 {
@@ -193,3 +219,4 @@ static unsigned short lookup_offset(int block, int chip, int dac)
 
 #include "acq100-offset-inc.c"
 /* EOF */
+

@@ -167,7 +167,7 @@
 #define ACQ100_ICR_HOTEN 0x00000080
 #define ACQ100_ICR_DACEN 0x80000000
 
-
+#ifndef __ASSEMBLER__
 
 
 static inline u32 acq164_syscon_set(u32 flags) {
@@ -217,11 +217,14 @@ static inline void stop_capture(void)
 }
 
 
+
 /** Counter compatibility with ACQ216: @@worktodo */
 
 #define ACQ216_TCR_IMM  ACQ164_TCR_IMMEDIATE
 #define ACQ216_TCR_LAT  ACQ164_TCR_LATCH
 
 extern struct OB_CLOCK_DEF ob_clock_def;
+
+#endif /* #ifndef __ASSEMBLER__ */
 
 #endif	/*  __ACQ132_H__ */

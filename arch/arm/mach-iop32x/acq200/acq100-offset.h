@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------- */
-/* acq196-offset.h offset control for acq196                                 */
+/* acq100-offset.h offset control for acq196                                 */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
@@ -17,11 +17,11 @@
 /* ------------------------------------------------------------------------- */
 
 
-#ifndef _ACQ196_OFFSET_H_
-#define _ACQ196_OFFSET_H_
+#ifndef _ACQ100_OFFSET_H_
+#define _ACQ100_OFFSET_H_
 
-int acq196_offset_fs_create(struct device *device);
-void acq196_offset_fs_remove(void);
+int acq100_offset_fs_create(struct device *device);
+void acq100_offset_fs_remove(void);
 
 
 

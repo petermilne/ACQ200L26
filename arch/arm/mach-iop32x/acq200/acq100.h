@@ -228,7 +228,8 @@ static inline u32 acq100_lineCode(int DIx)
 extern int disable_acq_debug;
 #define DISABLE_ACQ_DEBUG (!disable_acq_debug)
 
-static inline u32 reg_set_field(volatile u32* reg, int shift, u32 mask, u32 value)
+static inline u32 
+reg_set_field(volatile u32* reg, int shift, u32 mask, u32 value)
 {
 	u32 rv = *reg;
 	rv &= ~ (mask << shift);
@@ -236,8 +237,6 @@ static inline u32 reg_set_field(volatile u32* reg, int shift, u32 mask, u32 valu
 	*reg = rv;
 	return rv;
 }
-
-#endif	/* __ASSEMBLER__ */
 
 
 
@@ -262,5 +261,7 @@ struct OB_CLOCK_DEF {
 
 extern struct OB_CLOCK_DEF ob_clock_def;
 #endif
+
+#endif	/* __ASSEMBLER__ */
 
 #endif	/*  __ACQ100_H__ */

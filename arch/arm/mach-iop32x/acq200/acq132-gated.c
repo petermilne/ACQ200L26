@@ -42,8 +42,6 @@
 
 
 #include "acq196-AO.h"
-#include "acq196-offset.h"
-
 
 
 

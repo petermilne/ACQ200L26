@@ -28,7 +28,7 @@
 
 #include "acq200-fifo-top.h"
 	
-#include "acq196.h"
+#include "acq164.h"
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/arch/hardware.h>
@@ -43,8 +43,8 @@
 
 #if defined ACQ164
 
-#define ACQ200_FIFCON		ACQ196_FIFSTAT
-#define ACQ200_SYSCON		ACQ196_SYSCON
+#define ACQ200_FIFCON		ACQ164_FIFSTAT
+#define ACQ200_SYSCON		ACQ164_SYSCON
 #define ACQ200_FIFCON_MASK	0x0000000f
 #define ACQ132_FIFSTAT_HOTPOINT 0x0000000f
 	
@@ -59,7 +59,7 @@
 
 
 	.macro DO_CHECK_2B tmp, fifcon, not_2b
-	and	\tmp, \fifcon, #ACQ196_FIFSTAT_HOTPOINT
+	and	\tmp, \fifcon, #ACQ164_FIFSTAT_HOTPOINT
 	cmp	\tmp, #HOTxB
 	blt	\not_2b
 	.endm
@@ -71,7 +71,7 @@
 #define UPDATE_HOT_HISTO 1
 	
 	.macro GET_HOT tmp, fifcon
-	and	\tmp, \fifcon, #ACQ132_FIFSTAT_HOTPOINT
+	and	\tmp, \fifcon, #ACQ164_FIFSTAT_HOTPOINT
 	.endm
 
 #define MACH_VER CHECK_2B
