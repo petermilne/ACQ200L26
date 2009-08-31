@@ -122,7 +122,6 @@ static int enable_hard_trigger(void);
 
 void disable_acq(void) 
 {
-
 	dbg(DISABLE_ACQ_DEBUG, "");
 	acq164_syscon_clr(ACQ164_SYSCON_ACQEN);
 }
@@ -989,6 +988,16 @@ static void acq164_set_defaults(void)
 }
 
 
+static unsigned acq164_getClkCounter(void)
+{
+	return (*ACQ164_CLK_COUNTER) & ACQ100_CLK_COUNTER_COUNT;
+}
+
+static struct CLKCOUNTER_DESCR clk_probe = {
+	.getCount = acq164_getClkCounter,
+	.prescale = ACQ100_CLK_COUNTER_PRESCALE,
+	.rollover = ACQ100_CLK_COUNTER_COUNT+1
+};
 
 
 static int acq164_fpga_probe(struct device *dev)
@@ -1005,6 +1014,7 @@ static int acq164_fpga_probe(struct device *dev)
 		}else{
 			mk_sysfs(&acq164_fpga_driver);
 			acq164_set_defaults();
+			acq200_start_clkCounterMonitor(&clk_probe);
 		}
 		return rc;
 	}else{

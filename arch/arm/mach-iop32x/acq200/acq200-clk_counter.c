@@ -39,7 +39,6 @@
 #include "acq200-fifo-local.h"
 
 #include "acq200-fifo.h"
-#include "acq132.h"
 
 #include "boxcar32.h"
 
@@ -51,10 +50,7 @@
 
 
 
-static unsigned acq132_getClkCounter(void)
-{
-	return (*ACQ132_CLK_COUNTER) & ACQ132_CLK_COUNTER_COUNT;
-}
+
 static unsigned iop32x_getGTSR(void)
 {
 	return (*IOP321_GTSR) & GTSR_ROLLOVER_MASK;
@@ -66,32 +62,26 @@ module_param(clk_dj, int, 0444);
 int clk_dj_max = 4;
 module_param(clk_dj_max, int, 0644);
 
-struct CLKCOUNTER_STATE {
-	struct BOXCAR32 data;
 
-	unsigned (* getCount)(void);
-	int prescale;	
-	unsigned rollover;
+struct CLKCOUNTER_STATE {
+	const struct CLKCOUNTER_DESCR descr;
+	struct BOXCAR32 data;
 	u32 previous;
 	u32 result;
 };
 
+static struct CLKCOUNTER_STATE clk_probe;
 
-static struct CLKCOUNTER_STATE clk_probe = {
-	.getCount = acq132_getClkCounter,
-	.prescale = ACQ132_CLK_COUNTER_PRESCALE,
-	.rollover = ACQ132_CLK_COUNTER_COUNT+1
-};
 static struct CLKCOUNTER_STATE clk_ref = {
-	.getCount = iop32x_getGTSR,
-	.prescale = 1,
-	.rollover = GTSR_ROLLOVER_MASK+1
+	.descr.getCount = iop32x_getGTSR,
+	.descr.prescale = 1,
+	.descr.rollover = GTSR_ROLLOVER_MASK+1
 };
 
 
 unsigned getHz(struct CLKCOUNTER_STATE *cs)
 {
-	return (cs->result * cs->prescale * HZ) >> MAXCOUNT_SHFT;
+	return (cs->result * cs->descr.prescale * HZ) >> MAXCOUNT_SHFT;
 }
 
 int acq132_showClkCounter(char *buf)
@@ -113,7 +103,7 @@ static unsigned serviceClkCounter(struct CLKCOUNTER_STATE *st, unsigned cx)
 	unsigned delta;
 
 	if (cx < st->previous){
-		delta = st->rollover - st->previous + cx;
+		delta = st->descr.rollover - st->previous + cx;
 	}else{
 		delta = cx - st->previous;
 	}
@@ -129,8 +119,8 @@ static int clkcounter_please_stop;
 
 static void monitorClkCounter(unsigned long arg)
 {
-	unsigned cprobe = clk_probe.getCount();
-	unsigned cref = clk_ref.getCount();
+	unsigned cprobe = clk_probe.descr.getCount();
+	unsigned cref = clk_ref.descr.getCount();
 	unsigned delta;
 
 	delta = serviceClkCounter(&clk_probe, cprobe);
@@ -151,11 +141,12 @@ static void box_init(struct BOXCAR32 *b32)
 {
 	if (b32->history != 0){
 		boxcar32_free(b32);
-	}
+	}	
 	boxcar32_init(b32, MAXCOUNT);
 }	
-void acq132_start_clkCounterMonitor(void)
+void acq200_start_clkCounterMonitor(struct CLKCOUNTER_DESCR* descr)
 {
+	memcpy(&clk_probe.descr, descr, sizeof(clk_probe.descr));
 	init_timer(&clkcounter_timeout);
 	box_init(&clk_probe.data);
 	box_init(&clk_ref.data);
@@ -166,7 +157,7 @@ void acq132_start_clkCounterMonitor(void)
 	add_timer(&clkcounter_timeout);
 }
 
-void acq132_stop_clkCounterMonitor(void)
+void acq200_stop_clkCounterMonitor(void)
 {
 	clkcounter_please_stop = 1;
 }

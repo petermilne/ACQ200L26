@@ -227,6 +227,9 @@ void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 
 extern struct OB_CLOCK_DEF ob_clock_def;
 
+
+
 #endif /* #ifndef __ASSEMBLER__ */
+
 
 #endif	/*  __ACQ132_H__ */

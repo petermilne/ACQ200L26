@@ -150,4 +150,13 @@ extern void acq200_setChannelEnabled(int pchan, int enable);
 extern int acq200_pchanEnabled(int pchan);
 extern int acq200_lchanEnabled(int lchan);
 
+struct CLKCOUNTER_DESCR {
+	unsigned (* getCount)(void);
+	int prescale;	
+	unsigned rollover;
+};
+	
+
+void acq200_start_clkCounterMonitor(struct CLKCOUNTER_DESCR* clk_probe);
+void acq200_stop_clkCounterMonitor(void);
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

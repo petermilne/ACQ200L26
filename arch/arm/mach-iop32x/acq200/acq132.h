@@ -402,15 +402,7 @@ typedef unsigned * ChannelBankCursors[LRCH][QUADCH];
 int getChannelsInMask(int bank, ChannelBank channels);
 const char* acq132_getChannelSpeedMask(void);
 
-#define ACQ132_CLK_COUNTER_SRCMASK 0xf0000000
-#define ACQ132_CLK_COUNTER_SRCSHL  28
-#define ACQ132_CLK_COUNTER_SRC_DIO 0x80000000
 
-#define ACQ132_CLK_COUNTER_COUNT   0x000fffff
-#define ACQ132_CLK_COUNTER_PRESCALE	16
-#define ACQ132_CLK_COUNTER_ICSSRC	0x8
 
-void acq132_start_clkCounterMonitor(void);
-void acq132_stop_clkCounterMonitor(void);
 #endif	/*  __ACQ132_H__ */
 

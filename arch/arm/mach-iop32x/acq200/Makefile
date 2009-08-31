@@ -183,6 +183,7 @@ acq196-objs := acq196-fifo.o acq196-fiq.o \
 acq164-objs := acq164-fifo.o acq164-fiq.o \
 	acq164-fifo-procfs.o \
 	acq164-offset.o acq196-AO.o \
+	acq200-clk_counter.o \
 	$(ACQ2XX_FIFO_COMMON)
 
 acq196m-objs := acq196-fifo-m.o acq196-fiq-m.o \
@@ -203,7 +204,7 @@ acq196h-objs := acq196-fifo-h.o acq196-fiq-h.o \
 
 acq132-objs := acq132-fifo.o acq132-fiq.o \
 	acq132-fifo-procfs.o acq132-offset.o acq196-AO.o \
-	acq132-clk_counter.o \
+	acq200-clk_counter.o \
 	acq132-osam.o \
 	acq132-gated.o acq132-transform.o \
 	$(ACQ2XX_FIFO_COMMON)

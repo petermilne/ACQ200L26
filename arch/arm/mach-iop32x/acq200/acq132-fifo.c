@@ -1132,11 +1132,11 @@ static int acq132_commitClkCounterSrc(struct Signal* signal)
 {
 	u32 clk_counter = *ACQ132_CLK_COUNTER;
 
-	clk_counter &= ~ACQ132_CLK_COUNTER_SRCMASK;
+	clk_counter &= ~ACQ100_CLK_COUNTER_SRCMASK;
 
 	if (signal->DIx >=0 && signal->DIx <= 7){
-	       clk_counter |= signal->DIx << ACQ132_CLK_COUNTER_SRCSHL;
-	       clk_counter |= ACQ132_CLK_COUNTER_SRC_DIO;
+	       clk_counter |= signal->DIx << ACQ100_CLK_COUNTER_SRCSHL;
+	       clk_counter |= ACQ100_CLK_COUNTER_SRC_DIO;
 	}
 
 	*ACQ132_CLK_COUNTER = clk_counter;
@@ -1229,8 +1229,16 @@ static void acq132_set_defaults(void)
 	acq132_set_obclock(6, 0, 2, 2);
 }
 
+static unsigned acq132_getClkCounter(void)
+{
+	return (*ACQ132_CLK_COUNTER) & ACQ100_CLK_COUNTER_COUNT;
+}
 
-
+static struct CLKCOUNTER_DESCR clk_probe = {
+	.getCount = acq132_getClkCounter,
+	.prescale = ACQ100_CLK_COUNTER_PRESCALE,
+	.rollover = ACQ100_CLK_COUNTER_COUNT+1
+};
 
 static int acq132_fpga_probe(struct device *dev)
 {
@@ -1247,7 +1255,7 @@ static int acq132_fpga_probe(struct device *dev)
 		}else{
 			mk_sysfs(&acq132_fpga_driver);
 			acq132_set_defaults();
-			acq132_start_clkCounterMonitor();
+			acq200_start_clkCounterMonitor(&clk_probe);
 		}
 		return rc;
 	}else{
@@ -1258,7 +1266,7 @@ static int acq132_fpga_probe(struct device *dev)
 
 static int acq132_fpga_remove(struct device *dev)
 {
-	acq132_stop_clkCounterMonitor();
+	acq200_stop_clkCounterMonitor();
 	acqX00_fpga_remove(dev, IRQ_ACQ100_FPGA);
 	return 0;
 }
