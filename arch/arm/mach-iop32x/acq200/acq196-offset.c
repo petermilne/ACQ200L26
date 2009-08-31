@@ -107,21 +107,21 @@ static int hw_fudge(int lchan)
 int acq200_lookup_pchan(int lchannel)
 /** lchannel in = 1:96 nameplate order return 0:95 memory order */
 {
-	int block = ((lchannel-1)/32);
-	int index = lchannel - block*32;
+	int block = ((lchannel-1)/NCHANNELSBLOCK);
+	int index = lchannel - block*NCHANNELSBLOCK;
 
-	return block*32 + plut[index] - 1;
+	return block*NCHANNELSBLOCK + plut[index] - 1;
 }
 
 int acq200_lookup_lchan(int pchan)
 {
-       int block = ((pchan-1)/32);
-       int match = ((pchan-1)%32) + 1;
+       int block = ((pchan-1)/NCHANNELSBLOCK);
+       int match = ((pchan-1)%NCHANNELSBLOCK) + 1;
        int index = 1;
 
-       for (; index <= 32; ++index){
+       for (; index <= NCHANNELSBLOCK; ++index){
                if (plut[index] == match){
-                       return block * 32 + index;
+                       return block * NCHANNELSBLOCK + index;
                }
        }
        return -1;
@@ -139,30 +139,6 @@ static inline unsigned short *key2offset(int ikey)
 	    ikey, block, lchan, pchan);
 
 	return &offsets[block][pchan+1];
-}
-static void set_offset(int ikey, unsigned short offset)
-{
-	*key2offset(ikey) = offset;
-}
-
-
-static unsigned short get_offset(int ikey)
-{
-	return *key2offset(ikey);
-}
-
-static unsigned short lookup_offset(int block, int chip, int dac)
-{
-	dbg(1, "block: %d chip:%d dac:%c pchan %02d lchan %02d value:%d",
-	    block, chip, dac-1+'A', 
-	    (block-1)*32+MAP[chip][dac], 
-	    acq200_lookup_lchan((block-1)*32+MAP[chip][dac]),
-	    offsets[block][MAP[chip][dac]] );
-
-	if (MAP[chip][dac] == 0){
-		err("BAD MAP[%d][%d]", chip, dac);
-	}
-	return offsets[block][MAP[chip][dac]];
 }
 
 

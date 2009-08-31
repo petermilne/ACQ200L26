@@ -109,31 +109,6 @@ static inline unsigned short *key2offset(int ikey)
 
 	return &offsets[block][lchan];
 }
-static void set_offset(int ikey, unsigned short offset)
-{
-	*key2offset(ikey) = offset;
-}
-
-
-static unsigned short get_offset(int ikey)
-{
-	return *key2offset(ikey);
-}
-
-static unsigned short lookup_offset(int block, int chip, int dac)
-{
-	dbg(1, "block: %d chip:%d dac:%c pchan %02d lchan %02d value:%d",
-	    block, chip, dac-1+'A', 
-	    (block-1)*32+MAP[chip][dac], 
-	    acq200_lookup_lchan((block-1)*32+MAP[chip][dac]),
-	    offsets[block][MAP[chip][dac]] );
-
-	if (MAP[chip][dac] == 0){
-		err("BAD MAP[%d][%d]", chip, dac);
-	}
-	return offsets[block][MAP[chip][dac]];
-}
-
 
 #include "acq100-offset-inc.c"
 /* EOF */
