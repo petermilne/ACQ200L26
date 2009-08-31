@@ -69,8 +69,6 @@
 #define MASK_C  0x0f000f00
 #define MASK_D  0xf000f000
 
-#define BDR_MAGIC	0xdeadbeef
-
 /* channel mask in bank */
 #define MASK_1	0x1
 #define MASK_2	0x5

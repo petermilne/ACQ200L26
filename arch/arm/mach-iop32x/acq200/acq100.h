@@ -35,7 +35,7 @@
 #define ACQ200_ICR_OFFSET 0x80
 #define ACQ200_ICR     FPGA_REG( ACQ200_ICR_OFFSET )
 
-#define ACQ100_BDR_DEFAULT 0xdeadbeef
+#define ACQ100_BDR_MAGIC	0xdeadbeef
 
 #define ACQ100_SYSCON_EV_MASK    0xf
 #define ACQ100_SYSCON_EV_DISABLE 0x0

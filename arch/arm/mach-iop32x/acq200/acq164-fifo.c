@@ -997,8 +997,8 @@ static int acq164_fpga_probe(struct device *dev)
 	init_arbiter();
 
 	/* two reads allows for wedged PBI bus on jtag load */
-	if (*ACQ164_BDR == ACQ100_BDR_DEFAULT || 
-	    *ACQ164_BDR == ACQ100_BDR_DEFAULT    ){
+	if (*ACQ164_BDR == ACQ100_BDR_MAGIC || 
+	    *ACQ164_BDR == ACQ100_BDR_MAGIC    ){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");

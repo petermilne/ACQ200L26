@@ -15,7 +15,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define DTACQ_MACH 1
+#define DTACQ_MACH 2
 #define ACQ196
 
 #include "acq200-fifo-top.h"

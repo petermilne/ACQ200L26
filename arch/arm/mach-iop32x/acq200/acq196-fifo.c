@@ -915,7 +915,7 @@ static int acq196_fpga_probe(struct device *dev)
 	init_pbi(dev);
 	init_arbiter();
 
-	if (*ACQ196_BDR == ACQ100_BDR_DEFAULT){
+	if (*ACQ196_BDR == ACQ100_BDR_MAGIC){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");

@@ -691,9 +691,9 @@ static int sfpga_get_rev(void)
 
 	reg = *ACQ132_BDR;
 	dbg(1, "BDR read #%d value 0x%08x %s", 1, reg, 
-				reg==BDR_MAGIC? "GOOD": "BAD");
+				reg==ACQ100_BDR_MAGIC? "GOOD": "BAD");
 
-	if (reg != BDR_MAGIC){
+	if (reg != ACQ100_BDR_MAGIC){
 		return - __LINE__;
 	}
 
@@ -735,7 +735,7 @@ static int sfpga_get_rev(void)
 	*ACQ132_SYSCON &= ~ACQ132_SYSCON_REV_RESET;
 
 	test = *ACQ132_BDR;
-	pass = test == BDR_MAGIC;
+	pass = test == ACQ100_BDR_MAGIC;
 
 	dbg(1, "BDR read #%d value 0x%08x %s", 5, test, 
 	    pass? "PASS": "FAIL");       

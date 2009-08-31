@@ -1239,8 +1239,8 @@ static int acq132_fpga_probe(struct device *dev)
 
 	acq132_register_transformers();
 	/* two reads allows for wedged PBI bus on jtag load */
-	if (*ACQ132_BDR == ACQ100_BDR_DEFAULT || 
-	    *ACQ132_BDR == ACQ100_BDR_DEFAULT    ){
+	if (*ACQ132_BDR == ACQ100_BDR_MAGIC || 
+	    *ACQ132_BDR == ACQ100_BDR_MAGIC    ){
 		int rc = acqX00_fpga_probe(dev, IRQ_ACQ100_FPGA);
 		if (rc != 0){
 			err("fpga_probe() failed");

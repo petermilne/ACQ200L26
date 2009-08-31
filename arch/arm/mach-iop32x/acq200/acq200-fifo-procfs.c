@@ -139,7 +139,7 @@ static ssize_t show_counter_update(
 		       CAPDEF->counter_update==2? "event1": "sample");
 }
 
-#if defined(ACQ196) || defined (ACQ132)
+#if defined(ACQ132) || defined(ACQ164) || defined(ACQ196)
 static ssize_t store_counter_update(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -1659,6 +1659,7 @@ static ssize_t store_int_clk(
 	return strlen(buf);
 }
 
+#ifndef ACQ164
 static ssize_t show_int_clk_div(
 	struct device_driver * driver, char * buf)
 {
@@ -1677,7 +1678,7 @@ static ssize_t store_int_clk_div(
 	};
 	return strlen(buf);
 }
-
+#endif
 
 
 static ssize_t show_busywait(
@@ -2510,8 +2511,10 @@ static DRIVER_ATTR(pipe_fiq, S_IRUGO, show_pipe_fiq, 0);
 static DRIVER_ATTR(busywait, S_IRUGO|S_IWUGO, show_busywait, store_busywait);
 static DRIVER_ATTR(data_structs, S_IRUGO, show_data_addresses, 0);
 static DRIVER_ATTR(int_clk, S_IRUGO|S_IWUGO, show_int_clk, store_int_clk);
+#ifndef ACQ164
 static DRIVER_ATTR(int_clk_div, S_IRUGO|S_IWUGO, 
 		   show_int_clk_div, store_int_clk_div);
+#endif
 static DRIVER_ATTR(length, S_IRUGO|S_IWUGO, show_len, store_len);
 static DRIVER_ATTR(post_length, S_IRUGO|S_IWUGO, show_postlen, store_postlen);
 static DRIVER_ATTR(reset_fifo, S_IWUGO, 0, set_reset_fifo);
@@ -2538,7 +2541,9 @@ int mk_sysfs(struct device_driver *driver)
 	DRIVER_CREATE_FILE(driver, &driver_attr_busywait);
 	DRIVER_CREATE_FILE(driver, &driver_attr_data_structs);
 	DRIVER_CREATE_FILE(driver, &driver_attr_int_clk);
+#ifndef ACQ164
 	DRIVER_CREATE_FILE(driver, &driver_attr_int_clk_div);
+#endif
 	DRIVER_CREATE_FILE(driver, &driver_attr_length);
 	DRIVER_CREATE_FILE(driver, &driver_attr_post_length);
 	DRIVER_CREATE_FILE(driver, &driver_attr_reset_fifo);

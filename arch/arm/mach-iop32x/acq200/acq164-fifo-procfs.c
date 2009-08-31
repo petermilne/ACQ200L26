@@ -15,15 +15,15 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#define DTACQ_MACH 1
-#define ACQ132
+#define DTACQ_MACH 2
+#define ACQ164
 #include <linux/seq_file.h>
 
 #include "acq200-fifo-top.h"
 
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
-#include "acq132.h"
+#include "acq164.h"
 
 #include "iop321-auxtimer.h"
 
@@ -40,12 +40,15 @@ static ssize_t show_daq_enable(struct device_driver * driver, char * buf);
 static ssize_t set_daq_enable(
 	struct device_driver * driver, const char * buf, size_t count);
 
+static int acq200_proc_dumpregs(
+	char *buf, char **start, off_t offset, int len,
+	int* eof, void* data );
 
-static void acq132_mk_dev_sysfs(struct device *dev);
-static void acq132_create_proc_entries(struct proc_dir_entry* root);
+static void acq164_mk_dev_sysfs(struct device *dev);
+static void acq164_create_proc_entries(struct proc_dir_entry* root);
 
-#define DEVICE_MK_DEV_SYSFS(dev) acq132_mk_dev_sysfs(dev)
-#define DEVICE_CREATE_PROC_ENTRIES(root) acq132_create_proc_entries(root)
+#define DEVICE_MK_DEV_SYSFS(dev) acq164_mk_dev_sysfs(dev)
+#define DEVICE_CREATE_PROC_ENTRIES(root) acq164_create_proc_entries(root)
 
 
 
@@ -58,7 +61,7 @@ static ssize_t show_coding(
 	char * buf)
 {
         return sprintf(buf,"%s\n",
-		       acq196_getSyscon()&ACQ196_SYSCON_CODE_OB?
+		       acq164_getSyscon()&ACQ164_SYSCON_CODE_OB?
 		       "unsigned":
 		       "signed" );
 }
@@ -72,9 +75,9 @@ static ssize_t store_coding(
 	const char * buf, size_t count)
 {
 	if (strncmp(buf, S_SIGNED, strlen(S_SIGNED)) == 0){
-		*ACQ196_SYSCON_ADC &= ~ACQ196_SYSCON_CODE_OB;
+		*ACQ164_SYSCON &= ~ACQ164_SYSCON_CODE_OB;
 	}else if (strncmp(buf, S_UNSIGNED, strlen(S_UNSIGNED)) == 0){
-		*ACQ196_SYSCON_ADC |= ACQ196_SYSCON_CODE_OB;
+		*ACQ164_SYSCON |= ACQ164_SYSCON_CODE_OB;
 	}
 	return strlen(buf);
 }
@@ -99,7 +102,7 @@ static ssize_t store_ob_clock(
 
 		dbg(1, "demand:%d actual:%d", def.demand, def.actual);
   
-		acq132_set_obclock(def.FDW, def.RDW, def.R, def.Sx);
+		acq164_set_obclock(def.FDW, def.RDW, def.R, def.Sx);
 	}	
 
 	return count;
@@ -120,31 +123,6 @@ static ssize_t show_ob_clock(
 static DEVICE_ATTR(ob_clock, S_IRUGO|S_IWUGO, show_ob_clock, store_ob_clock);
 
 
-
-
-static ssize_t show_FAWG_div(
-	struct device * dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-	return sprintf(buf,"%d\n", getFAWG_DIV());
-}
-
-static ssize_t store_FAWG_div(
-	struct device * dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	int div;
-
-	if (sscanf(buf, "%d", &div) == 1 && (div >= 1 && div <= 256)){
-		setFAWG_DIV(div);
-	} 
-	return strlen(buf);
-}
-
-static DEVICE_ATTR(
-	FAWG_div, S_IRUGO|S_IWUGO, show_FAWG_div, store_FAWG_div);
 
 
 static ssize_t show_slow_clock(
@@ -188,95 +166,6 @@ static DEVICE_ATTR(
 	slow_clock, S_IRUGO|S_IWUGO, show_slow_clock, store_slow_clock);
 
 
-static ssize_t show_AO_coding(
-	struct device * dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-        return sprintf(buf,"%s\n",
-		       *ACQ196_SYSCON_DAC&ACQ196_SYSCON_CODE_OB?
-		       "unsigned":
-		       "signed" );
-}
-
-static ssize_t store_AO_coding(
-	struct device * dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	sscanf(buf, "0x%x", &DG->FIFERR);
-
-	if (strncmp(buf, S_SIGNED, strlen(S_SIGNED)) == 0){
-		*ACQ196_SYSCON_DAC &= ~ACQ196_SYSCON_CODE_OB;
-	}else if (strncmp(buf, S_UNSIGNED, strlen(S_UNSIGNED)) == 0){
-		*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_CODE_OB;
-	}
-	return strlen(buf);
-}
-
-static DEVICE_ATTR(
-	AO_coding, S_IRUGO|S_IWUGO, show_AO_coding, store_AO_coding);
-
-
-
-#define S_SOFT "soft"
-#define S_HARD "clocked"
-
-static ssize_t show_AO_clock_mode(
-	struct device * dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-        return sprintf(buf,"%s\n",
-		       *ACQ196_SYSCON_DAC&ACQ196_SYSCON_LOWLAT?
-		       S_SOFT " (lowlatency)":
-		       S_HARD );
-}
-
-static ssize_t store_AO_clock_mode(
-	struct device * dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	if (strncmp(buf, S_SOFT, strlen(S_SOFT)) == 0){
-		*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_LOWLAT;
-	}else if (strncmp(buf, S_HARD, strlen(S_HARD)) == 0){
-		*ACQ196_SYSCON_DAC &= ~ACQ196_SYSCON_LOWLAT;
-	}
-	return strlen(buf);
-}
-
-
-static DEVICE_ATTR(
-	AO_clock_mode, S_IRUGO|S_IWUGO, 
-	show_AO_clock_mode, store_AO_clock_mode);
-
-static ssize_t show_event_timer_prescale(
-	struct device *dev,
-	struct device_attribute *attr,
-	char *buf)
-{
-	return sprintf(buf, "%d\n", acq132_get_prescale());	
-}
-
-static ssize_t store_event_timer_prescale(
-	struct device * dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	int prescale;
-
-	if (sscanf(buf, "%d", &prescale) == 1){
-		acq132_set_prescale(prescale);
-		return count;
-	}else{
-		return -EINVAL;
-	}
-}
-
-static DEVICE_ATTR(
-	event_timer_prescale,  S_IRUGO|S_IWUGO,
-	show_event_timer_prescale, store_event_timer_prescale);
 
 
 DEFINE_EVENT_ATTR(1);
@@ -351,89 +240,6 @@ static int belongs(int key, const int lut[], int nlut)
 
 
 
-static ssize_t show_gpg_mas(
-	struct device * dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-	u32 syscon = *ACQ132_SYSCON;
-
-	if ((syscon&ACQ132_SYSCON_GPG_MAS) == 0){
-		return sprintf(buf, "none\n");
-	}else{
-		return sprintf(buf, "%s%s%s%s\n",
-		       syscon&ACQ132_SYSCON_GPG_MASD7 ? "d7 ": "",
-		       syscon&ACQ132_SYSCON_GPG_MASD6 ? "d6 ": "",
-		       syscon&ACQ132_SYSCON_GPG_MASD5 ? "d5 ": "",
-		       syscon&ACQ132_SYSCON_GPG_MASD4 ? "d4 ": "" );
-	}
-}
-
-static ssize_t store_gpg_mas(
-	struct device * dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-/* set mas bit to be output as well. NB - doesn't set input if omitted! */
-{
-	
-	unsigned diocon = *ACQ200_DIOCON;
-	u32 syscon = *ACQ132_SYSCON;
-	char w[4][16] = {};
-	int nw;
-	int iw;
-	int ibit;
-	int init_high = 0;
-
-	syscon &= ~ACQ132_SYSCON_GPG_MAS;
-
-	if ((nw = sscanf(buf, "%15s %15s %15s %15s", 
-			 w[0], w[1], w[2], w[3])) == 0){
-		err("failed to scan command \"%s\"", buf);
-		return -EINVAL;
-	}
-	if (strcmp(w[0], "none") == 0){
-		*ACQ132_SYSCON = syscon;
-		return count;
-	}
-
-	for (iw = 0; iw != nw; ++iw){
-		if (sscanf(w[iw], "d%1d,%1d", &ibit, &init_high) >= 1){
-			switch(ibit){
-			default:
-				err("dx must be in range 7654");
-				return -EINVAL;
-			case 7:
-				syscon |= ACQ132_SYSCON_GPG_MASD7;
-				break;
-			case 6:
-				syscon |= ACQ132_SYSCON_GPG_MASD6;
-				break;
-			case 5:
-				syscon |= ACQ132_SYSCON_GPG_MASD5;
-				break;
-			case 4:
-				syscon |= ACQ132_SYSCON_GPG_MASD4;
-				break;
-			}
-			if (init_high){
-				diocon = DIO_SET_OUTPUT1(diocon, ibit);
-			}else{
-				diocon = DIO_SET_OUTPUT0(diocon, ibit);
-			}
-		}else{
-			err("invalid w[%d] \"%s\"", iw, w[iw]);
-			return -EINVAL;
-		}
-	}
-
-	acq200_setDiocon(diocon);
-	*ACQ132_SYSCON = syscon;
-	return count;			
-}
-
-static DEVICE_ATTR(gpg_mas, S_IRUGO|S_IWUGO, show_gpg_mas, store_gpg_mas);
-
-
 
 static int sfpga_get_rev(void)
 {
@@ -442,19 +248,19 @@ static int sfpga_get_rev(void)
 	u32 test;
 	int pass;
 
-	*ACQ132_SYSCON |= ACQ132_SYSCON_REV_RESET;
-	*ACQ132_SYSCON &= ~ACQ132_SYSCON_REV_RESET;
+	*ACQ164_SYSCON |= ACQ164_SYSCON_REV_RESET;
+	*ACQ164_SYSCON &= ~ACQ164_SYSCON_REV_RESET;
 
-	reg = *ACQ132_BDR;
+	reg = *ACQ164_BDR;
 	dbg(1, "BDR read #%d value 0x%08x %s", 1, reg, 
-				reg==BDR_MAGIC? "GOOD": "BAD");
+				reg==ACQ100_BDR_MAGIC? "GOOD": "BAD");
 
-	if (reg != BDR_MAGIC){
+	if (reg != ACQ100_BDR_MAGIC){
 		return - __LINE__;
 	}
 
-	*ACQ132_BDR = 0;
-	reg = *ACQ132_BDR;
+	*ACQ164_BDR = 0;
+	reg = *ACQ164_BDR;
 
 	dbg(1, "BDR read #%d value 0x%08x %s", 2, reg, 
 	    reg>=0x300? "HAS ADC comms": "NO ADC_COMMS");
@@ -467,10 +273,10 @@ static int sfpga_get_rev(void)
 	/* now make a bus test ... simple crossed bit is OK */
 
 	reg = 0xaa55aa55;
-	*ACQ132_BDR = reg;
+	*ACQ164_BDR = reg;
 
 
-	test = *ACQ132_BDR;
+	test = *ACQ164_BDR;
 	pass = test == reg;
 
 	dbg(1, "BDR read #%d value 0x%08x %s", 3, test, 
@@ -480,18 +286,18 @@ static int sfpga_get_rev(void)
 		return - __LINE__;
 	}
 	reg = 0x55aa55aa;
-	*ACQ132_BDR = reg;
-	test = *ACQ132_BDR;
+	*ACQ164_BDR = reg;
+	test = *ACQ164_BDR;
 	pass = test == reg;
 
 	dbg(1, "BDR read #%d value 0x%08x %s", 4, test, 
 	    pass? "PASS": "FAIL");       
 	
-	*ACQ132_SYSCON |= ACQ132_SYSCON_REV_RESET;
-	*ACQ132_SYSCON &= ~ACQ132_SYSCON_REV_RESET;
+	*ACQ164_SYSCON |= ACQ164_SYSCON_REV_RESET;
+	*ACQ164_SYSCON &= ~ACQ164_SYSCON_REV_RESET;
 
-	test = *ACQ132_BDR;
-	pass = test == BDR_MAGIC;
+	test = *ACQ164_BDR;
+	pass = test == ACQ100_BDR_MAGIC;
 
 	dbg(1, "BDR read #%d value 0x%08x %s", 5, test, 
 	    pass? "PASS": "FAIL");       
@@ -499,7 +305,7 @@ static int sfpga_get_rev(void)
 	return pass? rev: - __LINE__;	
 }
 
-int acq132_sfpga_get_rev(void)
+int acq164_sfpga_get_rev(void)
 {
 	static int rev;
 	static int rev_valid;
@@ -519,34 +325,23 @@ static ssize_t show_fpga_state(
 	u32 debug_old;
 	u32 t1, t2;
 	int s_ok = 0, a_ok = 0;
-	u32 a_done = 0;
 	int rev = sfpga_get_rev();
 
 	if (rev == 0){
-		debug_old = *ACQ196_BDR;
-		*ACQ196_BDR = 0xdeadbeef;
-		t1 = *ACQ196_BDR;
-		*ACQ196_BDR = ~0xdeadbeef;
-		t2 = *ACQ196_BDR;
-		*ACQ196_BDR = debug_old;
+		debug_old = *ACQ164_BDR;
+		*ACQ164_BDR = ACQ100_BDR_MAGIC;
+		t1 = *ACQ164_BDR;
+		*ACQ164_BDR = ~ACQ100_BDR_MAGIC;
+		t2 = *ACQ164_BDR;
+		*ACQ164_BDR = debug_old;
 
-		s_ok =	t1 == 0xdeadbeef && 
-			t2 == ~t1 && *ACQ196_BDR == debug_old;
+		s_ok =	t1 == ACQ100_BDR_MAGIC && 
+			t2 == ~t1 && *ACQ164_BDR == debug_old;
 	}else if (rev > 0){
 		s_ok = 1;
 	}
 
-	if (s_ok){
-		a_done = ((*ACQ132_SFPGA_CONF) >> ACQ132_SFPGA_CONF_DONE_8) &
-				ACQ132_SFPGA_CONF_8MASK;
-		a_ok = a_done == ACQ132_SFPGA_CONF_8MASK;
-		if (!a_ok){
-			err("A_FPGA not OK: %08x", *ACQ132_SFPGA_CONF);
-		}
-	}
-	len = sprintf(buf, "%s S_FPGA=%s A_FPGA=%02x rev:%08x\n",
-		      s_ok && a_ok? "GOOD": "ERR", s_ok? "OK": "ERR", a_done,
-			rev);
+	len = sprintf(buf, "S_FPGA=%s\n", s_ok && a_ok? "GOOD": "ERR");
 	return len;
 }
 
@@ -559,159 +354,31 @@ DEFINE_SIGNAL_ATTR(ao_clk);
 
 DEFINE_SIGNAL_ATTR(sync_trig_src);
 DEFINE_SIGNAL_ATTR(sync_trig_mas);
-DEFINE_SIGNAL_ATTR(gate_src);
-
-
-static ssize_t show_RGM(
-	struct device * dev,
-	struct device_attribute *attr,
-	char *buf)
-{
-	static const char* modes[] = {
-		[0] = "OFF",
-		[1] = "GATE",
-		[2] = "GATE",
-	};
-	int mode = acq132_getRGM() != 0;
-
-	return sprintf(buf, "%d %s\n", mode, modes[mode]);		
-}
-
-static ssize_t store_RGM(
-	struct device * dev,
-	struct device_attribute *attr,
-	const char *buf, size_t count)
-{
-	unsigned mode;
-
-	if (sscanf(buf, "%u", &mode) > 0){
-		acq132_setRGM(mode);
-		return count;
-	}else{
-		return -EPERM;
-	}
-}
-
-static DEVICE_ATTR(RepeatingGateMode, S_IRUGO|S_IWUGO, show_RGM, store_RGM);
 
 
 
-static void acq132_mk_dev_sysfs(struct device *dev)
+
+
+static void acq164_mk_dev_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
-	DEVICE_CREATE_FILE(dev, &dev_attr_FAWG_div);
 	DEVICE_CREATE_FILE(dev, &dev_attr_slow_clock);
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_coding);
-	DEVICE_CREATE_FILE(dev, &dev_attr_AO_clock_mode);
-	DEVICE_CREATE_FILE(dev, &dev_attr_event_timer_prescale);
 	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
-	DEVICE_CREATE_FILE(dev, &dev_attr_ao_trig);
-	DEVICE_CREATE_FILE(dev, &dev_attr_ao_clk);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
-	DEVICE_CREATE_FILE(dev, &dev_attr_gate_src);
-	DEVICE_CREATE_FILE(dev, &dev_attr_gpg_mas);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
-	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
 }
 
 
-#define MASK_A	0x000f000f
-#define MASK_B  0x00f000f0
-#define MASK_C  0x0f000f00
-#define MASK_D  0xf000f000
-
-
-
-
-
-int count_bits(unsigned mask) {
-	int ibit;
-	int count = 0;
-
-	for (ibit = 0; ibit < 32; ++ibit){
-		if (mask & (1<<ibit)){
-			++count;
-		}
-	}
-	return count;
-}
-
-static int isValidMask(unsigned left, unsigned right)
-{
-	if (left != right){
-		return 0;
-	}
-	switch(left){
-	case MASK_1:
-	case MASK_2:
-	case MASK_4:
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-/*
-Valid Channel Masks
-
-11111111111111111111111111111111
-11110000000000001111000000000000
-10100000000000001010000000000000
-00010000000000000001000000000000
-00001111000000000000111100000000
-00001010000000000000101000000000
-00000001000000000000000100000000
-00000000111100000000000011110000
-00000000101000000000000010100000
-00000000000100000000000000010000
-00000000000011110000000000001111
-00000000000010100000000000001010
-00000000000000010000000000000001
-
-... and of course any combo between columns 
-eg
-
-10100000000000001010000000000000
-00001010000000000000101000000000
-
-10101010000000001010101000000000
-*/
-
-void acq164_set_channel_mask(unsigned mask)
-{
-	info("WORKTODO");
-}
 
 void acq200_setChannelMask(unsigned mask)
 {
-	unsigned mm;
-	int lchan;
-
-	if ((mm = mask&MASK_D) != 0 && isValidMask(mm>>16, mm>>0)){
-		mask |= mm;
-	}
-	if ((mm = mask&MASK_C) != 0 && isValidMask(mm>>20, mm>>4)){
-		mask |= mm;
-	}       
-	if ((mm = mask&MASK_B) != 0 && isValidMask(mm>>24, mm>>8)){
-		mask |= mm;
-	}
-	if ((mm = mask&MASK_A) != 0 && isValidMask(mm>>28, mm>>12)){
-		mask |= mm;
-	}
-
-	for (lchan = mm = 1; mm; mm<<=1, lchan++){
-		acq200_setChannelEnabled(
-			acq200_lookup_pchan(lchan), (mm&mask) != 0);
-	}
-
-	CAPDEF_set_nchan(count_bits(mask));
-	CAPDEF->channel_mask = mask;
-	acq164_set_channel_mask(mask);
+	CAPDEF_set_nchan(64);
+	CAPDEF->channel_mask = 0x3;
+//	acq164_set_channel_mask(mask);
 }
 
 
@@ -719,7 +386,7 @@ void acq200_setChannelMask(unsigned mask)
 static ssize_t show_daq_enable(
 	struct device_driver * driver, char * buf)
 {
-	int enable = (acq196_getSyscon()&ACQ196_SYSCON_ACQEN) != 0;
+	int enable = (acq164_getSyscon()&ACQ164_SYSCON_ACQEN) != 0;
 
         return sprintf(buf,"%d\n", enable);
 }
@@ -749,21 +416,20 @@ static struct REGS_LUT {
 	volatile u32* preg;
 }
 	regs_lut[] = {
-		REGS_LUT_ENTRY(ACQ132_BDR),
-		REGS_LUT_ENTRY(ACQ196_FIFCON),
-		REGS_LUT_ENTRY(ACQ132_FIFSTAT),
-		REGS_LUT_ENTRY(ACQ132_SYSCON),
-		REGS_LUT_ENTRY(ACQ132_SFPGA_CONF),
-		REGS_LUT_ENTRY(ACQ132_ICS527),
-		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
-		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_LEN),
-		REGS_LUT_ENTRY(ACQ196_CLKCON),
-		REGS_LUT_ENTRY(ACQ200_CLKDAT),
-		REGS_LUT_ENTRY(ACQ200_DIOCON),
-		REGS_LUT_ENTRY(ACQ196_OFFSET_DACS),
-		REGS_LUT_ENTRY(ACQ196_WAVLIMIT),
-		REGS_LUT_ENTRY(ACQ196_TCR_IMMEDIATE),
-		REGS_LUT_ENTRY(ACQ196_TCR_LATCH)
+		REGS_LUT_ENTRY(ACQ164_BDR),
+		REGS_LUT_ENTRY(ACQ164_FIFCON),
+		REGS_LUT_ENTRY(ACQ164_FIFSTAT),
+		REGS_LUT_ENTRY(ACQ164_SYSCON),
+		REGS_LUT_ENTRY(ACQ164_ICS527),
+		REGS_LUT_ENTRY(ACQ164_SYSCONDAC),
+		REGS_LUT_ENTRY(ACQ164_CLKCON),
+		REGS_LUT_ENTRY(ACQ164_DIOCON),
+		REGS_LUT_ENTRY(ACQ164_OFFSET_DACS),
+		REGS_LUT_ENTRY(ACQ164_WAVLIMIT),
+		REGS_LUT_ENTRY(ACQ164_TCR_IMMEDIATE),
+		REGS_LUT_ENTRY(ACQ164_TCR_LATCH),
+		REGS_LUT_ENTRY(ACQ164_RGATE),
+		REGS_LUT_ENTRY(ACQ164_CLK_COUNTER)
 	};
 
 #define REGS_LUT_ENTRIES (sizeof(regs_lut)/sizeof (struct REGS_LUT))
@@ -777,19 +443,20 @@ int acq200_dumpregs_diag(char* buf, int len)
         bp += snprintf(bp, len - (bp-buf), "%20s:[%02x] 0x%08X\n", \
                    #reg, ((unsigned)reg- (unsigned)ACQ200_FPGA), *reg)
 
-
-	APPEND(ACQ132_BDR);
-	APPEND(ACQ196_FIFCON);
-	APPEND(ACQ132_FIFSTAT);
-	APPEND(ACQ132_ICS527);
-
-	APPEND(ACQ196_CLKCON);
-	APPEND(ACQ200_CLKDAT);
-	APPEND(ACQ200_DIOCON);
-	APPEND(ACQ196_OFFSET_DACS);
-	APPEND(ACQ196_WAVLIMIT);
-	APPEND(ACQ196_TCR_IMMEDIATE);
-	APPEND(ACQ196_TCR_LATCH);
+	APPEND(ACQ164_BDR);
+	APPEND(ACQ164_FIFCON);
+	APPEND(ACQ164_FIFSTAT);
+	APPEND(ACQ164_SYSCON);
+	APPEND(ACQ164_ICS527);
+	APPEND(ACQ164_SYSCONDAC);
+	APPEND(ACQ164_CLKCON);
+	APPEND(ACQ164_DIOCON);
+	APPEND(ACQ164_OFFSET_DACS);
+	APPEND(ACQ164_WAVLIMIT);
+	APPEND(ACQ164_TCR_IMMEDIATE);
+	APPEND(ACQ164_TCR_LATCH);
+	APPEND(ACQ164_RGATE);
+	APPEND(ACQ164_CLK_COUNTER);
 
 	return bp-buf;
 }
@@ -855,7 +522,16 @@ static struct file_operations dump_regs_proc_fops = {
 	.release = seq_release	
 };
 
-static void acq132_create_proc_entries(struct proc_dir_entry* root)
+
+static int acq200_proc_dumpregs(
+	char *buf, char **start, off_t offset, int len,
+                int* eof, void* data )
+{
+	return acq200_dumpregs_diag(buf, len);
+}
+
+
+static void acq164_create_proc_entries(struct proc_dir_entry* root)
 {
 
 	
