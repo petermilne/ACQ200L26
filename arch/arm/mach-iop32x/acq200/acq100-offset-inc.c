@@ -18,6 +18,13 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
+#define REVID "$Revision: 1.4 $ B102\n"
+/*
+ * From example at http://lwn.net/Articles/57373/
+ * Copyright 2002, 2003 Jonathan Corbet <corbet-AT-lwn.net>
+ * This file may be redistributed under the terms of the GNU GPL.
+ */
+
 
 /*
  * iterators
@@ -54,7 +61,7 @@ static int each_block(int block){
 
 
 static int each_chip(int chip){
-	if (chip < 4){
+	if (chip < NCHIPSBLOCK){
 		return chip + 1;
 	}else{
 		return 0;
@@ -301,6 +308,7 @@ static struct file_system_type offset_fs_type = {
 
 
 
+
 int acq100_offset_fs_create(struct device* device)
 {
 	info("about to register fs");
@@ -310,6 +318,17 @@ void acq100_offset_fs_remove(void)
 {
 	unregister_filesystem(&offset_fs_type);
 	kfree(my_files);
+}
+
+void acq200_setChannelLut(const int *lut, int _nlut)
+{
+	if (lut){
+		plut = lut;
+		nlut = _nlut;
+	}else{
+		plut = __plut;
+		nlut = __PLUT_ELEMS;
+	}
 }
 
 EXPORT_SYMBOL_GPL(acq200_lookup_pchan);

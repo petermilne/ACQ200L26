@@ -18,57 +18,13 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-/*
- * From example at http://lwn.net/Articles/57373/
- * Copyright 2002, 2003 Jonathan Corbet <corbet-AT-lwn.net>
- * This file may be redistributed under the terms of the GNU GPL.
- */
-
-#define REVID "$Revision: 1.4 $ B102\n"
-
-#define DTACQ_MACH 2
 #define ACQ164
-#define ACQ_IS_INPUT 1
+#include "acq100-offset-inc.h"
 
-
-#include "acq200-fifo-top.h"
-
-#include "acq200_debug.h"
-#include "acq200-fifo-local.h"
-#include "acq200-fifo.h"
-#include "acq196.h"
-
-
-#include <linux/kernel.h>
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/fs.h>     	/* This is where libfs stuff is declared */
-#include <asm/atomic.h>
-#include <asm/uaccess.h>	/* copy_to_user */
-
-
-#define LFS_MAGIC 0xa164a164
-
-#define TD_SZ  (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((2+(numchan)+1+1)*TD_SZ)
-
-
-#define MAXCHAN 64
-
-#define DACX 0
-#define DACY 1
-
-#define MAXBLOCKS  2
-#define NCHANNELSBLOCK 32
-#define NDACSBLOCK 4
-#define NDACSCHIP  8
-
-/* convert ino to channel - ch01 is at ino 2 */
-#define INO2CH(ch) (int)((ch) - 1)  
 /*
  * map chip, dac to channel in block
  */
-static const int MAP[NDACSBLOCK+1][NDACSCHIP+1] = {
+static const int MAP[NCHIPSBLOCK+1][NDACSCHIP+1] = {
 /* MAP[chip][dac] ... unfortunately, these numbers are pchan order :-( */
 	[ 1][DACA] = 17,	[ 2][DACA] = 25,  
 	[ 1][DACB] = 18,	[ 2][DACB] = 26,
@@ -141,18 +97,9 @@ static int hw_fudge(int lchan)
 	}
 }
 
-void acq200_setChannelLut(const int *lut, int _nlut)
-{
-	if (lut){
-		plut = lut;
-		nlut = _nlut;
-	}else{
-		plut = __plut;
-		nlut = __PLUT_ELEMS;
-	}
-}
 
 int acq200_lookup_pchan(int lchannel)
+/** lchannel in = 1:32 nameplate order return 0:32 memory order */
 {
 	int block = ((lchannel-1)/32);
 	int index = lchannel - block*32;
@@ -176,7 +123,6 @@ int acq200_lookup_lchan(int pchan)
 
 
 
-static unsigned short offsets[MAXBLOCKS+1][NCHANNELSBLOCK+1];
 
 
 static inline unsigned short *key2offset(int ikey)
