@@ -225,22 +225,6 @@ static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
 
 
-
-static int belongs(int key, const int lut[], int nlut)
-{
-	int ikey;
-
-	for (ikey = 0; ikey < nlut; ++ikey){
-		if (key == lut[ikey]){
-			return 1;
-		}
-	}
-	return 0;
-}
-
-
-
-
 static int sfpga_get_rev(void)
 {
 	u32 reg;
@@ -349,12 +333,9 @@ static DEVICE_ATTR(fpga_state, S_IRUGO, show_fpga_state, 0);
 
 
 
-DEFINE_SIGNAL_ATTR(ao_trig);
-DEFINE_SIGNAL_ATTR(ao_clk);
-
 DEFINE_SIGNAL_ATTR(sync_trig_src);
 DEFINE_SIGNAL_ATTR(sync_trig_mas);
-
+DEFINE_SIGNAL_ATTR(clk_counter_src);
 
 
 
@@ -368,6 +349,7 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clk_counter_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
 }

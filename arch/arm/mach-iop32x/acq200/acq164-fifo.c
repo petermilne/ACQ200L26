@@ -881,6 +881,20 @@ static int acq216_commitTcrSrc(struct Signal* signal)
 	return 0;
 }
 
+static int acq164_commitClkCounterSrc(struct Signal* signal)
+{
+	u32 clk_counter = *ACQ164_CLK_COUNTER;
+
+	clk_counter &= ~ACQ100_CLK_COUNTER_SRCMASK;
+
+	if (signal->DIx >=0 && signal->DIx <= 7){
+	       clk_counter |= signal->DIx << ACQ100_CLK_COUNTER_SRCSHL;
+	       clk_counter |= ACQ100_CLK_COUNTER_SRC_DIO;
+	}
+
+	*ACQ164_CLK_COUNTER = clk_counter;
+	return 0;
+}
 
 static struct CAPDEF* acq164_createCapdef(void)
 {
@@ -939,6 +953,9 @@ static struct CAPDEF* acq164_createCapdef(void)
 	capdef->ev[0] = createSignal(
 		"event0", 0, 7, 3, 0, 0, acq164_commitGateSrc);
 #endif
+	capdef->clk_counter_src = createSignal(
+		"clk_counter_src", 0, 8, 8, 0, 0, acq164_commitClkCounterSrc);
+	
 	return capdef;
 }
 
