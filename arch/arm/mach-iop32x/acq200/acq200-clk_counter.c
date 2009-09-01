@@ -84,6 +84,7 @@ unsigned getHz(struct CLKCOUNTER_STATE *cs)
 	return (cs->result * cs->descr.prescale * HZ) >> MAXCOUNT_SHFT;
 }
 
+/* @@hack alert - defeats purpose of module device approach */
 int acq132_showClkCounter(char *buf)
 {
 	unsigned probe_hz = getHz(&clk_probe);

@@ -139,7 +139,6 @@ static struct pci_driver acq200_fpga_driver = {
 #endif
 };
 
-
 static int __init acq200_fifo_init( void )
 {
 	int rc;

@@ -338,6 +338,17 @@ DEFINE_SIGNAL_ATTR(sync_trig_mas);
 DEFINE_SIGNAL_ATTR(clk_counter_src);
 
 
+extern int acq132_showClkCounter(char *buf);
+
+static ssize_t show_ClkCounter(
+	struct device *dev,
+	struct device_attribute *attr,
+	char* buf)
+{
+	return acq132_showClkCounter(buf);
+}
+
+static DEVICE_ATTR(ClkCounter, S_IRUGO, show_ClkCounter, 0);
 
 
 static void acq164_mk_dev_sysfs(struct device *dev)
@@ -352,6 +363,7 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_clk_counter_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
+	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
 }
 
 

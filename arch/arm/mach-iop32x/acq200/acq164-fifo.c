@@ -319,6 +319,7 @@ void acq132_setRGM(int enable)
 
 static void acq164_mach_on_set_mode(struct CAPDEF* capdef)
 {
+#ifdef PGMCOMOUT
 	switch(capdef->mode){
 	case M_TRIGGERED_CONTINUOUS:
 
@@ -341,6 +342,7 @@ static void acq164_mach_on_set_mode(struct CAPDEF* capdef)
 		}
 		break;
 	}
+#endif
 }
 
 
@@ -1074,28 +1076,28 @@ static struct platform_device acq164_fpga_device = {
 
 };
 
+#define LINDEB dbg(1, "%d", __LINE__)
 
 static int __init acq164_fifo_init( void )
 {
 	int rc;
+	acq200_debug = acq200_fifo_debug;
+
+	dbg(1, "acq200_debug set %d\n", acq200_debug );
+	info(ACQ164_VERID);
 
 	IPC = kmalloc(sizeof(struct IPC), GFP_KERNEL);
 	memset(IPC, 0, sizeof(struct IPC));
 
+	LINDEB;
 	CAPDEF = acq164_createCapdef();
 	init_dg();
+	LINDEB;
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	DMC_WO->handleEmpties = dmc_handle_empties_acq164;
+	LINDEB;
 	init_phases();
-
-	acq200_debug = acq200_fifo_debug;
-
-	info(ACQ164_VERID);
-
-	dbg(1, "acq200_debug set %d\n", acq200_debug );
-
-
-
+	LINDEB;
 /* extra kobject init needed to hook driver sysfs WHY? */
 
 	kobject_init(&acq164_fpga_driver.kobj);
