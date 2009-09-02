@@ -159,14 +159,17 @@ obj-$(CONFIG_ARCH_DTACQ_DEBUG_IOP) += debug_acq1xx.o
 obj-$(CONFIG_ARCH_DTACQ_ACQ132_LFP) += acq132_lfp.o
 
 
-ACQ2XX_FIFO_COMMON=\
+ACQ2XX_FIFO_COMMONA=\
 	acq200-fifo-tblock.o \
 	acq200-transform.o \
 	acq200-rb.o \
 	acq200-fifo-bigbuf-fops.o \
 	acq200-hook.o \
-	acq200-signal.o \
 	acq200-cdog.o
+
+ACQ2XX_FIFO_COMMON=\
+	$(ACQ2XX_FIFO_COMMONA) \
+	acq200-signal.o \
 
 acq216-objs := acq216-fifo.o acq216-fiq.o \
 	acq216-fifo-procfs.o acq2xx-fifo.o acq216-offset.o \
@@ -184,7 +187,8 @@ acq164-objs := acq164-fifo.o acq164-fiq.o \
 	acq164-fifo-procfs.o \
 	acq164-offset.o acq196-AO.o \
 	acq200-clk_counter.o \
-	$(ACQ2XX_FIFO_COMMON)
+	$(ACQ2XX_FIFO_COMMONA) \
+	acq200-signal2.o
 
 acq196m-objs := acq196-fifo-m.o acq196-fiq-m.o \
 	acq196-fifo-procfs.o acq196-offset.o acq196-AO.o \

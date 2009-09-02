@@ -33,6 +33,7 @@
 
 #include <linux/platform_device.h>
 
+#include "acq200-signal2.h"
 #include "acq200-fifo-top.h"
 
 #include "acq200-fifo-local.h"
@@ -720,7 +721,9 @@ static void init_pbi(struct device *dev)
 	DG->fpga.fifo.va = (void*)(ACQ200_FPGA+ACQ164_FIFO_OFFSET);
 }
 
-static int _acq196_commitEvX(
+
+
+static int _acq164_commitEvX(
 	struct Signal* signal, 
 	volatile u32* reg,
 	int shift)
@@ -730,173 +733,56 @@ static int _acq196_commitEvX(
 	syscon &= ~(ACQ100_SYSCON_EV_MASK << shift);
 	
 	if (signal->is_active){
-		u32 rising = signal->rising? 
+		u32 rising = signal->px[SIG_EDGE].ix? 
 			ACQ100_SYSCON_EV_RISING: ACQ100_SYSCON_EV_FALLING;
+		u32 linecode = signal->px[SIG_LINE].ix;
 
-		syscon |= ((rising | acq100_lineCode(signal->DIx)) << shift);
+		syscon |= ((rising | linecode) << shift);
 	}	
-
-	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
 
 	*reg = syscon;	
 	return 0;
 }
 
-static int acq196_commitTrg(struct Signal* signal)
+
+static inline int acq164_commitEv0(struct Signal* signal)
 {
-	return _acq196_commitEvX(
+	return _acq164_commitEvX(
+		signal, ACQ164_SYSCON, ACQ164_SYSCON_EV0_SHIFT);
+}
+static inline int acq164_commitEv1(struct Signal* signal)
+{
+	return _acq164_commitEvX(
+		signal, ACQ164_SYSCON, ACQ164_SYSCON_EV1_SHIFT);
+}
+static inline int acq164_commitTrg(struct Signal* signal)
+{
+	return _acq164_commitEvX(
 		signal, ACQ164_SYSCON, ACQ164_SYSCON_TRG_SHIFT);
 }
 
-static int acq196_commitAOTrg(struct Signal* signal)
+static int acq164_commitAOTrg(struct Signal* signal)
 {
-	return _acq196_commitEvX(
-		signal, ACQ100_SYSCON_DAC, ACQ164_SYSCON_TRG_SHIFT);
-}
-
-#ifdef BADPORT
-
-static int acq196_commitAXClk(struct Signal* signal, volatile u32* reg)
-{
-	u32 syscon = *reg;
-	
-	syscon &= ~ACQ196_SYSCON_EC_MASK; /* NO SHIFT */
-	
-	if (signal->is_active){
-
-		if (signal->DIx == DIX_INTERNAL){
-			syscon &= ~ACQ196_SYSCON_EXTCLK;
-		}else{
-			syscon |= signal->rising? ACQ196_SYSCON_EC_RISING: 0;
-	                /* field value 0 => DI0 */
-			syscon |= signal->DIx <<ACQ196_SYSCON_EC_SHIFT;
-			syscon |= ACQ196_SYSCON_EXTCLK;
-		}
-	}	
-
-	*reg = syscon;	
-	return 0;
-}
-#endif
-
-static int acq196_commitAIClk(struct Signal* signal)
-{
-	return -1;
-//	return acq196_commitAXClk(signal, ACQ196_SYSCON_ADC);
-}
-
-static int acq196_commitAOClk(struct Signal* signal)
-{
-	return -1;
-//	return acq196_commitAXClk(signal, ACQ196_SYSCON_DAC);
-}
-
-static int acq196_commitMasClk(struct Signal* signal)
-{
-	u32 clkcon = *ACQ164_CLKCON;
-	
-	clkcon &= ~(ACQ164_CLKCON_OCS_MASK);
-
-	if (signal->is_active){
-                /* @@todo WARNING starts D0 == 0 */
-		clkcon |= signal->DIx;
-	}
-	*ACQ164_CLKCON = clkcon;
-	return 0;
-}
-
-
-
-static int acq196_commitIntClkSrc(struct Signal* signal)
-{
-	u32 clkcon = *ACQ164_CLKCON;
-	
-	clkcon &= ~(ACQ164_CLKCON_CS_MASK);
-
-	if (signal->is_active){
-		clkcon |= signal->DIx;	/* @@todo */
-	}
-	*ACQ164_CLKCON = clkcon;
-	return 0;
-}
-
-#ifdef BADPORT
-static int acq196_commitSyncTrigSrc(struct Signal* signal)
-{
-	u32 clkcon = *ACQ196_CLKCON;
-	
-	clkcon &= ~(ACQ196_CLKCON_TR_MASK);
-
-	if (signal->is_active){
-		clkcon |= ACQ196_CLKCON_TR_DIx(signal->DIx);
-	}
-	*ACQ196_CLKCON = clkcon;
-	return 0;	
-}
-
-static int acq196_commitMasSyncTrig(struct Signal *signal)
-{
-	u32 clkcon = *ACQ196_CLKCON;
-	
-	clkcon &= ~(ACQ196_CLKCON_OTR_MASK|ACQ196_CLKCON_TRMAS);
-
-	if (signal->is_active){
-                /* @@todo WARNING starts D0 == 0 */
-		clkcon |= 
-			ACQ196_CLKCON_OTR_DOx(signal->DIx)|
-			ACQ196_CLKCON_TRMAS;
-	}
-	*ACQ196_CLKCON = clkcon;
-	return 0;	
-}
-
-
-static int acq164_commitGateSrc(struct Signal* signal)
-{
-	u32 syscon = *ACQ132_SYSCON;
-
-	syscon &= ~ACQ132_SYSCON_GATE_MASK;
-	
-	if (signal->is_active){
-		syscon |= ACQ132_SYSCON_GATE_EN;
-		if (signal->rising){
-			syscon |= ACQ132_SYSCON_GATE_HI;	       
-		}
-		syscon |= signal->DIx << ACQ132_SYSCON_GATE_SHL;
-	}
-
-	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
-	*ACQ132_SYSCON = syscon;
-	return 0;
-}
-#endif
-
-
-static int acq216_commitTcrSrc(struct Signal* signal)
-{
-	u32 clkcon = *ACQ216_TCR_IMM;
-	
-	clkcon &= ~ACQ216_TCR_TCS_MASK;	
-	clkcon |= signal->DIx<<ACQ216_TCR_TCS_SHL;
-
-	*ACQ216_TCR_IMM = clkcon;	
-	return 0;
+	return _acq164_commitEvX(
+		signal, ACQ164_SYSCONDAC, ACQ164_SYSCON_TRG_SHIFT);
 }
 
 static int acq164_commitClkCounterSrc(struct Signal* signal)
 {
 	u32 clk_counter = *ACQ164_CLK_COUNTER;
+	u32 linecode = signal->px[SIG_LINE].ix;
 
 	clk_counter &= ~ACQ100_CLK_COUNTER_SRCMASK;
 
-	if (signal->DIx >=0 && signal->DIx <= 7){
-	       clk_counter |= signal->DIx << ACQ100_CLK_COUNTER_SRCSHL;
+	if (linecode >=0 && linecode <= 7){
+	       clk_counter |= linecode << ACQ100_CLK_COUNTER_SRCSHL;
 	       clk_counter |= ACQ100_CLK_COUNTER_SRC_DIO;
 	}
 
 	*ACQ164_CLK_COUNTER = clk_counter;
 	return 0;
 }
+
 
 static struct CAPDEF* acq164_createCapdef(void)
 {
@@ -913,50 +799,20 @@ static struct CAPDEF* acq164_createCapdef(void)
 	capdef_set_nchan(capdef, AICHAN_DEFAULT);
 	capdef_set_word_size(capdef, 2);
 
-	/* name, minDIx, maxDIx, DIx, rising, is_active, commit	*/
-	capdef->ev[1] = 
-		createSignal("event1", 0, 5, 3, 1, 0, 0);
-	capdef->trig  = 
-		createSignal("trig", 0, 5, 3, 0, 0, acq196_commitTrg);
 	
-	capdef->ext_clk = 
-		createSignal("ext_clk", 0, 5, 0, 0, 0, acq196_commitAIClk);
-	capdef->ext_clk->has_internal_option = 1;
-	
-	capdef->ao_trig = 
-		createSignal("ao_trig", 0, 5, 3, 0, 0, acq196_commitAOTrg);
-	capdef->ao_clk = 
-		createSignal("ao_clk", 0, 2, 0, 0, 0, acq196_commitAOClk);
-	capdef->ao_clk->has_internal_option = 1;
-
-	capdef->int_clk_src = createSignal(
-		"int_clk_src", 0, 5, 0, 0, 0, acq196_commitIntClkSrc);
-	capdef->mas_clk = createSignal(
-		"mas_clk", 0, 5, 1, 0, 0,acq196_commitMasClk);
-	capdef->mas_clk->is_output = 1;
-
-#ifdef BADPORT
-	capdef->sync_trig_src = createSignal(
-		"sync_trig_src", 3, 5, 3, 0, 0, acq196_commitSyncTrigSrc);
-
-	capdef->sync_trig_mas = createSignal(
-		"sync_trig_mas", 3, 5, 3, 0, 0, acq196_commitMasSyncTrig);
-	capdef->sync_trig_mas->is_output = 1;
-#endif
-	capdef->counter_src = 
-		createSignal("counter_src", 0, 6, 6,0, 1, acq216_commitTcrSrc);
-	/** @todo how to action? */
-	capdef->counter_src->has_internal_option = 1;
-
-#ifdef BADPORT
-	capdef->gate_src = createLevelSignal(
-		"gate_src", 0, 7, 7, 0, 0, acq164_commitGateSrc);
-	/* warning: it's the same thing ... */
 	capdef->ev[0] = createSignal(
-		"event0", 0, 7, 3, 0, 0, acq164_commitGateSrc);
-#endif
+		"event0", SIG(EVS), 3, SIG(EDG), 0, acq164_commitEv0);
+	capdef->ev[1] =  createSignal(
+		"event1", SIG(EVS), 3, SIG(EDG), 1, acq164_commitEv1);
+	capdef->trig  = createSignal(
+		"trig",   SIG(EVS), 3, SIG(EDG), 0, acq164_commitTrg);
+
+	capdef->ao_trig = createSignal(
+		"ao_trig", SIG(EVS), 3, SIG(EDG), 0, acq164_commitAOTrg);
+
 	capdef->clk_counter_src = createSignal(
-		"clk_counter_src", 0, 8, 8, 0, 0, acq164_commitClkCounterSrc);
+		"clk_counter_src", SIG(CKS07), 0, SIG(EDG), 0, 
+		acq164_commitClkCounterSrc);
 	
 	return capdef;
 }
