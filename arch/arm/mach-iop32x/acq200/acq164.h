@@ -137,7 +137,9 @@
 
 /* SYSCONDAC : want exact same as ACQ196 please */
 
-/** not used				0xffff0000 */
+#define ACQ164_CLKCON_SCLK_RESET	0x80000000
+#define ACQ164_CLKCON_SCLK_LOCK		0x40000000
+/** not used				0x3fff0000 */
 #define ACQ164_CLKCON_OIND_RISING	0x00008000
 /** not used				0x00004000 */
 #define ACQ164_CLKCON_OIND_MASK		0x00003000

@@ -18,7 +18,7 @@
 #define DTACQ_MACH 2
 #define ACQ164
 #include <linux/seq_file.h>
-
+#include "acq200-signal2.h"
 #include "acq200-fifo-top.h"
 
 #include "acq200-fifo-local.h"

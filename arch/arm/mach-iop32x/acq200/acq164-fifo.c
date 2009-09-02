@@ -52,6 +52,12 @@
  */
 #define ACQ164_DECIM	128
 
+#ifdef TEST_COMPLETE
+#define ACQ200_CLK_HZ	32768000
+#else
+#define ACQ200_CLK_HZ	33333000	
+#endif
+
 #define INT_CLK_CALC_ROUNDING 0x80
 //#define BEST_ICSINPUT_HZ 20000000
 #define BEST_ICSINPUT_HZ 1000000
@@ -218,7 +224,7 @@ static int _set_ob_clock(int khz)
 	int ii;
 	int decim = khz < 4000? 4: 1;	/* ics min f = 4MHz */
 
-	sprintf(fin_def, "%d", acq200_clk_hz/1000);
+	sprintf(fin_def, "%d", ACQ200_CLK_HZ/1000);
 
 	khz *= decim;
 
@@ -811,7 +817,7 @@ static struct CAPDEF* acq164_createCapdef(void)
 		"ao_trig", SIG(EVS), 3, SIG(EDG), 0, acq164_commitAOTrg);
 
 	capdef->clk_counter_src = createSignal(
-		"clk_counter_src", SIG(CKS07), 0, SIG(EDG), 0, 
+		"clk_counter_src", SIG(CKS07), 8, SIG(EDG), 0, 
 		acq164_commitClkCounterSrc);
 	
 	return capdef;
@@ -859,13 +865,21 @@ static void acq164_set_defaults(void)
 {
 /* ICS527 - make "null modem" 4 /4 - works for 1..2MHz clocks */
         err("2MHz is likely to be a bad idea ..");
-	acq132_set_obclock(6, 0, 2, 2);
+	acq200_setIntClkHz(32768000);
 }
 
 
 static unsigned acq164_getClkCounter(void)
 {
-	return (*ACQ164_CLK_COUNTER) & ACQ100_CLK_COUNTER_COUNT;
+	u32 clk_con = *ACQ164_CLKCON;
+	u32 clk_counter = *ACQ164_CLK_COUNTER;
+
+	if ((clk_con&ACQ164_CLKCON_SCLK_LOCK) == 0){
+		*ACQ164_CLKCON = clk_con ^= ACQ164_CLKCON_SCLK_RESET;
+		dbg(2, "clk_con %08x clk_counter %08x", clk_con, clk_counter);
+		/* pull reset down next tick */
+	}
+	return (clk_counter) & ACQ100_CLK_COUNTER_COUNT;
 }
 
 static struct CLKCOUNTER_DESCR clk_probe = {

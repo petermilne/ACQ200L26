@@ -54,28 +54,40 @@ struct Signal {
 		px[2];
 
 	int (*commit)(struct Signal* signal);
+	ssize_t (*store)(struct Signal* signal,
+		     struct device * dev, const char * _buf, size_t count);
+	ssize_t (*show)(struct Signal* signal, struct device * dev, char * buf);
 };
 
 
 ssize_t acq200_show_signal(
 	struct Signal* signal, struct device * dev, char * buf);
 
-static inline ssize_t show_signal(
-	struct Signal* signal, struct device * dev, char * buf)
-{
-	return acq200_show_signal(signal, dev, buf);
-}
-
 ssize_t acq200_store_signal(
 	struct Signal* signal,
 	struct device * dev, const char * _buf, size_t count);
 
-static inline ssize_t store_signal(
-	struct Signal* signal,
-	struct device * dev, const char * _buf, size_t count)
+
+ ssize_t acq200_show_signal(
+        struct Signal* signal, struct device * dev, char * buf);
+ 
+static inline ssize_t show_signal(
+       struct Signal* signal, struct device * dev, char * buf)
 {
-	return acq200_store_signal(signal, dev, _buf, count);
+       return signal->show(signal, dev, buf);
 }
+
+ ssize_t acq200_store_signal(
+        struct Signal* signal,
+        struct device * dev, const char * _buf, size_t count);
+ 
+static inline ssize_t store_signal(
+       struct Signal* signal,
+       struct device * dev, const char * _buf, size_t count)
+{
+       return signal->store(signal, dev, _buf, count);
+}
+
 /**
  * createSignal
  * name, minDIx, maxDIx, DIx, rising, is_active, commit

@@ -40,13 +40,36 @@ ssize_t acq200_show_signal(
 		return -ENODEV;
 	}
 
-	return sprintf("%s %s %s %s\n", 
+	return sprintf(buf, "%s %s %s %s\n", 
 		       signal->name, 
 		       signalLookup(signal, SIG_P1, signal->px[SIG_P1].ix),
 		       signalLookup(signal, SIG_P2, signal->px[SIG_P2].ix),
 		       signal->is_active? "ACTIVE": "inactive");
 }
 
+
+static void signalHelp(struct Signal *signal)
+{
+	char buf[128];
+	const char** pp;
+	int ip;
+
+	info("%s:%s", "name", signal->name);
+	
+	for (ip = SIG_P1; ip <= SIG_P2; ++ip){
+		buf[0] = '\0';
+		if ((pp = signal->px[ip].lut) != 0){
+			int ik;
+			for (ik = 0; pp[ik]; ++ik){
+				if (strlen(buf)+strlen(pp[ik]) < sizeof(buf)-1){
+					strcat(buf, pp[ik]);
+					strcat(buf, " ");
+				}
+			}
+		}
+		info("%d:%s", ip, buf);
+	}		
+}
 ssize_t acq200_store_signal(
 	struct Signal* signal,
 	struct device * dev, const char * _buf, size_t count)
@@ -70,7 +93,14 @@ ssize_t acq200_store_signal(
 	
 	nscan = sscanf(buf, "%s %s %s", name, p1, p2);
 
-	if (strcmp(signal->name, name) != 0){
+	if (nscan < 1){
+		err("name p1 p2 - try help for list");
+		return -ENODEV;
+	}
+	if (strcmp(name, "help") == 0){
+		signalHelp(signal);
+		return -ENODEV;
+	}else if (strcmp(signal->name, name) != 0){
 		err("signal name must match \"%s\" \"%s\"",
 			signal->name, name);
 		return -ENODEV;
@@ -80,8 +110,8 @@ ssize_t acq200_store_signal(
 		return -ENODEV;
 	}else{
 		int ix1 = signalLookupIndex(signal, SIG_P1, p1);
-		if (ix1 <= 0){
-			err("illegal p2 \"%s\"", p1);
+		if (ix1 < 0){
+			err("illegal p1 \"%s\"", p1);
 			return -ENODEV;
 		}else{
 			signal->px[SIG_P1].ix = ix1;
@@ -96,6 +126,7 @@ ssize_t acq200_store_signal(
 			}
 		}
 	}	
+	activateSignal(signal);
 	return count;
 }
 
@@ -161,6 +192,8 @@ struct Signal* acq200_createSignal(
 	signal->px[SIG_P2].lut = _p2;
 	signal->px[SIG_P2].ix = init_p2;
 	signal->commit = commit;
+	signal->show = acq200_show_signal;
+	signal->store = acq200_store_signal;
 	return signal;
 }
 
@@ -181,16 +214,21 @@ const char* signalLookup(struct Signal * signal, int px, int key)
 }
 int signalLookupIndex(struct Signal *signal, int px, const char* key)
 {
+	dbg(2, "01:key \"%s\"", key);
+
 	if (signal->px[px].lut != 0){
 		int ikey;
 		const char* lbl;
 		for (ikey = 0; (lbl = signal->px[px].lut[ikey]) != 0; ++ikey){
+			dbg(2, "50:key \"%s\" lbl \"%s\"", key, lbl);
 			if (strcmp(lbl, key) == 0){
+				dbg(2, "98: return %d", ikey);
 				return ikey;
 			}
 		}
 	}
 
+	dbg(2, "99: return -1");
 	return -1;
 }
 
