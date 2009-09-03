@@ -49,6 +49,7 @@ struct Signal {
 
 	struct {
 		const char **lut;
+		const u32* masks;	/* optional  0-> use ix literally */
 		int ix;
 	}
 		px[2];
@@ -74,6 +75,9 @@ ssize_t acq200_store_signal(
 static inline ssize_t show_signal(
        struct Signal* signal, struct device * dev, char * buf)
 {
+       if (!signal){
+		return -1;
+       }
        return signal->show(signal, dev, buf);
 }
 
@@ -85,6 +89,9 @@ static inline ssize_t store_signal(
        struct Signal* signal,
        struct device * dev, const char * _buf, size_t count)
 {
+	if (!signal){
+		return -1;
+	}
        return signal->store(signal, dev, _buf, count);
 }
 

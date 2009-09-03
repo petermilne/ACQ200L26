@@ -728,6 +728,50 @@ static void init_pbi(struct device *dev)
 }
 
 
+static const char* ACQ164_CLKDI3_MENU[] = {
+	"internal", "DI0", "DI1", "DI2", 0
+};
+static const char* ACQ164_CLKDO3_MENU[] = {
+	"none", "DO0", "DO1", "DO2", 0
+};
+static const char *ACQ164_DO345_MENU[] = {
+	"none", "DO3", "DO4", "DO5", 0
+};
+
+static int acq164_commitClkXX(
+		struct Signal* signal, int shl)
+{
+	u32 clkcon = *ACQ164_CLKCON;
+	
+	clkcon &= ~(ACQ164_CLKCON_XX << shl);
+
+	if (signal->is_active){
+		u32 linecode = signal->px[SIG_LINE].ix;
+		clkcon |= linecode << shl;
+		if (signal->px[SIG_EDGE].ix){
+			clkcon |= ACQ164_CLKCON_RISING << shl;
+		}
+	}
+	*ACQ164_CLKCON = clkcon;
+	return 0;
+}
+static int acq164_commitIntClkSrc(struct Signal* signal)
+{
+	return acq164_commitClkXX(signal, ACQ164_CLKCON_CS_SHIFT);
+}
+
+static int acq164_commitMasClk(struct Signal* signal)
+{
+	return acq164_commitClkXX(signal, ACQ164_CLKCON_OCS_SHIFT);
+}
+static int acq164_commitIndexSrc(struct Signal* signal)
+{
+	return acq164_commitClkXX(signal, ACQ164_CLKCON_IND_SHIFT);
+}
+static int acq164_commitIndexMas(struct Signal* signal)
+{
+	return acq164_commitClkXX(signal, ACQ164_CLKCON_OIND_SHIFT);
+}
 
 static int _acq164_commitEvX(
 	struct Signal* signal, 
@@ -750,7 +794,11 @@ static int _acq164_commitEvX(
 	return 0;
 }
 
-
+static inline int acq164_commitSyncTrig(struct Signal *signal)
+{
+	return _acq164_commitEvX(
+		signal, ACQ164_SYSCON, ACQ164_SYSCON_OTR_SHIFT);
+}
 static inline int acq164_commitEv0(struct Signal* signal)
 {
 	return _acq164_commitEvX(
@@ -790,6 +838,43 @@ static int acq164_commitClkCounterSrc(struct Signal* signal)
 }
 
 
+static int acq164_commitAdcModeChoice(struct Signal* signal)
+{
+	if (signal->px[0].masks == 0){
+		err("NO MASKS");
+		return -1;
+	}else{
+		u32 syscon = *ACQ164_SYSCON;
+		u32 mask = signal->px[0].masks[signal->px[0].ix];
+
+		syscon &= ~ACQ164_SYSCON_CDM;
+		syscon |=  mask << ACQ164_SYSCON_CDM_SHIFT;	
+		*ACQ164_SYSCON = syscon;
+		return 0;
+	}
+}
+
+static struct Signal *createSignalAdcMode(void)
+{
+	static const char *ACQ164_ADC_MODE_CHOICES[] = {
+		"HISPEED_256", "HIRES_512", "LP_256", "LP_512", "LS_512", 0 
+	};
+	static const unsigned ACQ164_ADC_MODE_MASKS[] = {
+		ACQ164_SYSCON_CDM_HISPEED_256,	ACQ164_SYSCON_CDM_HIRES_512,
+		ACQ164_SYSCON_CDM_LP_256,	ACQ164_SYSCON_CDM_LP_512,
+		ACQ164_SYSCON_CDM_LS_512 
+		/* terminator not required */
+	};
+
+	struct Signal *sig = createSignal(
+		"adc_mode", 
+		ACQ164_ADC_MODE_CHOICES, 0, 0, 0, 
+		acq164_commitAdcModeChoice);
+
+	sig->px[0].masks = &ACQ164_ADC_MODE_MASKS;
+	return sig;
+}
+
 static struct CAPDEF* acq164_createCapdef(void)
 {
 	static struct CAPDEF _capdef = {
@@ -816,10 +901,31 @@ static struct CAPDEF* acq164_createCapdef(void)
 	capdef->ao_trig = createSignal(
 		"ao_trig", SIG(EVS), 3, SIG(EDG), 0, acq164_commitAOTrg);
 
+	capdef->sync_trig_mas = createSignal(
+		"sync_trig_mas", ACQ164_DO345_MENU,0, 0,0,
+		acq164_commitSyncTrig);
+	/* @todo - ext clk is int_clk_src ? */
+	capdef->ext_clk = 
+	capdef->int_clk_src = createSignal(
+		"int_clk_src", ACQ164_CLKDI3_MENU, 0, SIG(EDG), 0,
+		acq164_commitIntClkSrc);
+
+	capdef->mas_clk = createSignal(
+		"mas_clk", ACQ164_CLKDO3_MENU, 0, SIG(EDG), 0, 
+		acq164_commitMasClk);
+
 	capdef->clk_counter_src = createSignal(
 		"clk_counter_src", SIG(CKS07), 8, SIG(EDG), 0, 
 		acq164_commitClkCounterSrc);
-	
+
+	capdef->index_src = createSignal(
+		"index_src", ACQ164_CLKDI3_MENU, 0, SIG(EDG), 0,
+		acq164_commitIndexSrc);
+	capdef->index_mas = createSignal(
+		"index_mas", ACQ164_CLKDO3_MENU, 0, SIG(EDG), 0,
+		acq164_commitIndexMas);
+
+	capdef->adc_mode = createSignalAdcMode();
 	return capdef;
 }
 

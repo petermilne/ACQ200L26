@@ -108,7 +108,9 @@ static ssize_t show_##signal(						\
 	struct device_attribute *attr,					\
 	char * buf)							\
 {									\
-	return show_signal(CAPDEF->signal, dev, buf);			\
+	int rc = show_signal(CAPDEF->signal, dev, buf);			\
+	if (rc < 0) err("NO SIGNAL");					\
+	return rc;							\
 }									\
 									\
 static ssize_t store_##signal(						\
@@ -116,7 +118,9 @@ static ssize_t store_##signal(						\
 	struct device_attribute *attr,					\
 	const char * buf, size_t count)					\
 {									\
-	return store_signal(CAPDEF->signal, dev, buf, count);		\
+	int rc = store_signal(CAPDEF->signal, dev, buf, count);		\
+	if (rc < 0) err("NO SIGNAL");					\
+	return rc;							\
 }									\
 static DEVICE_ATTR(signal, S_IRUGO|S_IWUGO, show_##signal, store_##signal)
 
@@ -127,6 +131,7 @@ DEFINE_SIGNAL_ATTR(ext_clk);
 #ifndef WAV232
 DEFINE_SIGNAL_ATTR(int_clk_src);
 DEFINE_SIGNAL_ATTR(counter_src);
+
 
 static ssize_t show_counter_update(
 	struct device * dev, 

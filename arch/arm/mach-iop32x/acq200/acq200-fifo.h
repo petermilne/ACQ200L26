@@ -702,6 +702,11 @@ struct CAPDEF {
 	struct Signal* gate_src;
 #endif
 	struct Signal* clk_counter_src;
+#if defined(ACQ164)
+	struct Signal* index_src;
+	struct Signal* index_mas;
+	struct Signal* adc_mode;
+#endif
 };
 
 

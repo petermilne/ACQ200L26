@@ -333,11 +333,12 @@ static DEVICE_ATTR(fpga_state, S_IRUGO, show_fpga_state, 0);
 
 
 
-DEFINE_SIGNAL_ATTR(sync_trig_src);
 DEFINE_SIGNAL_ATTR(sync_trig_mas);
 DEFINE_SIGNAL_ATTR(clk_counter_src);
 
-
+DEFINE_SIGNAL_ATTR(index_src);
+DEFINE_SIGNAL_ATTR(index_mas);
+DEFINE_SIGNAL_ATTR(adc_mode);
 extern int acq132_showClkCounter(char *buf);
 
 static ssize_t show_ClkCounter(
@@ -358,12 +359,14 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);
-	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
 	DEVICE_CREATE_FILE(dev, &dev_attr_clk_counter_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ob_clock);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fpga_state);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
+	DEVICE_CREATE_FILE(dev, &dev_attr_index_src);
+	DEVICE_CREATE_FILE(dev, &dev_attr_index_mas);
+	DEVICE_CREATE_FILE(dev, &dev_attr_adc_mode);	
 }
 
 
