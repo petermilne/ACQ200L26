@@ -309,13 +309,20 @@ static struct LlcDevGlobs {
 		} ao32;
 
 		unsigned alt_VI_target;
-		unsigned wdt_bit;
+
+		struct WDT_CONTROL {
+			unsigned preset;
+			unsigned toggle;
+			unsigned cleanup;
+		}
+			wdt;
+
 	} settings;
 
 	u32 *llcv2_init_buf;
 	int ai_dma_index;
 	
-
+	/* STATUS gets cleared on entry */
 	struct STATUS {
 		int is_triggered;
 		unsigned iter;
@@ -333,6 +340,7 @@ static struct LlcDevGlobs {
 			unsigned SETADDR, ARM, SOFTCLOCK, READCTR;
 		} cmd_counts;
 		unsigned hot_starts;
+		int wdt_preset_done;
 	} status;
 
 	int shot;
@@ -1034,10 +1042,18 @@ static void wdt_short_action(volatile u32 *reg, unsigned short wdt_bit)
 	*reg = xx;
 }
 
-static void wdt_action(unsigned wdt_bit)
+static void wdt_action(void)
 {
-	unsigned short xa = wdt_bit;
-	unsigned short xb = wdt_bit >> 16;
+	unsigned short xa = dg.settings.wdt.toggle;
+	unsigned short xb = dg.settings.wdt.toggle >> 16;
+
+	if (dg.status.wdt_preset_done == 0){
+		unsigned short pa = dg.settings.wdt.preset;
+		unsigned short pb = dg.settings.wdt.preset >> 16; 
+		*RTM_DIO_DATA_A |= pa;
+		*RTM_DIO_DATA_B |= pb;
+		dg.status.wdt_preset_done = 1;	
+	}
 
 	if (xa){
 		wdt_short_action(RTM_DIO_DATA_A, xa);
@@ -1045,6 +1061,15 @@ static void wdt_action(unsigned wdt_bit)
 	if (xb){
 		wdt_short_action(RTM_DIO_DATA_B, xb);
 	}
+}
+
+static void wdt_cleanup(void)
+{
+	unsigned short ca = ~(dg.settings.wdt.cleanup);
+	unsigned short cb = (~(dg.settings.wdt.cleanup)) >> 16;
+
+	*RTM_DIO_DATA_A &= ca;
+	*RTM_DIO_DATA_B &= cb;	
 }
 
 #define IS_TRIGGERED(trig) \
@@ -1658,7 +1683,7 @@ static void llc_loop_sync2V(int entry_code)
 					}
 					REPORT_TINST2V;
 					dg.status.cmd_counts.READCTR++;
-					wdt_action(dg.settings.wdt_bit);
+					wdt_action();
 				}
 
 				csr &= ~LLC_CSR_S_TCYCLE;
@@ -1672,6 +1697,8 @@ static void llc_loop_sync2V(int entry_code)
 	}
 
  quit:
+	wdt_cleanup();
+
 	if (snack_on_quit){
 		long j1 = jiffies;
 
@@ -2195,9 +2222,20 @@ static ssize_t set_wdt_bit(
 	struct device_attribute *attr,
 	const char *buf, size_t count)
 {
-	unsigned wdt_bit;
-	if (sscanf(buf, "0x%x", &wdt_bit) == 1){
-		dg.settings.wdt_bit = wdt_bit;
+	unsigned parms[3];
+	int nscan = sscanf(buf, "0x%x,0x%08x,0x%08x", 
+			   &parms[0], &parms[1], &parms[2]);
+	switch(nscan){
+	case 1:
+		dg.settings.wdt.toggle = parms[0];
+		break;
+	case 3:
+		dg.settings.wdt.preset = parms[0];
+		dg.settings.wdt.toggle = parms[1];
+		dg.settings.wdt.cleanup = parms[2];
+		break;
+	default:
+		return -1;
 	}
 	return strlen(buf);
 }
@@ -2207,7 +2245,10 @@ static ssize_t get_wdt_bit(
 	struct device_attribute *attr,
 	char *buf)
 {
-	return sprintf(buf, "0x%08x\n", dg.settings.wdt_bit);
+	return sprintf(buf, "0x%08x,0x%08x,0x%08x\n", 
+		       dg.settings.wdt.preset,
+		       dg.settings.wdt.toggle,
+		       dg.settings.wdt.cleanup);
 }
 
 static DEVICE_ATTR(wdt_bit, S_IWUGO|S_IRUGO, get_wdt_bit, set_wdt_bit);
