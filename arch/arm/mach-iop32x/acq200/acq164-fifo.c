@@ -894,7 +894,7 @@ static struct CAPDEF* acq164_createCapdef(void)
 	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
 
 	capdef_set_nchan(capdef, AICHAN_DEFAULT);
-	capdef_set_word_size(capdef, 2);
+	capdef_set_word_size(capdef,  ACQ164_SAMPLE_WORD_SIZE);
 
 	
 	capdef->ev[0] = createSignal(

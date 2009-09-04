@@ -24,6 +24,8 @@
 #define HAS_OB_CLOCK	1
 #include "acq100.h"
 
+#define ACQ164_SAMPLE_WORD_SIZE	4	/* 24 bit sample in 32 bit field */
+
 #define ACQ164_BDR		FPGA_REG(0x00)
 #define ACQ164_FIFCON		FPGA_REG(0x04)
 #define ACQ164_FIFSTAT		FPGA_REG(0x08)
