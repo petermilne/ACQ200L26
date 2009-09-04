@@ -91,7 +91,7 @@ extern struct file_operations acq132_gate_pulse_ops;
 void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 
 
-#define AICHAN_DEFAULT 32
+#define AICHAN_DEFAULT 64
 
 
 #define HOT_FIFO_FULL_ENTRIES(fifstat) (((fifstat)&ACQ164_FIFSTAT_HOTPOINT)>>1)
@@ -1076,6 +1076,7 @@ static int __init acq164_fifo_init( void )
 	LINDEB;
 	CAPDEF = acq164_createCapdef();
 	init_dg();
+	acq200_setChannelMask(0x3);
 	LINDEB;
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	DMC_WO->handleEmpties = dmc_handle_empties_acq164;

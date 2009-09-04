@@ -373,9 +373,15 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 
 void acq200_setChannelMask(unsigned mask)
 {
-	CAPDEF_set_nchan(64);
-	CAPDEF->channel_mask = 0x3;
-//	acq164_set_channel_mask(mask);
+	int lchan;
+
+	CAPDEF_set_nchan(NCHAN);
+	CAPDEF->channel_mask = mask&0x3;
+
+	for (lchan = 1; lchan <= NCHAN; ++lchan){
+		int enable =  ((1 << (lchan-1)/32) & mask) != 0;
+		acq200_setChannelEnabled(acq200_lookup_pchan(lchan), enable);
+	}
 }
 
 
