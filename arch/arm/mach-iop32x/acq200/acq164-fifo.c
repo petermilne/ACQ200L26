@@ -834,6 +834,12 @@ static int acq164_commitClkCounterSrc(struct Signal* signal)
 	}
 
 	*ACQ164_CLK_COUNTER = clk_counter;
+
+	if (linecode == 9){
+		acq200_stop_clkCounterMonitor();		
+	}else if (acq200_clkCounterMonitor_requestedToStop()){
+		acq200_start_clkCounterMonitor();
+	}
 	return 0;
 }
 
@@ -1009,7 +1015,9 @@ static int acq164_fpga_probe(struct device *dev)
 		}else{
 			mk_sysfs(&acq164_fpga_driver);
 			acq164_set_defaults();
-			acq200_start_clkCounterMonitor(&clk_probe);
+			
+			acq200_init_clkCounterMonitor(&clk_probe);
+			acq200_start_clkCounterMonitor();
 		}
 		return rc;
 	}else{

@@ -157,6 +157,9 @@ struct CLKCOUNTER_DESCR {
 };
 	
 
-void acq200_start_clkCounterMonitor(struct CLKCOUNTER_DESCR* clk_probe);
+
+void acq200_init_clkCounterMonitor(struct CLKCOUNTER_DESCR* clk_probe);
+void acq200_start_clkCounterMonitor(void);
 void acq200_stop_clkCounterMonitor(void);
+int acq200_clkCounterMonitor_requestedToStop(void);
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

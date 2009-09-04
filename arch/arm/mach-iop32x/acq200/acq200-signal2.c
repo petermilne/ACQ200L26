@@ -154,7 +154,7 @@ static const char * _SIGDEF_DI07[] = {
 	_ISIGS07, 0			
 };
 static const char * _SIGDEF_CKS07[] = {
-	_ISIGS07, "internal", 0
+	_ISIGS07, "internal", "none", 0
 };
 
 static const char** menus[] = {
