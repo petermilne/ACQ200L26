@@ -975,9 +975,8 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 
 static void acq164_set_defaults(void)
 {
-/* ICS527 - make "null modem" 4 /4 - works for 1..2MHz clocks */
-        err("2MHz is likely to be a bad idea ..");
-	acq200_setIntClkHz(32768000);
+	info("setIntClkHz %d", ACQ164_BEST_CLK);
+	acq200_setIntClkHz(ACQ164_BEST_CLK);
 }
 
 

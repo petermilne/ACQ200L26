@@ -25,6 +25,7 @@
 #include "acq100.h"
 
 #define ACQ164_SAMPLE_WORD_SIZE	4	/* 24 bit sample in 32 bit field */
+#define ACQ164_BEST_CLK		32768000
 
 #define ACQ164_BDR		FPGA_REG(0x00)
 #define ACQ164_FIFCON		FPGA_REG(0x04)

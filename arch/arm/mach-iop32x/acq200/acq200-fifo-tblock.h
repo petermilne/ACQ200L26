@@ -11,7 +11,15 @@ int tblock_raw_extractor(
 	struct TBLOCK *this,
 	short* u_buf, int maxbuf, 
 	int channel, int offset, int stride);
+int tblock_raw_extractor32(
+	struct TBLOCK *this,
+	short* u_buf, int maxbuf, 
+	int channel, int offset, int stride);
 int tblock_cooked_extractor(
+	struct TBLOCK *this,
+	short* u_buf, int maxbuf, 
+	int channel, int offset, int stride);
+int tblock_cooked_extractor32(
 	struct TBLOCK *this,
 	short* u_buf, int maxbuf, 
 	int channel, int offset, int stride);
