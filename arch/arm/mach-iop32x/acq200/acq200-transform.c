@@ -111,6 +111,26 @@ void transform1(short *to, short *from, int nwords, int stride)
 	}
 }
 
+static void __transform32(u32 *to, u32* from, int nwords, int stride)
+{
+	int nsamples = nwords/stride;
+	int isample, ichannel;
+
+	for (isample = 0; isample != nsamples; ++isample){
+		for (ichannel = 0; ichannel != stride; ++ichannel){
+			to[ichannel*nsamples + isample] =
+				from[isample*stride + ichannel];
+		}
+	}
+}
+
+
+void transform32(short *to, short *from, int nwords, int stride)
+{
+	__transform32((u32*)to, (u32*)from, nwords/2, stride);
+
+}
+
 
 
 
@@ -545,6 +565,7 @@ void acq200_transform_init(void)
 		{ .name = "transform4", .transform = transform4 },
 		{ .name = "transform5", .transform = transform5 },
 		{ .name = "t12344321",  .transform = transform12344321 },
+		{ .name = "transform32", .transform = transform32 },
 	};
 #define NDEFAULTS (sizeof(defaults)/sizeof(struct Transformer))
 	int ireg;
