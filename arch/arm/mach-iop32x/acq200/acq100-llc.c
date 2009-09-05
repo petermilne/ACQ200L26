@@ -143,6 +143,19 @@ int acq100_llc_sync2V = 0;
 #define ACQ100_LLC_SYNC2V_DIDO    3
 #define ACQ100_LLC_SYNC2V_DIDOSTA 4
 
+/* SYNC2V SCRATCHPAD */
+#define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
+#define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+1]
+#define I_SCRATCH_FSTA ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+2]
+#if DI_IN_1
+#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[1]
+#else
+#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DI32]
+#endif
+#define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
+
+#define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
+
 module_param(acq100_llc_sync2V, int, 0664);
 
 
@@ -162,7 +175,7 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1074
+#define BUILD 1075
 #define _VERID(build) "$Revision: 1.24 $ build " #build
 
 #define VERID _VERID(BUILD)
@@ -1042,16 +1055,26 @@ static void wdt_short_action(volatile u32 *reg, unsigned short wdt_bit)
 	*reg = xx;
 }
 
+
 static void wdt_action(void)
 {
 	unsigned short xa = dg.settings.wdt.toggle;
 	unsigned short xb = dg.settings.wdt.toggle >> 16;
 
 	if (dg.status.wdt_preset_done == 0){
-		unsigned short pa = dg.settings.wdt.preset;
-		unsigned short pb = dg.settings.wdt.preset >> 16; 
-		*RTM_DIO_DATA_A |= pa;
-		*RTM_DIO_DATA_B |= pb;
+		unsigned short pa = *RTM_DIO_DATA_A;
+		unsigned short pb = *RTM_DIO_DATA_B;
+		u32 do32;
+
+		pa |= dg.settings.wdt.preset;
+		pb |= dg.settings.wdt.preset >> 16; 
+		
+		*RTM_DIO_DATA_A = pa;
+		*RTM_DIO_DATA_B = pb;
+
+		/* ensure same values occur on transition to DMA */
+		do32 = pb; do32 <<= 16; do32 |= pa;
+		O_SCRATCH_DO32 = do32;
 		dg.status.wdt_preset_done = 1;	
 	}
 
@@ -1492,17 +1515,6 @@ onFifoNotEmpty: {
  **********************************************************************************************/
 
 
-#define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
-#define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+1]
-#define I_SCRATCH_FSTA ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+2]
-#if DI_IN_1
-#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[1]
-#else
-#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DI32]
-#endif
-#define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
-
-#define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
 
 static void llc_loop_sync2V(int entry_code)
 /**< llc_loop_sync2V 2Vectors syncronised loop, optimized for max reprate. 
