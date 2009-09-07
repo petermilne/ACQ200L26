@@ -474,9 +474,6 @@ static ssize_t show_osam(
 
 	const u32 osam = *ACQ132_ADC_OSAM(block) >> OSAMLR(lr);
 
-	dbg(1, "block %d lr %d osam 0x%08x 0x%08x", 
-	    block, lr, osam, *ACQ132_ADC_OSAM(block));
-
 	nacc = ((osam>>ACQ132_ADC_OSAM_R_NACC) & 0x0f) + 1;
 	shift_code = (osam>>ACQ132_ADC_OSAM_R_SHIFT) & 0x0f;
 	switch(shift_code){
