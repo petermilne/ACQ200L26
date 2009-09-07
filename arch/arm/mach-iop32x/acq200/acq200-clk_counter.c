@@ -145,7 +145,7 @@ static void box_init(struct BOXCAR32 *b32)
 	}	
 	boxcar32_init(b32, MAXCOUNT);
 }	
-void acq200_start_clkCounterMonitor(struct CLKCOUNTER_DESCR* descr)
+void acq200_init_clkCounterMonitor(struct CLKCOUNTER_DESCR* descr)
 {
 	memcpy(&clk_probe.descr, descr, sizeof(clk_probe.descr));
 	init_timer(&clkcounter_timeout);
@@ -153,6 +153,9 @@ void acq200_start_clkCounterMonitor(struct CLKCOUNTER_DESCR* descr)
 	box_init(&clk_ref.data);
 	clkcounter_timeout.function = monitorClkCounter;
 	clk_dj = 1;
+}
+void acq200_start_clkCounterMonitor(void)
+{
 	clkcounter_timeout.expires = jiffies + clk_dj;
 	clkcounter_please_stop = 0;
 	add_timer(&clkcounter_timeout);
@@ -161,4 +164,9 @@ void acq200_start_clkCounterMonitor(struct CLKCOUNTER_DESCR* descr)
 void acq200_stop_clkCounterMonitor(void)
 {
 	clkcounter_please_stop = 1;
+}
+
+int acq200_clkCounterMonitor_requestedToStop(void)
+{
+	return clkcounter_please_stop;
 }

@@ -111,6 +111,26 @@ void transform1(short *to, short *from, int nwords, int stride)
 	}
 }
 
+static void __transform32(u32 *to, u32* from, int nwords, int stride)
+{
+	int nsamples = nwords/stride;
+	int isample, ichannel;
+
+	for (isample = 0; isample != nsamples; ++isample){
+		for (ichannel = 0; ichannel != stride; ++ichannel){
+			to[ichannel*nsamples + isample] =
+				from[isample*stride + ichannel];
+		}
+	}
+}
+
+
+void transform32(short *to, short *from, int nwords, int stride)
+{
+	__transform32((u32*)to, (u32*)from, nwords/2, stride);
+
+}
+
 
 
 
@@ -402,14 +422,25 @@ static ssize_t store_transformer_transform(
 {
 	const struct Transformer **pt = DG->bigbuf.transformers;
 	struct TBLOCKLIST *tbl = &DG->bigbuf.tblocks;
-	int itransform;
+	int it;
 
-	if (sscanf(buf, "%d", &itransform) == 1 &&
-	    IN_RANGE(itransform, 0, MAX_TRANSFORMS-1) &&
-	    pt[itransform] != 0){
-		tbl->transform = pt[itransform]->transform;
+	if (sscanf(buf, "%d", &it) == 1){
+		if (IN_RANGE(it, 0, MAX_TRANSFORMS-1) &&
+		    pt[it] != 0){
+			tbl->transform = pt[it]->transform;
+			return strlen(buf);
+		}
+	}else{
+		for (it = 0; it < MAX_TRANSFORMS; ++it){
+			const char *key = pt[it]->name;
+			if (strncmp(key, buf, strlen(key)) == 0){
+				tbl->transform = pt[it]->transform;
+				return strlen(buf);
+			}
+		}
 	}
-	return strlen(buf);
+
+	return -1;
 }
 
 static DRIVER_ATTR(transformer_transform,S_IRUGO | S_IWUGO, 
@@ -545,6 +576,7 @@ void acq200_transform_init(void)
 		{ .name = "transform4", .transform = transform4 },
 		{ .name = "transform5", .transform = transform5 },
 		{ .name = "t12344321",  .transform = transform12344321 },
+		{ .name = "transform32", .transform = transform32 },
 	};
 #define NDEFAULTS (sizeof(defaults)/sizeof(struct Transformer))
 	int ireg;

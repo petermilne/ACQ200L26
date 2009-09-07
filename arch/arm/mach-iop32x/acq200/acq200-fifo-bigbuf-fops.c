@@ -71,6 +71,7 @@ void acq200_initDCI(struct file *file, int lchannel)
 		for (pchan = 0; pchan < NCHAN; ++pchan){
 			if (acq200_pchanEnabled(pchan)){
 				DCI(file)->pchan = pchan;
+				break;
 			}
 		}
 		DCI(file)->ssize = RSIZE;
@@ -190,7 +191,8 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	}
 
 	if ((t_flags&TF_RESULT_IS_RAW) == 0){
-		tblock->extract = tblock_cooked_extractor;
+		tblock->extract = capdef_get_word_size() == sizeof(u32)?
+			tblock_cooked_extractor32: tblock_cooked_extractor;
 	}
 	tblock_unlock(tblock);
 
@@ -243,7 +245,8 @@ int acq200_fifo_part_transform(struct Phase* phase)
 	tblock_lock(tblock);
 	/** unfortunately we have to blt the whole thing back */
 	DG->bigbuf.tblocks.blt(tb_va, tb_tmp, nwords);
-	tblock->extract = tblock_cooked_extractor;
+	tblock->extract = capdef_get_word_size() == sizeof(u32)?
+			tblock_cooked_extractor32: tblock_cooked_extractor;
 	tblock_unlock(tblock);
 	return 0;
 }
@@ -466,13 +469,14 @@ ssize_t acq200_fifo_bigbuf_read_bbrp(
 	}else{
 		int extract_words = bbrp->my_samples_reqlen;
 
-		
+#ifdef TODO_OR_NOTODO
+		/* @@todo should not be needed with extract32 ? */	
 		if (DCI(file)->ssize > sizeof(short)){
 			/* extractor works in shorts */
 			extract_words *= DCI(file)->ssize;
 			extract_words /= sizeof(short);
 		}
-
+#endif
 		cpwords = bbrp->extract(
 			        bbrp->tblock, 
 				(short*)buf, 
@@ -507,6 +511,8 @@ ssize_t acq200_fifo_bigbuf_read (
  */
 {
 	struct BigbufReadPrams bbrp = { 0, };
+
+	dbg(1, "01: len:%u offset:%u", len, *offset);
 
 	if (unlikely(len <= 0)){
 		return 0;
@@ -890,10 +896,14 @@ static int tblock_rawxx_extractor(
 	short* bblock_base = (short*)(va_buf(DG) + this->offset);
 	int cplen;
 	int maxwords;
+	
 	int offsetw = offsam * NCHAN * stride;
 
 	dbg(1, "channel %2d offsam %08x offsetw %08x maxbuf %x", 
 	    channel, offsam, offsetw, maxbuf);
+
+	dbg(2, "sample_size() %d stride %d NCHAN %d",
+	    sample_size(), stride, NCHAN);
 
 	maxwords = min(maxbuf, bblock_samples-offsam) * NCHAN;
 
@@ -903,6 +913,46 @@ static int tblock_rawxx_extractor(
 			return -EFAULT;
 		}
 		offsetw += stride*NCHAN;
+	}		
+
+	dbg(1, "returns maxwords %d", maxwords);
+	return maxwords;
+}
+
+static int tblock_rawxx_extractor32(
+	struct TBLOCK *this,
+	short* ubuf, 
+	int maxbuf, 
+	int channel, 
+	int offsam, 
+	int stride)
+{
+	int bblock_samples = this->length/sample_size()/stride;
+	short* bblock_base = (short*)(va_buf(DG) + this->offset);
+	int cplen;
+	int maxwords;
+	int stride_words = NCHAN * stride * 2; /* 2 shorts per long */
+	
+	int offsetw = offsam * stride_words;
+
+	dbg(1, "channel %2d offsam %08x offsetw %08x maxbuf %x", 
+	    channel, offsam, offsetw, maxbuf);
+
+	dbg(2, "sample_size() %d stride %d NCHAN %d",
+	    sample_size(), stride, NCHAN);
+
+	maxwords = min(maxbuf, bblock_samples-offsam) * NCHAN*2;
+	/** above looks really dodgy for overflow, but ... it works better 
+		than this:
+	maxwords = min(maxbuf, bblock_samples-offsam * NCHAN);
+	*/
+
+	for(cplen = 0; cplen < maxwords; cplen += NCHAN*2){
+		this->memcpy(tbuf, bblock_base + offsetw, sample_size());
+		if (copy_to_user(ubuf+cplen, tbuf, sample_size())){
+			return -EFAULT;
+		}
+		offsetw += stride_words;
 	}		
 
 	dbg(1, "returns maxwords %d", maxwords);
@@ -1017,7 +1067,12 @@ int acq200_fifo_bigbuf_xx_open (
 	struct inode *inode, struct file *file)
 {
 	acq200_initDCI(file, 0);
-	DCI(file)->extract = tblock_rawxx_extractor;
+	if (capdef_get_word_size() == sizeof(u32)){
+		DCI(file)->extract = tblock_rawxx_extractor32;
+	}else{
+		DCI(file)->extract = tblock_rawxx_extractor;
+	}
+
 	return 0;
 }
 

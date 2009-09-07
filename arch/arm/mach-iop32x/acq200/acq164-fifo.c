@@ -91,7 +91,7 @@ extern struct file_operations acq132_gate_pulse_ops;
 void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 
 
-#define AICHAN_DEFAULT 32
+#define AICHAN_DEFAULT 64
 
 
 #define HOT_FIFO_FULL_ENTRIES(fifstat) (((fifstat)&ACQ164_FIFSTAT_HOTPOINT)>>1)
@@ -834,6 +834,12 @@ static int acq164_commitClkCounterSrc(struct Signal* signal)
 	}
 
 	*ACQ164_CLK_COUNTER = clk_counter;
+
+	if (linecode == 9){
+		acq200_stop_clkCounterMonitor();		
+	}else if (acq200_clkCounterMonitor_requestedToStop()){
+		acq200_start_clkCounterMonitor();
+	}
 	return 0;
 }
 
@@ -888,7 +894,7 @@ static struct CAPDEF* acq164_createCapdef(void)
 	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
 
 	capdef_set_nchan(capdef, AICHAN_DEFAULT);
-	capdef_set_word_size(capdef, 2);
+	capdef_set_word_size(capdef,  ACQ164_SAMPLE_WORD_SIZE);
 
 	
 	capdef->ev[0] = createSignal(
@@ -969,9 +975,8 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 
 static void acq164_set_defaults(void)
 {
-/* ICS527 - make "null modem" 4 /4 - works for 1..2MHz clocks */
-        err("2MHz is likely to be a bad idea ..");
-	acq200_setIntClkHz(32768000);
+	info("setIntClkHz %d", ACQ164_BEST_CLK);
+	acq200_setIntClkHz(ACQ164_BEST_CLK);
 }
 
 
@@ -1009,7 +1014,9 @@ static int acq164_fpga_probe(struct device *dev)
 		}else{
 			mk_sysfs(&acq164_fpga_driver);
 			acq164_set_defaults();
-			acq200_start_clkCounterMonitor(&clk_probe);
+			
+			acq200_init_clkCounterMonitor(&clk_probe);
+			acq200_start_clkCounterMonitor();
 		}
 		return rc;
 	}else{
@@ -1068,6 +1075,8 @@ static int __init acq164_fifo_init( void )
 	LINDEB;
 	CAPDEF = acq164_createCapdef();
 	init_dg();
+	DG->bigbuf.tblocks.getChannelData = getChannelData32;
+	acq200_setChannelMask(0x3);
 	LINDEB;
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	DMC_WO->handleEmpties = dmc_handle_empties_acq164;

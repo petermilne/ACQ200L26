@@ -193,7 +193,12 @@ static ssize_t show_channel_mapping(
 	char * buf)
 {
 	int len = 0;
-	len += build_channel_mapping( 0, buf+len);
+	if ((CAPDEF->channel_mask&1)){
+		len += build_channel_mapping( 0, buf+len);
+	}
+	if ((CAPDEF->channel_mask&2)){
+		len += build_channel_mapping(32, buf+len);
+	}
 	return len;
 }
 static DEVICE_ATTR(channel_mapping, S_IRUGO, show_channel_mapping, 0);
@@ -217,7 +222,12 @@ static ssize_t show_channel_mapping_bin(
 	char * buf)
 {
 	int len = 0;
-	len += build_channel_mapping_bin( 0, buf+len);
+	if ((CAPDEF->channel_mask&1)){
+		len += build_channel_mapping( 0, buf+len);
+	}
+	if ((CAPDEF->channel_mask&2)){
+		len += build_channel_mapping(32, buf+len);
+	}
 	return len;
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
@@ -373,9 +383,15 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 
 void acq200_setChannelMask(unsigned mask)
 {
-	CAPDEF_set_nchan(64);
-	CAPDEF->channel_mask = 0x3;
-//	acq164_set_channel_mask(mask);
+	int lchan;
+
+	CAPDEF_set_nchan(NCHAN);
+	CAPDEF->channel_mask = mask&0x3;
+
+	for (lchan = 1; lchan <= NCHAN; ++lchan){
+		int enable =  ((1 << (lchan-1)/32) & mask) != 0;
+		acq200_setChannelEnabled(acq200_lookup_pchan(lchan), enable);
+	}
 }
 
 

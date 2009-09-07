@@ -1266,7 +1266,8 @@ static int acq132_fpga_probe(struct device *dev)
 		}else{
 			mk_sysfs(&acq132_fpga_driver);
 			acq132_set_defaults();
-			acq200_start_clkCounterMonitor(&clk_probe);
+			acq200_init_clkCounterMonitor(&clk_probe);
+			acq200_start_clkCounterMonitor();
 		}
 		return rc;
 	}else{

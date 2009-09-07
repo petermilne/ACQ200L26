@@ -68,6 +68,31 @@ int tblock_raw_extractor(
 	DBG(1, "returns cplen %d", cplen);
 	return cplen;
 }
+int tblock_raw_extractor32(
+	struct TBLOCK *this,
+	short* ubuf, int maxbuf, 
+	int channel, int offset, int stride)
+{
+	short* bblock_base = (short*)(
+		va_buf(DG) + this->offset + channel*sizeof(u32));
+	unsigned *usbuf = (unsigned *)ubuf;
+	int cplen;
+
+
+/* @@todo offset is in shorts - does this affect price of eggs ?? */
+	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
+
+	stride *= NCHAN * 2;		/* two shorts per sample */
+	offset *= NCHAN * 2;
+
+	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
+		COPY_TO_USER(usbuf+cplen, bblock_base + offset, sizeof(u32));
+		offset += stride;
+	}
+
+	DBG(1, "returns cplen %d", cplen);
+	return cplen;
+}
 
 
 int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
@@ -79,12 +104,22 @@ int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
 	*base = bblock_base + offset;
 	return bblock_samples;
 }
+int getChannelData32(struct TBLOCK* tb, short **base, int channel, int offset)
+{
+	int bblock_samples = tb->length/NCHAN/sizeof(u32);
+	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
+				channel*bblock_samples*sizeof(u32));
+
+	*base = bblock_base + offset;
+	return bblock_samples;
+}
 
 int tblock_cooked_extractor(
 	struct TBLOCK *this,
 	short* ubuf, int maxbuf, 
 	int channel, int offset, int stride)
 {
+
 	short* bblock_base;
 	int bblock_samples = DG->bigbuf.tblocks.getChannelData(
 					this, &bblock_base, channel, offset);
@@ -102,6 +137,37 @@ int tblock_cooked_extractor(
 		for(cplen = 0; cplen < maxbuf && offset < this->length; 
 		    ++cplen, bblock_base += stride){
 			COPY_TO_USER(ubuf+cplen, bblock_base, sizeof(short));
+		}		
+	}
+
+	DBG(1, "returns maxbuf %d", maxbuf);
+	return maxbuf;
+}
+
+int tblock_cooked_extractor32(
+	struct TBLOCK *this,
+	short* ubuf, int maxbuf, 
+	int channel, int offset, int stride)
+{
+	unsigned *usbuf = (unsigned *)ubuf;
+	short* bblock_base;
+	int bblock_samples = DG->bigbuf.tblocks.getChannelData(
+					this, &bblock_base, channel, offset);
+
+	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
+/* @@todo offset is in shorts - does this affect price of eggs ?? */
+
+	maxbuf = min(maxbuf, bblock_samples-offset);
+	if (stride == 1){
+		COPY_TO_USER(ubuf, bblock_base, maxbuf*sizeof(u32));
+	}else{
+		int cplen;
+
+		DBG(1, "c:%d stride:%d", channel, stride);
+
+		for(cplen = 0; cplen < maxbuf && offset < this->length; 
+		    ++cplen, bblock_base += stride){
+			COPY_TO_USER(usbuf+cplen, bblock_base, sizeof(u32));
 		}		
 	}
 
@@ -171,9 +237,14 @@ void acq200_init_tblock_list(void)
 	tb_temp.locked = 0;
 
 	switch(DG->btype){
+	
 	case BTYPE_ACQ216:
 	default:
-		tb_temp.extract = tblock_raw_extractor;
+		if (capdef_get_word_size() == sizeof(u32)){
+			tb_temp.extract = tblock_raw_extractor32;
+		}else{
+			tb_temp.extract = tblock_raw_extractor;
+		}
 		tb_temp.fill = tblock_raw_filler;
 		break;
 	case BTYPE_WAV232:

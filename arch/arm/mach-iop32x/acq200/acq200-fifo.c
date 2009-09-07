@@ -1584,7 +1584,7 @@ static int acq200_dmc0_task(void *arg)
 		if (kthread_should_stop()){
 			return 0;
 		}
-		dbg((timeout? 4: 2), "run: %s %s", 
+		dbg((timeout? 5: 2), "run: %s %s", 
 		    timeout? "TIMEOUT": "",
 		    run_request? "RUN_REQUEST": "");
 
