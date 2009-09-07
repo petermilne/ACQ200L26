@@ -422,14 +422,25 @@ static ssize_t store_transformer_transform(
 {
 	const struct Transformer **pt = DG->bigbuf.transformers;
 	struct TBLOCKLIST *tbl = &DG->bigbuf.tblocks;
-	int itransform;
+	int it;
 
-	if (sscanf(buf, "%d", &itransform) == 1 &&
-	    IN_RANGE(itransform, 0, MAX_TRANSFORMS-1) &&
-	    pt[itransform] != 0){
-		tbl->transform = pt[itransform]->transform;
+	if (sscanf(buf, "%d", &it) == 1){
+		if (IN_RANGE(it, 0, MAX_TRANSFORMS-1) &&
+		    pt[it] != 0){
+			tbl->transform = pt[it]->transform;
+			return strlen(buf);
+		}
+	}else{
+		for (it = 0; it < MAX_TRANSFORMS; ++it){
+			const char *key = pt[it]->name;
+			if (strncmp(key, buf, strlen(key)) == 0){
+				tbl->transform = pt[it]->transform;
+				return strlen(buf);
+			}
+		}
 	}
-	return strlen(buf);
+
+	return -1;
 }
 
 static DRIVER_ATTR(transformer_transform,S_IRUGO | S_IWUGO, 
