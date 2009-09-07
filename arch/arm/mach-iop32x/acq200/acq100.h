@@ -53,6 +53,10 @@
 #define ACQ100_SYSCON_EV1_SHIFT 12
 #define ACQ100_SYSCON_TRG_SHIFT 16
 
+#define ACQ100_RGATE_MODE_OFF	0
+#define ACQ100_RGATE_MODE_TRAN  1	/* transient */
+#define ACQ100_RGATE_MODE_GATE  2	/* gated */
+#define ACQ100_RGATE_MODE_COMB  3	/* combined transient, gated */
 
 #define ACQ100_ICS527_FDW	0x007f0000
 #define ACQ100_ICS527_RDW	0x00007f00
