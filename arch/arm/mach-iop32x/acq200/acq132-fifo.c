@@ -445,7 +445,7 @@ int acq132_getRGM(void)
 
 void acq132_setRGM(int enable)
 {
-	__rgm = enable != 0;
+	__rgm = enable != 0? ACQ100_RGATE_MODE_GATE: 0;
 }
 
 
@@ -1108,14 +1108,15 @@ static int acq216_commitTcrSrc(struct Signal* signal)
 	return 0;
 }
 
-static int acq132_commitGateSrc(struct Signal* signal)
+
+static int __acq132_commitGateSrc(struct Signal* signal, u32 gate_code)
 {
 	u32 syscon = *ACQ132_SYSCON;
 
 	syscon &= ~ACQ132_SYSCON_GATE_MASK;
 	
 	if (signal->is_active){
-		syscon |= ACQ132_SYSCON_GATE_EN;
+		syscon |= ACQ132_SYSCON_GATE_DEN|gate_code;
 		if (signal->rising){
 			syscon |= ACQ132_SYSCON_GATE_HI;	       
 		}
@@ -1125,6 +1126,16 @@ static int acq132_commitGateSrc(struct Signal* signal)
 	dbg(1, "active:%d setting %08x", signal->is_active, syscon);
 	*ACQ132_SYSCON = syscon;
 	return 0;
+}
+
+static int acq132_commitGateSrc(struct Signal* signal)
+{
+	return __acq132_commitGateSrc(signal, ACQ132_SYSCON_GATE_EN);
+}
+
+static int acq132_commitEventSrc(struct Signal* signal)
+{
+	return __acq132_commitGateSrc(signal, 0);
 }
 
 
@@ -1193,9 +1204,9 @@ static struct CAPDEF* acq132_createCapdef(void)
 
 	capdef->gate_src = createLevelSignal(
 		"gate_src", 0, 7, 7, 0, 0, acq132_commitGateSrc);
-	/* warning: it's the same thing ... */
+	/* warning: it's the same select ... */
 	capdef->ev[0] = createSignal(
-		"event0", 0, 7, 3, 0, 0, acq132_commitGateSrc);
+		"event0", 0, 7, 3, 0, 0, acq132_commitEventSrc);
 
 	capdef->clk_counter_src = createSignal(
 		"clk_counter_src", 0, 8, 8, 0, 0, acq132_commitClkCounterSrc);

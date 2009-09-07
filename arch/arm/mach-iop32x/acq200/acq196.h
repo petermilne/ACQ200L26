@@ -491,10 +491,11 @@ static inline unsigned acq100_get_maccon_ref(unsigned bank) {
 #define ACQ196_RGATE_MODE	0xc0000000
 #define ACQ196_RGATE_MODE_SHL	30
 
-#define ACQ196_RGATE_MODE_OFF	0
-#define ACQ196_RGATE_MODE_TRAN  1	/* transient */
-#define ACQ196_RGATE_MODE_GATE  2	/* gated */
-#define ACQ196_RGATE_MODE_COMB  3	/* combined transient, gated */
+#define ACQ196_RGATE_MODE_OFF	ACQ100_RGATE_MODE_OFF
+#define ACQ196_RGATE_MODE_TRAN  ACQ100_RGATE_MODE_TRAN	/* transient */
+#define ACQ196_RGATE_MODE_GATE  ACQ100_RGATE_MODE_GATE	/* gated */
+#define ACQ196_RGATE_MODE_COMB  ACQ100_RGATE_MODE_COMB	
+/* combined transient, gated */
 
 
 /* PORT: temporary */

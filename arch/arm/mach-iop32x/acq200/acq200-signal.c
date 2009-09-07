@@ -36,6 +36,8 @@
 ssize_t acq200_show_signal(
 	struct Signal* signal, struct device * dev, char * buf)
 {
+	const char *hilo;
+
 	if (!signal){
 		err("ERROR: null signal");
 		return -ENODEV;
@@ -48,13 +50,13 @@ ssize_t acq200_show_signal(
 			       signal->name,
 			       signal->is_active?"ACTIVE":"inactive");
 	default:
+		hilo = signal->rising? signal->key_hi: signal->key_lo;
 		return sprintf(buf, "%s D%c%d %s %s\n",
 			       signal->name, 
 			       signal->is_output? 'O': 'I',
 /* frig DIx for case of phys bits already set (ob_clk_src) gimme C++ */
 			       signal->DIx <= 16? signal->DIx: 16,
-			       signal->is_output? "":
-			               signal->rising? "rising": "falling",
+			       signal->is_output? "": hilo,
 			       signal->is_active? "ACTIVE":"inactive");
 	}
 }

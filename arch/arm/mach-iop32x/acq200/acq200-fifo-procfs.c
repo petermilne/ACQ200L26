@@ -3660,7 +3660,7 @@ static int acq200_proc_stat_timing(
 		_show_measured_sample_rate(
 			nbuf, sizeof(nbuf), ELAPSED_SAMPLES, 
 			process_ms, process_us);
-	}else{
+	}else if (DMC_WO_getState() != ST_STOP){
 		struct RUNNING_STATS rstats;
 		
 		getRunningStats(&rstats);
