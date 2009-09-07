@@ -1241,6 +1241,9 @@ extern void acq200_setChannelLut(const int *lut, int nlut);
 
 extern 
 int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset);
+extern 
+int getChannelData32(struct TBLOCK* tb, short **base, int channel, int offset);
+
 extern unsigned getChannelNumSamples(int lchan);
 
 extern u32 acq200_stateListenerMakeStatecode(enum STATE s);

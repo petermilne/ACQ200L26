@@ -512,6 +512,8 @@ ssize_t acq200_fifo_bigbuf_read (
 {
 	struct BigbufReadPrams bbrp = { 0, };
 
+	dbg(1, "01: len:%u offset:%u", len, *offset);
+
 	if (unlikely(len <= 0)){
 		return 0;
 	}

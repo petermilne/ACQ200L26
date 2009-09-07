@@ -104,6 +104,15 @@ int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
 	*base = bblock_base + offset;
 	return bblock_samples;
 }
+int getChannelData32(struct TBLOCK* tb, short **base, int channel, int offset)
+{
+	int bblock_samples = tb->length/NCHAN/sizeof(u32);
+	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
+				channel*bblock_samples*sizeof(u32));
+
+	*base = bblock_base + offset;
+	return bblock_samples;
+}
 
 int tblock_cooked_extractor(
 	struct TBLOCK *this,

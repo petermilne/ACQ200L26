@@ -1075,6 +1075,7 @@ static int __init acq164_fifo_init( void )
 	LINDEB;
 	CAPDEF = acq164_createCapdef();
 	init_dg();
+	DG->bigbuf.tblocks.getChannelData = getChannelData32;
 	acq200_setChannelMask(0x3);
 	LINDEB;
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
