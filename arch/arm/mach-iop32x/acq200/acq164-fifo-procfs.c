@@ -193,7 +193,12 @@ static ssize_t show_channel_mapping(
 	char * buf)
 {
 	int len = 0;
-	len += build_channel_mapping( 0, buf+len);
+	if ((CAPDEF->channel_mask&1)){
+		len += build_channel_mapping( 0, buf+len);
+	}
+	if ((CAPDEF->channel_mask&2)){
+		len += build_channel_mapping(32, buf+len);
+	}
 	return len;
 }
 static DEVICE_ATTR(channel_mapping, S_IRUGO, show_channel_mapping, 0);
@@ -217,7 +222,12 @@ static ssize_t show_channel_mapping_bin(
 	char * buf)
 {
 	int len = 0;
-	len += build_channel_mapping_bin( 0, buf+len);
+	if ((CAPDEF->channel_mask&1)){
+		len += build_channel_mapping( 0, buf+len);
+	}
+	if ((CAPDEF->channel_mask&2)){
+		len += build_channel_mapping(32, buf+len);
+	}
 	return len;
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
