@@ -988,7 +988,7 @@ void acq132_register_transformers(void)
 }
 
 
-static void check_first_row(unsigned* first, unsigned* last)
+static int check_first_row(unsigned* first, unsigned* last)
 {
 	unsigned *searchp = (unsigned*)va_buf(DG);
 	int ifirst = *first / USS;
@@ -998,6 +998,7 @@ static void check_first_row(unsigned* first, unsigned* last)
 	if (TBLOCK_OFFSET(*first) > ROW_SIZE){
 		if (IS_EVENT_MAGIC(searchp[ifirst - ROW_SIZE/USS])){
 			err("previous MAGIC at 0x%08x", ifirst - ROW_LONGS);
+			return -1
 		}else{
 			dbg(1, "no previous MAGIC (good)");
 		}
@@ -1011,12 +1012,16 @@ static void check_first_row(unsigned* first, unsigned* last)
 				dbg(1, "got a magic going forward %d [Good]", 
 				    block);
 			}else{
-				err( "no MAGIC going forward %d", block);
+ 				err( "no MAGIC going forward %d", block);
+				return -1;
 			}
 		}else{
-				dbg(1, "too close to tblock end, can't look");
+			dbg(1, "too close to tblock end, can't look");
+			return -1;
 		}
 	}	
+
+	return 0;
 }
 
 
@@ -1036,7 +1041,9 @@ void acq132_event_adjust(
 	dbg(1, "eslen %d nblocks %d event_adjust_delta_blocks %d",
 	    eslen, nblocks, event_adjust_delta_blocks);
 
-	check_first_row(first, last);
+	if (check_first_row(first, last) != 0){
+		err("FAILED to VALIDATE ES");	
+	}
 
 	if (mark_event_data){
 		memset(BB_PTR(*first-sample_size()), 0xfe, 8*sizeof(short));
