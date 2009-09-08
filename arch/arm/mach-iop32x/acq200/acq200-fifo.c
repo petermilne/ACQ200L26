@@ -2662,7 +2662,7 @@ static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
  */
 	for (isL = istart; isL < max_search; isL += ES_LONGS){
 
-		dbg((INTERESTING? 1: 2),
+		dbg((INTERESTING? 1: 3),
 		    "%4d:off %08x max %08x d:%08x %s",
 		    iter, isL*4, max_search*4, searchp[isL], 
 		    IS_EVENT_MAGIC(searchp[isL])? "MAGIC": "");
