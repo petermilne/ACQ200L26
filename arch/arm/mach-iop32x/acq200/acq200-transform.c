@@ -431,11 +431,14 @@ static ssize_t store_transformer_transform(
 			return strlen(buf);
 		}
 	}else{
-		for (it = 0; it < MAX_TRANSFORMS; ++it){
-			const char *key = pt[it]->name;
-			if (strncmp(key, buf, strlen(key)) == 0){
-				tbl->transform = pt[it]->transform;
-				return strlen(buf);
+		char ukey[32];
+		if (sscanf(buf, "%31s", ukey) == 1){
+			for (it = 0; it < MAX_TRANSFORMS; ++it){
+				const char *key = pt[it]->name;
+				if (key != 0 && strcmp(key, buf) == 0){
+					tbl->transform = pt[it]->transform;
+					return strlen(buf);
+				}
 			}
 		}
 	}
