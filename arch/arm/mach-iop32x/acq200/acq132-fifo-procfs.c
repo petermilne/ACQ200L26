@@ -876,7 +876,38 @@ static ssize_t show_ClkCounter(
 
 static DEVICE_ATTR(ClkCounter, S_IRUGO, show_ClkCounter, 0);
 
+extern int acq132_set_best_decimation(int khz, int *khz_clock, int *decim);
 
+static int khz_clock;
+static int decim;
+
+static ssize_t show_best_decimation(
+	struct device *dev,
+	struct device_attribute *attr,
+	char* buf)
+{
+	return sprintf(buf, "%d %d\n", khz_clock, decim);
+}
+
+static ssize_t store_best_decimation(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	int khz;
+
+	khz_clock = -1;	
+
+	if (sscanf(buf, "%d", &khz) == 1){
+		if (acq132_set_best_decimation(khz, &khz_clock, &decim) == 0){
+			return count;						
+		}
+	}
+	return -1;
+}
+
+static DEVICE_ATTR(best_decimation, S_IRUGO|S_IWUGO, 
+		   show_best_decimation, store_best_decimation);
 
 static void acq132_mk_dev_sysfs(struct device *dev)
 {
@@ -905,6 +936,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ChannelSpeedMask);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
+	DEVICE_CREATE_FILE(dev, &dev_attr_best_decimation);
 }
 
 

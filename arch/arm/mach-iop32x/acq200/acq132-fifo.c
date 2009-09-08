@@ -305,26 +305,35 @@ static void _setIntClkHz( int hz )
 		      hz);
 }
 
-static int acq132_decim;
+extern int get_acq132_decim(void);
+extern void acq132_setAllDecimate(int dec);
 
-static void acq132_setAllDecimate(int dec)
+int acq132_set_best_decimation(int khz, int *khz_clock, int *decim)
+/* min ics_527 output = 4MHz. for slower speed decimate ..
+ * but be careful NOT to overclock the ADC, could be 10MHz part ..
+ */
 {
-#define DECIM	1
-	int block;
-
-	if (dec < 1) dec = 1;
-	if (dec > 16) dec = 16;
-
-	acq132_decim = dec;
-
-	dbg(1, "setting decimation to %d", dec);
-
-	for (block = 0; block <= 3; ++block){
-		acq132_set_osam_nacc(block, OSAMLR('L'), dec, -2, DECIM);
-		acq132_set_osam_nacc(block, OSAMLR('R'), dec, -2, DECIM);
+	int _decim = 
+		(khz < 2000)? 4 :	/* SCLK < 2M * 4 < 10MHz Good! */
+		(khz < 3000)? 3 :	/* SCLK < 3M * 3 < 10MHz Good! */
+		(khz < 4000)? 2 :	/* SCLK < 4M * 2 < 10MHz Good! */
+		1;			/* SCLK = kHZ		       */
+	
+	if (khz < 1000 || khz > 100000){
+		return -1;
 	}
-}	
 
+	acq132_setAllDecimate(_decim);		
+	khz *= _decim;
+
+	if (khz_clock){
+		*khz_clock = khz;
+	}
+	if (decim){
+		*decim = _decim;
+	}
+	return 0;
+}
 
 // ./ob_calc_527 --fin 20000  32000
 static int _set_ob_clock(int khz)
@@ -340,20 +349,10 @@ static int _set_ob_clock(int khz)
 	static char fin_def[20];
 	static char *argv[6];
 	int ii;
-	/* min ics_527 output = 4MHz. for slower speed decimate ..
-         * but be careful NOT to overclock the ADC, could be 10MHz part ..
-	 */
-	int decim = 
-		(khz < 2000)? 4 :	/* SCLK < 2M * 4 < 10MHz Good! */
-		(khz < 3000)? 3 :	/* SCLK < 3M * 3 < 10MHz Good! */
-		(khz < 4000)? 2 :	/* SCLK < 4M * 2 < 10MHz Good! */
-		1;			/* SCLK = kHZ		       */
-	
+
+	acq132_set_best_decimation(khz, &khz, 0);
+
 	sprintf(fin_def, "%d", acq200_clk_hz/1000);
-
-	acq132_setAllDecimate(decim);		
-	khz *= decim;
-
 	sprintf(fout_def, "%d", khz);
 
         ii = 0;
@@ -1110,13 +1109,19 @@ static int acq216_commitTcrSrc(struct Signal* signal)
 
 
 static int __acq132_commitGateSrc(struct Signal* signal, u32 gate_code)
+/* gate_code is redundant */
 {
 	u32 syscon = *ACQ132_SYSCON;
 
 	syscon &= ~ACQ132_SYSCON_GATE_MASK;
 	
+	/* turns out DEN and EN are basically the same thing, and in this
+	 * context (SFPGA->AFPGA) GATE is the external signal also known
+	 * as event. To select GATE MODE clear ACQ132_ADC_CTRL_PREPOST
+	 */
 	if (signal->is_active){
-		syscon |= ACQ132_SYSCON_GATE_DEN|gate_code;
+		syscon |= 
+			ACQ132_SYSCON_GATE_DEN|ACQ132_SYSCON_GATE_EN|gate_code;
 		if (signal->rising){
 			syscon |= ACQ132_SYSCON_GATE_HI;	       
 		}
@@ -1394,7 +1399,7 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 
 	*ACQ132_ICS527 = ics527;
 
-	acq200_clk_hz = ob_clock_def.actual/acq132_decim * 1000;
+	acq200_clk_hz = ob_clock_def.actual/get_acq132_decim() * 1000;
 }
 
 

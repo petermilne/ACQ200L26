@@ -25,6 +25,12 @@
 #include "acq200-fifo.h"
 #include "acq132.h"
 
+static int _decim;
+
+int get_acq132_decim(void)
+{
+	return _decim == 0 ? 1: _decim;
+}
 
 static inline u32 acq132_adc_set_osam(u32 osam, int shl, int nacc)
 {
@@ -82,4 +88,25 @@ void acq132_set_osam_nacc(
 	*ACQ132_ADC_OSAM(dev) = osam;
 	dbg(1, "%p was: 0x%08x set 0x%08x reads 0x%08x ",
 	    ACQ132_ADC_OSAM(dev), osam1, osam, *ACQ132_ADC_OSAM(dev));
+
+	_decim = nacc;
 }
+
+void acq132_setAllDecimate(int dec)
+{
+#define DECIM	1
+	int block;
+
+	if (dec < 1) dec = 1;
+	if (dec > 16) dec = 16;
+
+	_decim = dec;
+
+	dbg(1, "setting decimation to %d", dec);
+
+	for (block = 0; block <= 3; ++block){
+		acq132_set_osam_nacc(block, OSAMLR('L'), dec, -2, DECIM);
+		acq132_set_osam_nacc(block, OSAMLR('R'), dec, -2, DECIM);
+	}
+}	
+
