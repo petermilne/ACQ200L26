@@ -435,12 +435,19 @@ static ssize_t store_transformer_transform(
 		if (sscanf(buf, "%31s", ukey) == 1){
 			for (it = 0; it < MAX_TRANSFORMS; ++it){
 				const char *key = pt[it]->name;
-				if (key != 0 && strcmp(key, buf) == 0){
+
+				if (key != 0){
+					dbg(1, "matching \"%s\" and \"%s\"",
+					    ukey, key);
+				}
+
+				if (key != 0 && strcmp(key, ukey) == 0){
 					tbl->transform = pt[it]->transform;
 					return strlen(buf);
 				}
 			}
 		}
+		else err("sscanf failed");
 	}
 
 	return -1;
