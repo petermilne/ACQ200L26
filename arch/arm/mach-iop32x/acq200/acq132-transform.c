@@ -998,7 +998,7 @@ static int check_first_row(unsigned* first, unsigned* last)
 	if (TBLOCK_OFFSET(*first) > ROW_SIZE){
 		if (IS_EVENT_MAGIC(searchp[ifirst - ROW_SIZE/USS])){
 			err("previous MAGIC at 0x%08x", ifirst - ROW_LONGS);
-			return -1
+			return -1;
 		}else{
 			dbg(1, "no previous MAGIC (good)");
 		}
