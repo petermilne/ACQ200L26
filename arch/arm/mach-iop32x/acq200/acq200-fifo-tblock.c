@@ -172,7 +172,7 @@ int tblock_cooked_extractor32(
 	}
 
 	DBG(1, "returns maxbuf %d", maxbuf);
-	return maxbuf;
+	return maxbuf * sizeof(u32)/sizeof(short);
 }
 int tblock_raw_filler(
 	struct TBLOCK *this,
