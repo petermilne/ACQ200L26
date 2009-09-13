@@ -167,7 +167,7 @@ static struct MEAN_CONSUMERS {
 	spinlock_t lock;
 } mc_list;
 
-static void sum_up(void *data)
+static void sum_up_s16(void *data)
 {
 	int ic;
 	short *channels = (short*)data;
@@ -178,6 +178,24 @@ static void sum_up(void *data)
 		work_state.the_sums[ic] += channels[ic];
 	}
 }
+
+static void sum_up_acq164(void *data)
+/* acq164 data is 24 bit wide in a 32 bit field. right shift to 
+ * eliminate effect of overflow (for NACC < 256)
+ */
+{
+	int ic;
+	int *channels = (int *)data;
+
+	dma_map_single(DG->dev, data, app_state.sample_size, DMA_FROM_DEVICE);
+
+	for (ic = 0; ic != app_state.nchannels; ++ic){
+		work_state.the_sums[ic] += channels[ic] >> 8;
+	}	
+}
+
+static void (*sum_up)(void *data) = sum_up_s16;
+
 
 #define LHIST 3
 #define NHIST (1<<LHIST)
@@ -276,6 +294,14 @@ static void start_work(void)
 {
 	dbg(1, "01");
 	work_state.iskip = work_state.imean = 0;
+	if (DG->btype == BTYPE_ACQ164){
+		sum_up = sum_up_acq164;
+		if (log2_mean > 7){
+			log2_mean = 7;	/* prevent overflow */
+		}
+	}else{
+		sum_up = sum_up_s16;
+	}
 	acq200_setRefillClient(mean_work);
 	on_arm();
 

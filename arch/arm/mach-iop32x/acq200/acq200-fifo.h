@@ -411,11 +411,17 @@ typedef int (*GetChannelData)(
 
 #define NHISTO 16
 
-#define BTYPE_AI 0
-#define BTYPE_AO 1
+#define BTYPE_AI 0x0000
+#define BTYPE_AO 0x1000
 
-#define BTYPE_ACQ216 BTYPE_AI
-#define BTYPE_WAV232 BTYPE_AO
+#define BTYPE_IS_AI(bt) (((bt) & BTYPE_AO) == 0)
+#define BTYPE_IS_AO(bt) (((bt) & BTYPE_AO) != 0)
+
+#define BTYPE_ACQ216 (BTYPE_AI|1)
+#define BTYPE_ACQ196 (BTYPE_AI|2)
+#define BTYPE_ACQ132 (BTYPE_AI|3)
+#define BTYPE_ACQ164 (BTYPE_AI|4)
+#define BTYPE_WAV232 (BTYPE_AO|1)
 
 
 #define TB_IN_PHASE(tb) (atomic_read(&tb->in_phase))

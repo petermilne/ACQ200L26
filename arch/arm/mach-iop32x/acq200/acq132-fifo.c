@@ -486,7 +486,7 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 
 
 static struct DevGlobs acq132_dg = {
-	.btype = BTYPE_AI,
+	.btype = BTYPE_ACQ132,
 	.hitide = 2,
 	.max_alloc = 10240,
 	.busywait = 0,

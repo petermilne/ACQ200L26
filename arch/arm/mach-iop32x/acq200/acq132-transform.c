@@ -1046,13 +1046,13 @@ void acq132_event_adjust(
 	}
 
 	if (mark_event_data){
-		memset(BB_PTR(*first-sample_size()), 0xfe, 8*sizeof(short));
+		memset(BB_PTR(*first-8*sizeof(short)), 0xfe, 8*sizeof(short));
 		memset(BB_PTR(*last), 0xde, 8*sizeof(short));
 	}
 	dbg(1, "nblocks:%d first,last: 0x%08x,0x%08x => 0x%08x,0x%08x",
 	    nblocks, *first, *last, *first, newlast);
 
-	if (stub_event_adjust < 0){
+	if (stub_event_adjust <= 0){
 		dbg(1, "updating last");
 		*last = newlast;
 	}

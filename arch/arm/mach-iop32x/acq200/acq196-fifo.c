@@ -384,7 +384,7 @@ static void acq196_cdog_check(int cdog_code)
 
 
 static struct DevGlobs acq196_dg = {
-	.btype = BTYPE_ACQ216,
+	.btype = BTYPE_ACQ196,
 #ifdef ACQ196H
 	.hitide = 4,
 #else

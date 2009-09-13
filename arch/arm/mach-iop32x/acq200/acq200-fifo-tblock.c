@@ -236,21 +236,16 @@ void acq200_init_tblock_list(void)
 	tb_temp.length = tbl->blocklen;
 	tb_temp.locked = 0;
 
-	switch(DG->btype){
-	
-	case BTYPE_ACQ216:
-	default:
+	if (BTYPE_IS_AI(DG->btype)){
 		if (capdef_get_word_size() == sizeof(u32)){
 			tb_temp.extract = tblock_raw_extractor32;
 		}else{
 			tb_temp.extract = tblock_raw_extractor;
 		}
 		tb_temp.fill = tblock_raw_filler;
-		break;
-	case BTYPE_WAV232:
+	}else{
 		tb_temp.extract = tblock_cooked_extractor;
 		tb_temp.fill = tblock_cooked_filler;
-		break;
 	}
 
 	for (iblock = 0; iblock != tbl->nblocks; ++iblock){

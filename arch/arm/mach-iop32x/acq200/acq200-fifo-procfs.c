@@ -1819,6 +1819,12 @@ static ssize_t show_btype(
 	switch(DG->btype){
 	case BTYPE_ACQ216:
 		rc = sprintf(buf, "acq216"); break;
+	case BTYPE_ACQ164:
+		rc = sprintf(buf, "acq164"); break;
+	case BTYPE_ACQ196:
+		rc = sprintf(buf, "acq196"); break;
+	case BTYPE_ACQ132:
+		rc = sprintf(buf, "acq132"); break;
 	case BTYPE_WAV232:
 		rc = sprintf(buf, "wav232"); break;
 	default:
@@ -1830,6 +1836,7 @@ static ssize_t show_btype(
 static ssize_t store_btype(
 	struct device_driver * driver, const char * buf, size_t count)
 {
+/* @@todo - NOT a good idea - fixed at load const */
 	if (STREQN(buf, "acq216" )){
 		DG->btype = BTYPE_ACQ216;
 	}else if (STREQN(buf, "wav232" )){
