@@ -860,6 +860,17 @@ static int acq164_commitAdcModeChoice(struct Signal* signal)
 	}
 }
 
+int acq164_getDecimation(void)
+{
+	switch(CAPDEF->adc_mode->px[0].ix >> ACQ164_SYSCON_CDM_SHIFT){
+	case ACQ164_SYSCON_CDM_HISPEED_256:
+	case ACQ164_SYSCON_CDM_LP_256:
+		return 256;
+	default:
+		return 512;
+	}
+}
+
 static struct Signal *createSignalAdcMode(void)
 {
 	static const char *ACQ164_ADC_MODE_CHOICES[] = {
@@ -966,7 +977,7 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 
 	*ACQ164_ICS527 = ics527;
 
-	acq200_clk_hz = ob_clock_def.actual/ACQ164_DECIM * 1000;
+	acq200_clk_hz = ob_clock_def.actual * 1000;
 }
 
 
@@ -1144,7 +1155,7 @@ void acq164_set_obclock(int FDW, int RDW, int R, int Sx)
 
 	*ACQ164_ICS527 = ics527;
 
-	acq200_clk_hz = ob_clock_def.actual/ACQ164_DECIM * 1000;
+	acq200_clk_hz = ob_clock_def.actual * 1000;
 }
 
 

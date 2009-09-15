@@ -1627,6 +1627,21 @@ static ssize_t store_debug(
 }
 
 
+#ifdef ACQ164
+extern int acq164_getDecimation(void);
+
+
+static ssize_t show_int_clk(
+	struct device_driver * driver, char * buf)
+{
+        return sprintf(buf,"%d %dkHz %dMHz OSR:%d\n", 
+		       acq200_clk_hz, 
+		       acq200_clk_hz/1000,
+		       acq200_clk_hz/1000000,
+		       acq200_clk_hz/acq164_getDecimation());
+}
+
+#else
 static ssize_t show_int_clk(
 	struct device_driver * driver, char * buf)
 {
@@ -1635,6 +1650,7 @@ static ssize_t show_int_clk(
 		       acq200_clk_hz/1000,
 		       acq200_clk_hz/1000000);
 }
+#endif
 
 static ssize_t store_int_clk(
 	struct device_driver * driver, const char * buf, size_t count)
@@ -1664,9 +1680,8 @@ static ssize_t store_int_clk(
 	return strlen(buf);
 }
 
-#ifndef ACQ164
 static ssize_t show_int_clk_div(
-	struct device_driver * driver, char * buf)
+       struct device_driver * driver, char * buf)
 {
         return sprintf(buf,"%u\n", arch_get_int_clk_div());
 }
@@ -1683,7 +1698,7 @@ static ssize_t store_int_clk_div(
 	};
 	return strlen(buf);
 }
-#endif
+
 
 
 static ssize_t show_busywait(
