@@ -163,6 +163,13 @@ extern int init_atu;
 #define IOP3XX_DMA1_BCR		(volatile u32 *)IOP3XX_REG_ADDR(0x0460)
 #define IOP3XX_DMA1_DCR		(volatile u32 *)IOP3XX_REG_ADDR(0x0464)
 
+/* SSP */
+#define IOP3XX_SSCR0		(volatile u32 *)IOP3XX_REG_ADDR(0x0600)
+#define IOP3XX_SSCR1		(volatile u32 *)IOP3XX_REG_ADDR(0x0604)
+#define IOP3XX_SSSR		(volatile u32 *)IOP3XX_REG_ADDR(0x0608)
+#define IOP3XX_SSITR		(volatile u32 *)IOP3XX_REG_ADDR(0x060c)
+#define IOP3XX_SSDR		(volatile u32 *)IOP3XX_REG_ADDR(0x0610)
+
 /* Peripheral bus interface  */
 #define IOP3XX_PBCR		(volatile u32 *)IOP3XX_REG_ADDR(0x0680)
 #define IOP3XX_PBISR		(volatile u32 *)IOP3XX_REG_ADDR(0x0684)
