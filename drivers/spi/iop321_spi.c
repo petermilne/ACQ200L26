@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------- */
-/* drivers/spi/iop32x_spi.c spi device driver for IOP321                     */
+/* drivers/spi/iop321_spi.c spi device driver for IOP321                     */
 /* ------------------------------------------------------------------------- */
-/*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
+/*   Copyright (C) 2009 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
 
     This program is free software; you can redistribute it and/or modify
@@ -23,6 +23,7 @@
  * Copyright (c) 2006 Simtec Electronics
  *	Ben Dooks <ben@simtec.co.uk>
 */
+#define DEBUG 1
 
 #include <linux/init.h>
 #include <linux/spinlock.h>
@@ -41,7 +42,7 @@
 #include <asm/arch/iop321.h>
 #include <asm/arch/iop321_spi.h>
 
-struct iop32x_spi {
+struct iop321_spi {
 	/* bitbang has to be first */
 	struct spi_bitbang	 bitbang;
 	struct completion	 done;
@@ -66,19 +67,19 @@ struct iop32x_spi {
 	struct iop321_spi_info  *pdata;
 };
 
-static inline struct iop32x_spi *to_hw(struct spi_device *sdev)
+static inline struct iop321_spi *to_hw(struct spi_device *sdev)
 {
 	return spi_master_get_devdata(sdev->master);
 }
 
-static void iop32x_spi_setcs(struct spi_board_info *spi, int cs, int pol)
+static void iop321_spi_setcs(struct spi_board_info *spi, int cs, int pol)
 {
 /* default: no cs */
 }
 
-static void iop32x_spi_chipsel(struct spi_device *spi, int value)
+static void iop321_spi_chipsel(struct spi_device *spi, int value)
 {
-	struct iop32x_spi *hw = to_hw(spi);
+	struct iop321_spi *hw = to_hw(spi);
 	unsigned int cspol = spi->mode & SPI_CS_HIGH ? 1 : 0;
 
 	switch (value) {
@@ -93,10 +94,10 @@ static void iop32x_spi_chipsel(struct spi_device *spi, int value)
 	}
 }
 
-static int iop32x_spi_setupxfer(struct spi_device *spi,
+static int iop321_spi_setupxfer(struct spi_device *spi,
 				 struct spi_transfer *t)
 {
-	struct iop32x_spi *hw = to_hw(spi);
+	struct iop321_spi *hw = to_hw(spi);
 
 	spin_lock(&hw->bitbang.lock);
 	if (!hw->bitbang.busy) {
@@ -106,7 +107,7 @@ static int iop32x_spi_setupxfer(struct spi_device *spi,
 	return 0;
 }
 
-static int iop32x_spi_setup(struct spi_device *spi)
+static int iop321_spi_setup(struct spi_device *spi)
 {
 	int ret;
 
@@ -116,7 +117,7 @@ static int iop32x_spi_setup(struct spi_device *spi)
 	if ((spi->mode & SPI_LSB_FIRST) != 0)
 		return -EINVAL;
 
-	ret = iop32x_spi_setupxfer(spi, NULL);
+	ret = iop321_spi_setupxfer(spi, NULL);
 	if (ret < 0) {
 		dev_err(&spi->dev, "setupxfer returned %d\n", ret);
 		return ret;
@@ -129,18 +130,18 @@ static int iop32x_spi_setup(struct spi_device *spi)
 	return 0;
 }
 
-static void iop32x_tx(struct iop32x_spi *hw)
+static void iop321_tx(struct iop321_spi *hw)
 {
 
 }
-static inline unsigned int hw_txbyte(struct iop32x_spi *hw, int count)
+static inline unsigned int hw_txbyte(struct iop321_spi *hw, int count)
 {
 	return hw->tx ? hw->tx[count] : 0;
 }
 
-static int iop32x_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
+static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 {
-	struct iop32x_spi *hw = to_hw(spi);
+	struct iop321_spi *hw = to_hw(spi);
 
 	dev_dbg(&spi->dev, "txrx: tx %p, rx %p, len %d\n",
 		t->tx_buf, t->rx_buf, t->len);
@@ -151,17 +152,17 @@ static int iop32x_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 	hw->count = 0;
 
 	/* send the first byte[s] */
-	iop32x_tx(hw);
+	iop321_tx(hw);
 	wait_for_completion(&hw->done);
 
 	return hw->count;
 }
 
-// IRQ_IOP32X_SSP
+// IRQ_IOP321_SSP
 
-static irqreturn_t iop32x_spi_irq(int irq, void *dev)
+static irqreturn_t iop321_spi_irq(int irq, void *dev)
 {
-	struct iop32x_spi *hw = dev;
+	struct iop321_spi *hw = dev;
 #if 0
 	unsigned int spsta = readb(hw->regs + S3C2410_SPSTA);
 	unsigned int count = hw->count;
@@ -197,16 +198,16 @@ static irqreturn_t iop32x_spi_irq(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
-static int iop32x_spi_probe(struct platform_device *pdev)
+static int iop321_spi_probe(struct platform_device *pdev)
 {
-	struct iop32x_spi *hw;
+	struct iop321_spi *hw;
 	struct spi_master *master;
 	struct spi_board_info *bi;
 	struct resource *res;
 	int err = 0;
 	int i;
 
-	master = spi_alloc_master(&pdev->dev, sizeof(struct iop32x_spi));
+	master = spi_alloc_master(&pdev->dev, sizeof(struct iop321_spi));
 	if (master == NULL) {
 		dev_err(&pdev->dev, "No memory for spi_master\n");
 		err = -ENOMEM;
@@ -214,7 +215,7 @@ static int iop32x_spi_probe(struct platform_device *pdev)
 	}
 
 	hw = spi_master_get_devdata(master);
-	memset(hw, 0, sizeof(struct iop32x_spi));
+	memset(hw, 0, sizeof(struct iop321_spi));
 
 	hw->master = spi_master_get(master);
 	hw->pdata = pdev->dev.platform_data;
@@ -232,15 +233,15 @@ static int iop32x_spi_probe(struct platform_device *pdev)
 	/* setup the state for the bitbang driver */
 
 	hw->bitbang.master         = hw->master;
-	hw->bitbang.setup_transfer = iop32x_spi_setupxfer;
-	hw->bitbang.chipselect     = iop32x_spi_chipsel;
-	hw->bitbang.txrx_bufs      = iop32x_spi_txrx;
-	hw->bitbang.master->setup  = iop32x_spi_setup;
+	hw->bitbang.setup_transfer = iop321_spi_setupxfer;
+	hw->bitbang.chipselect     = iop321_spi_chipsel;
+	hw->bitbang.txrx_bufs      = iop321_spi_txrx;
+	hw->bitbang.master->setup  = iop321_spi_setup;
 
 	dev_dbg(hw->dev, "bitbang at %p\n", &hw->bitbang);
 
 	/* find and map our resources */
-
+#if 0
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
 		dev_err(&pdev->dev, "Cannot get IORESOURCE_MEM\n");
@@ -256,7 +257,7 @@ static int iop32x_spi_probe(struct platform_device *pdev)
 		err = -ENXIO;
 		goto err_no_iores;
 	}
-#if 0
+#if 
 	hw->regs = ioremap(res->start, (res->end - res->start)+1);
 	if (hw->regs == NULL) {
 		dev_err(&pdev->dev, "Cannot map IO\n");
@@ -271,7 +272,7 @@ static int iop32x_spi_probe(struct platform_device *pdev)
 		goto err_no_irq;
 	}
 
-	err = request_irq(hw->irq, iop32x_spi_irq, 0, pdev->name, hw);
+	err = request_irq(hw->irq, iop321_spi_irq, 0, pdev->name, hw);
 	if (err) {
 		dev_err(&pdev->dev, "Cannot claim IRQ\n");
 		goto err_no_irq;
@@ -283,7 +284,7 @@ static int iop32x_spi_probe(struct platform_device *pdev)
 
 #if 0
 	if (!hw->pdata->set_cs){
-		hw->set_cs = iop32x_spi_setcs;
+		hw->set_cs = iop321_spi_setcs;
 	}else{
 		hw->set_cs = hw->pdata->set_cs;
 	}
@@ -328,9 +329,9 @@ static int iop32x_spi_probe(struct platform_device *pdev)
 	return err;
 }
 
-static int iop32x_spi_remove(struct platform_device *dev)
+static int iop321_spi_remove(struct platform_device *dev)
 {
-	struct iop32x_spi *hw = platform_get_drvdata(dev);
+	struct iop321_spi *hw = platform_get_drvdata(dev);
 
 	platform_set_drvdata(dev, NULL);
 
@@ -348,49 +349,49 @@ static int iop32x_spi_remove(struct platform_device *dev)
 
 #ifdef CONFIG_PM
 
-static int iop32x_spi_suspend(struct platform_device *pdev, pm_message_t msg)
+static int iop321_spi_suspend(struct platform_device *pdev, pm_message_t msg)
 {
-	struct iop32x_spi *hw = platform_get_drvdata(pdev);
+	struct iop321_spi *hw = platform_get_drvdata(pdev);
 
 	return 0;
 }
 
-static int iop32x_spi_resume(struct platform_device *pdev)
+static int iop321_spi_resume(struct platform_device *pdev)
 {
-	struct iop32x_spi *hw = platform_get_drvdata(pdev);
+	struct iop321_spi *hw = platform_get_drvdata(pdev);
 
 	return 0;
 }
 
 #else
-#define iop32x_spi_suspend NULL
-#define iop32x_spi_resume  NULL
+#define iop321_spi_suspend NULL
+#define iop321_spi_resume  NULL
 #endif
 
-static struct platform_driver iop32x_spidrv = {
-	.probe		= iop32x_spi_probe,
-	.remove		= iop32x_spi_remove,
-	.suspend	= iop32x_spi_suspend,
-	.resume		= iop32x_spi_resume,
+static struct platform_driver iop321_spidrv = {
+	.probe		= iop321_spi_probe,
+	.remove		= iop321_spi_remove,
+	.suspend	= iop321_spi_suspend,
+	.resume		= iop321_spi_resume,
 	.driver		= {
-		.name	= "iop32x-spi",
+		.name	= "iop321-spi",
 		.owner	= THIS_MODULE,
 	},
 };
 
-static int __init iop32x_spi_init(void)
+static int __init iop321_spi_init(void)
 {
-        return platform_driver_register(&iop32x_spidrv);
+        return platform_driver_register(&iop321_spidrv);
 }
 
-static void __exit iop32x_spi_exit(void)
+static void __exit iop321_spi_exit(void)
 {
-        platform_driver_unregister(&iop32x_spidrv);
+        platform_driver_unregister(&iop321_spidrv);
 }
 
-module_init(iop32x_spi_init);
-module_exit(iop32x_spi_exit);
+module_init(iop321_spi_init);
+module_exit(iop321_spi_exit);
 
-MODULE_DESCRIPTION("IOP32X SPI Driver");
+MODULE_DESCRIPTION("IOP321 SPI Driver");
 MODULE_AUTHOR("Peter Milne, <peter dot milne@d-tacq.com>");
 MODULE_LICENSE("GPL");
