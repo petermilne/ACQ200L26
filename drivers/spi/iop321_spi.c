@@ -43,6 +43,42 @@
 #include <asm/arch/iop321_spi.h>
 #include <asm/arch/iop321-irqs.h>
 
+
+/* copy bits from pcs-regs.h that are the same ... */
+
+#define SSCR0_DSS		0x0000000f	/* Data Size Select (mask) */
+#define SSCR0_DataSize(x)  ((x) - 1)		/* Data Size Select [4..16] */
+#define SSCR0_FRF		0x00000030	/* FRame Format (mask) */
+#define SSCR0_Motorola		(0x0 << 4)	/* Motorola's Serial Peripheral Interface (SPI) */
+#define SSCR0_ECS	(1 << 6)	/* External clock select */
+#define SSCR0_SSE	(1 << 7)	/* Synchronous Serial Port Enable */
+#define SSCR0_SCR	(0x0000ff00)	/* Serial Clock Rate (mask) */
+#define SSCR0_SerClkDiv(x) ((((x) - 2)/2) << 8) /* Divisor [2..512] */
+
+#define SSCR1_RIE	(1 << 0)	/* Receive FIFO Interrupt Enable */
+#define SSCR1_TIE	(1 << 1)	/* Transmit FIFO Interrupt Enable */
+#define SSCR1_LBM	(1 << 2)	/* Loop-Back Mode */
+#define SSCR1_SPO	(1 << 3)	/* Motorola SPI SSPSCLK polarity setting */
+#define SSCR1_SPH	(1 << 4)	/* Motorola SPI SSPSCLK phase setting */
+#define SSCR1_MWDS	(1 << 5)	/* Microwire Transmit Data Size */
+#define SSCR1_TFT	(0x000003c0)	/* Transmit FIFO Threshold (mask) */
+#define SSCR1_TxTresh(x) (((x) - 1) << 6) /* level [1..16] */
+#define SSCR1_RFT	(0x00003c00)	/* Receive FIFO Threshold (mask) */
+#define SSCR1_RxTresh(x) (((x) - 1) << 10) /* level [1..16] */
+
+#define SSSR_TNF	(1 << 2)	/* Transmit FIFO Not Full */
+#define SSSR_RNE	(1 << 3)	/* Receive FIFO Not Empty */
+#define SSSR_BSY	(1 << 4)	/* SSP Busy */
+#define SSSR_TFS	(1 << 5)	/* Transmit FIFO Service Request */
+#define SSSR_RFS	(1 << 6)	/* Receive FIFO Service Request */
+#define SSSR_ROR	(1 << 7)	/* Receive FIFO Overrun */
+
+#define SSSR_TFL	0x00000f00
+#define SSSR_RFL	0x0000f000
+
+#define SSSR_RxCount(sssr) (((sssr)&SSSR_RFL) >> 12)
+
+#define SSCRO_DSS_8		0x7
 #ifndef DEBUG
 #error DEBUG ALL GONE
 #endif
@@ -54,7 +90,8 @@ struct iop321_spi {
 	void __iomem		*regs;
 	int			 irq;
 	int			 len;
-	int			 count;
+	int			 tx_count;
+	int			 rx_count;
 
 	void			(*set_cs)(struct iop321_spi_info *spi,
 					  int cs, int pol);
@@ -76,6 +113,21 @@ static inline struct iop321_spi *to_hw(struct spi_device *sdev)
 	return spi_master_get_devdata(sdev->master);
 }
 
+static void iop321_ssp_init(void)
+{
+	*IOP3XX_SSCR0 = 
+		SSCR0_DataSize(8)|
+		SSCR0_Motorola|
+		SSCR0_SerClkDiv(2);
+
+//		SSCR1_SPH |		/* does this have any effect? */
+	*IOP3XX_SSCR1 = 
+		SSCR1_RIE|
+		SSCR1_TxTresh(1)|
+		SSCR1_RxTresh(1);  
+
+	*IOP3XX_SSCR0 |= SSCR0_SSE;	     
+}
 static void iop321_spi_setcs(struct spi_board_info *spi, int cs, int pol)
 {
 /* default: no cs */
@@ -106,11 +158,13 @@ static int iop321_spi_setupxfer(struct spi_device *spi,
 
 	spin_lock(&hw->bitbang.lock);
 	if (!hw->bitbang.busy) {
+		;
 	}
 	spin_unlock(&hw->bitbang.lock);
 
 	return 0;
 }
+
 
 static int iop321_spi_setup(struct spi_device *spi)
 {
@@ -135,32 +189,71 @@ static int iop321_spi_setup(struct spi_device *spi)
 	return 0;
 }
 
-static void iop321_tx(struct iop321_spi *hw)
-{
-
-}
 static inline unsigned int hw_txbyte(struct iop321_spi *hw, int count)
 {
-	return hw->tx ? hw->tx[count] : 0;
+	unsigned rc = hw->tx ? hw->tx[count] : 0;
+	dev_dbg(hw->dev, "TX:%02x\n", rc);
+	return rc;
 }
+
+static void iop321_tx(struct iop321_spi *hw)
+{	
+	while(hw->tx_count < hw->len && (*IOP3XX_SSSR & SSSR_TNF) != 0){
+		*IOP3XX_SSDR = hw_txbyte(hw, hw->tx_count++);
+	}	
+}
+
+static void iop321_rx(struct iop321_spi *hw, int nread)
+{
+	while(nread-- > 0){
+		u32 rx = *IOP3XX_SSDR;
+		if (hw->rx && hw->rx_count < hw->len){
+			hw->rx[hw->rx_count++] = rx;	
+			dev_dbg(hw->dev, "RX:%02x\n", rx);
+		}else{
+			dev_dbg(hw->dev, "RX_%02x\n", rx);
+		}
+	}
+}
+
+static inline int tx_complete(struct iop321_spi *hw)
+{
+	return hw->tx_count >= hw->len;
+}
+static inline int rx_complete(struct iop321_spi *hw)
+{
+	return hw->rx == 0 || hw->rx_count >= hw->len;
+}
+static inline int txrx_complete(struct iop321_spi *hw)
+{
+	return tx_complete(hw) && rx_complete(hw);
+}
+
+static int irq_report_ok;
 
 static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 {
 	struct iop321_spi *hw = to_hw(spi);
 
-	dev_dbg(&spi->dev, "txrx: tx %p, rx %p, len %d\n",
+	dev_dbg(hw->dev, "txrx: tx %p, rx %p, len %d\n",
 		t->tx_buf, t->rx_buf, t->len);
 
 	hw->tx = t->tx_buf;
 	hw->rx = t->rx_buf;
 	hw->len = t->len;
-	hw->count = 0;
+	hw->tx_count = hw->rx_count = 0;
 
 	/* send the first byte[s] */
-	iop321_tx(hw);
-//	wait_for_completion(&hw->done);
 
-	return hw->count;
+	irq_report_ok = 1;
+	*IOP3XX_SSCR1 |= SSCR1_TIE|SSCR1_RIE;
+	iop321_tx(hw);
+
+	while (!txrx_complete(hw)){
+		wait_for_completion(&hw->done);
+	}
+
+	return hw->tx_count;
 }
 
 
@@ -168,51 +261,66 @@ static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 static irqreturn_t iop321_spi_irq(int irq, void *dev)
 {
 	struct iop321_spi *hw = dev;
-#if 0
-	unsigned int spsta = readb(hw->regs + S3C2410_SPSTA);
-	unsigned int count = hw->count;
+	u32 sssr = *IOP3XX_SSSR;
+	static u32 old_sssr;
+	static int nprint;
 
-	if (spsta & S3C2410_SPSTA_DCOL) {
-		dev_dbg(hw->dev, "data-collision\n");
-		complete(&hw->done);
-		goto irq_done;
+	if (sssr != old_sssr || irq_report_ok){
+		dev_dbg(hw->dev, "IRQ:SSSR %08x\n", sssr);
+		old_sssr = sssr;
+		irq_report_ok = 0;
+	}
+	iop321_tx(hw);
+	if (tx_complete(hw)){	
+		dev_dbg(hw->dev, "IRQ: TX complete\n");	
+		*IOP3XX_SSCR1 &= ~SSCR1_TIE;
+	}
+	iop321_rx(hw, SSSR_RxCount(sssr));
+
+	if (rx_complete(hw)){
+		dev_dbg(hw->dev, "RX complete\n");
+		*IOP3XX_SSCR1 &= ~SSCR1_RIE;
 	}
 
-	if (!(spsta & S3C2410_SPSTA_READY)) {
-		dev_dbg(hw->dev, "spi not ready for tx?\n");
-		complete(&hw->done);
-		goto irq_done;
-	}
-
-	hw->count++;
-
-	if (hw->rx)
-		hw->rx[count] = readb(hw->regs + S3C2410_SPRDAT);
-
-	count++;
-
-	if (count < hw->len)
-		writeb(hw_txbyte(hw, count), hw->regs + S3C2410_SPTDAT);
-	else
-#endif
-	if (hw->count >= hw->len){
+	if (txrx_complete(hw)){	
 		complete(&hw->done);
 	}
 
-	//irq_done:
 	return IRQ_HANDLED;
+}
+
+static int register_associated_devices(
+	struct spi_master *master, struct iop321_spi *hw)
+{
+	struct spi_board_info *bi = &hw->pdata->board_info[0];
+	struct spi_device *newdev;
+	int i;
+
+	if (!spi_master_get(master)){
+		dev_err(hw->dev,
+			 "spi_new_device will fail on spi_master_get\n");
+	}
+
+
+	for (i = 0; i < hw->pdata->board_size; i++, bi++) {
+		dev_info(hw->dev, "registering %s\n", bi->modalias);
+
+		bi->controller_data = hw;
+		newdev = spi_new_device(master, bi);
+		if (newdev == NULL){
+			dev_err(hw->dev, "spi_new_device returned NULL\n");
+		}
+	}
+	return 0;
 }
 
 static int iop321_spi_probe(struct platform_device *pdev)
 {
 	struct iop321_spi *hw;
-	struct spi_master *master;
-	struct spi_board_info *bi;
-	struct resource *res;
+	struct spi_master *master;	
+//	struct resource *res;
 	int err = 0;
-	int i;
 
-	printk("At least printk should probe\n");
 	dev_dbg(&pdev->dev, "probe\n");
 	master = spi_alloc_master(&pdev->dev, sizeof(struct iop321_spi));
 	if (master == NULL) {
@@ -245,7 +353,7 @@ static int iop321_spi_probe(struct platform_device *pdev)
 	hw->bitbang.txrx_bufs      = iop321_spi_txrx;
 	hw->bitbang.master->setup  = iop321_spi_setup;
 
-//	dev_dbg(hw->dev, "bitbang at %p\n", &hw->bitbang);
+	dev_dbg(hw->dev, "bitbang at %p\n", &hw->bitbang);
 
 	/* find and map our resources */
 #if 0
@@ -285,9 +393,7 @@ static int iop321_spi_probe(struct platform_device *pdev)
 		goto err_no_irq;
 	}
 
-	/* program defaults into the registers */
-
-	/* setup any gpio we can */
+	iop321_ssp_init();
 
 #if 0
 	if (!hw->pdata->set_cs){
@@ -303,18 +409,8 @@ static int iop321_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register SPI master\n");
 		goto err_register;
 	}
-
-	/* register all the devices associated */
-
-	bi = &hw->pdata->board_info[0];
-	for (i = 0; i < hw->pdata->board_size; i++, bi++) {
-		dev_info(hw->dev, "registering %s\n", bi->modalias);
-
-		bi->controller_data = hw;
-		spi_new_device(master, bi);
-	}
-
-	return 0;
+	
+	return register_associated_devices(master, hw);
 
  err_register:
 
@@ -330,7 +426,7 @@ static int iop321_spi_probe(struct platform_device *pdev)
 
  err_no_iores:
  err_no_pdata:
-	spi_master_put(hw->master);;
+	spi_master_put(hw->master);
 
  err_nomem:
 	return err;
@@ -388,7 +484,6 @@ static struct platform_driver iop321_spidrv = {
 
 static int __init iop321_spi_init(void)
 {
-	printk("At least printk should work\n");
         return platform_driver_register(&iop321_spidrv);
 }
 
