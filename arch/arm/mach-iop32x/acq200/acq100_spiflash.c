@@ -46,13 +46,13 @@ struct iop321_spi_info acq100_spi_info = {
 static u64 spi_dmamask = 0xffffffffUL;
 
 struct platform_device iop321_spi = {
-	.name = "acq100-spi",
+	.name = "iop321-spi",
 	.id = 0,
 	.num_resources = 0,
-	.dev.platform_data = &acq100_spi_info,
 	.dev = {
 		.dma_mask = &spi_dmamask,
-		.coherent_dma_mask = 0xffffffffUL
+		.coherent_dma_mask = 0xffffffffUL,
+		.platform_data = &acq100_spi_info
 	}
 };
 

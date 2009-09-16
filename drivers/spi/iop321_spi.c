@@ -41,7 +41,11 @@
 #include <asm/hardware.h>
 #include <asm/arch/iop321.h>
 #include <asm/arch/iop321_spi.h>
+#include <asm/arch/iop321-irqs.h>
 
+#ifndef DEBUG
+#error DEBUG ALL GONE
+#endif
 struct iop321_spi {
 	/* bitbang has to be first */
 	struct spi_bitbang	 bitbang;
@@ -82,6 +86,7 @@ static void iop321_spi_chipsel(struct spi_device *spi, int value)
 	struct iop321_spi *hw = to_hw(spi);
 	unsigned int cspol = spi->mode & SPI_CS_HIGH ? 1 : 0;
 
+	return;			/* @todo ... fails after this .. */
 	switch (value) {
 	default:
 	case BITBANG_CS_INACTIVE:
@@ -153,12 +158,12 @@ static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 
 	/* send the first byte[s] */
 	iop321_tx(hw);
-	wait_for_completion(&hw->done);
+//	wait_for_completion(&hw->done);
 
 	return hw->count;
 }
 
-// IRQ_IOP321_SSP
+
 
 static irqreturn_t iop321_spi_irq(int irq, void *dev)
 {
@@ -207,6 +212,8 @@ static int iop321_spi_probe(struct platform_device *pdev)
 	int err = 0;
 	int i;
 
+	printk("At least printk should probe\n");
+	dev_dbg(&pdev->dev, "probe\n");
 	master = spi_alloc_master(&pdev->dev, sizeof(struct iop321_spi));
 	if (master == NULL) {
 		dev_err(&pdev->dev, "No memory for spi_master\n");
@@ -238,7 +245,7 @@ static int iop321_spi_probe(struct platform_device *pdev)
 	hw->bitbang.txrx_bufs      = iop321_spi_txrx;
 	hw->bitbang.master->setup  = iop321_spi_setup;
 
-	dev_dbg(hw->dev, "bitbang at %p\n", &hw->bitbang);
+//	dev_dbg(hw->dev, "bitbang at %p\n", &hw->bitbang);
 
 	/* find and map our resources */
 #if 0
@@ -257,15 +264,15 @@ static int iop321_spi_probe(struct platform_device *pdev)
 		err = -ENXIO;
 		goto err_no_iores;
 	}
-#if 
 	hw->regs = ioremap(res->start, (res->end - res->start)+1);
 	if (hw->regs == NULL) {
 		dev_err(&pdev->dev, "Cannot map IO\n");
 		err = -ENXIO;
 		goto err_no_iomap;
 	}
-#endif
 	hw->irq = platform_get_irq(pdev, 0);
+#endif
+	hw->irq = IRQ_IOP321_SSP;	/* @todo get from resource? why? */
 	if (hw->irq < 0) {
 		dev_err(&pdev->dev, "No IRQ specified\n");
 		err = -ENOENT;
@@ -381,6 +388,7 @@ static struct platform_driver iop321_spidrv = {
 
 static int __init iop321_spi_init(void)
 {
+	printk("At least printk should work\n");
         return platform_driver_register(&iop321_spidrv);
 }
 

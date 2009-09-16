@@ -6,6 +6,7 @@ ifeq ($(CONFIG_SPI_DEBUG),y)
 EXTRA_CFLAGS += -DDEBUG
 endif
 
+CONFIG_SPI_IOP321=m
 
 # small core, mostly translating board-specific
 # config declarations into driver model code
