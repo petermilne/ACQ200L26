@@ -308,20 +308,29 @@ static void _setIntClkHz( int hz )
 extern int get_acq132_decim(void);
 extern void acq132_setAllDecimate(int dec);
 
+#define ICS_MIN	4000
+#define ICS_MAX 100000
+
+#define DECIM_MAX	16
+
 int acq132_set_best_decimation(int khz, int *khz_clock, int *decim)
 /* min ics_527 output = 4MHz. for slower speed decimate ..
  * but be careful NOT to overclock the ADC, could be 10MHz part ..
  */
 {
-	int _decim = 
+	int _decim = -1;
+
+	if (khz < ICS_MIN/DECIM_MAX || khz > ICS_MAX){
+		return -1;
+	}
+
+	_decim = 
+		(khz < 500)? 16 :       /* SCLK <.5M *16 < 10MHz Good! */
+		(khz < 1000)? 8 :       /* SCLK < 1M * 8 < 10MHz Good! */
 		(khz < 2000)? 4 :	/* SCLK < 2M * 4 < 10MHz Good! */
 		(khz < 3000)? 3 :	/* SCLK < 3M * 3 < 10MHz Good! */
 		(khz < 4000)? 2 :	/* SCLK < 4M * 2 < 10MHz Good! */
 		1;			/* SCLK = kHZ		       */
-	
-	if (khz < 1000 || khz > 100000){
-		return -1;
-	}
 
 	acq132_setAllDecimate(_decim);		
 	khz *= _decim;
