@@ -80,6 +80,8 @@ ssize_t acq200_store_signal(
 	char p2[64];
 	int nscan;
 
+	p1[0] = p2[0] = '\0';
+
 	if (!signal){
 		err("ERROR: null signal");
 		return -ENODEV;
@@ -110,11 +112,11 @@ ssize_t acq200_store_signal(
 		return -ENODEV;
 	}else{
 		int ix1 = signalLookupIndex(signal, SIG_P1, p1);
-		if (ix1 < 0){
+		if (ix1 >= 0){
+			signal->px[SIG_P1].ix = ix1;	
+		}else{
 			err("illegal p1 \"%s\"", p1);
 			return -ENODEV;
-		}else{
-			signal->px[SIG_P1].ix = ix1;
 		}
 		if (nscan == 3){
 			int ix2 = signalLookupIndex(signal, SIG_P2, p2);
@@ -125,7 +127,10 @@ ssize_t acq200_store_signal(
 				return -ENODEV;
 			}
 		}
-	}	
+	}
+
+	dbg(1, "p1:\"%s\" p2:\"%s\"",  p1, p2);
+
 	activateSignal(signal);
 	return count;
 }
@@ -259,6 +264,7 @@ int enableSignal(struct Signal* signal, int enable)
 	if (key && strcmp(key, "none")){
 		return signal->is_active = enable;
 	}else{
+		signal->is_active = 0;
 		return 0;
 	}
 }
