@@ -33,6 +33,7 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/clk.h>
+#include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 
 #include <linux/spi/spi.h>
@@ -76,12 +77,26 @@
 #define SSSR_TFL	0x00000f00
 #define SSSR_RFL	0x0000f000
 
-#define SSSR_RxCount(sssr) (((sssr)&SSSR_RFL) >> 12)
+#define SSSR_RxCount(sssr) ((sssr)&SSSR_RNE? ((sssr)&SSSR_RFL) >> 12: 0)
 
-#define SSCRO_DSS_8		0x7
-#ifndef DEBUG
-#error DEBUG ALL GONE
+#ifdef DEBUG
+int iop321_debug;
+module_param(iop321_debug, int, 0664);
+#define DEV_DBG	if (iop321_debug) dev_dbg
+#else
+#define DEV_DBG	
 #endif
+
+
+/* knobs to tweak bus params - should be in the descriptor, but this is easier */
+int SP0;
+module_param(SP0, int, 0644);
+int SPH;
+module_param(SPH, int, 0644);
+
+int do_every_time=1;	/* init every setup - shouldn't be necessary */
+module_param(do_every_time, int, 0644);
+
 struct iop321_spi {
 	/* bitbang has to be first */
 	struct spi_bitbang	 bitbang;
@@ -120,8 +135,9 @@ static void iop321_ssp_init(void)
 		SSCR0_Motorola|
 		SSCR0_SerClkDiv(2);
 
-//		SSCR1_SPH |		/* does this have any effect? */
 	*IOP3XX_SSCR1 = 
+		(SP0 ? SSCR1_SPO: 0)|(SPH? SSCR1_SPH: 0)|
+		SSCR1_SPO|
 		SSCR1_RIE|
 		SSCR1_TxTresh(1)|
 		SSCR1_RxTresh(1);  
@@ -155,7 +171,10 @@ static int iop321_spi_setupxfer(struct spi_device *spi,
 				 struct spi_transfer *t)
 {
 	struct iop321_spi *hw = to_hw(spi);
-
+	DEV_DBG(&spi->dev, "setup\n");
+	if (do_every_time){
+		iop321_ssp_init();
+	}
 	spin_lock(&hw->bitbang.lock);
 	if (!hw->bitbang.busy) {
 		;
@@ -182,7 +201,7 @@ static int iop321_spi_setup(struct spi_device *spi)
 		return ret;
 	}
 
-	dev_dbg(&spi->dev, "%s: mode %d, %u bpw, %d hz\n",
+	DEV_DBG(&spi->dev, "%s: mode %d, %u bpw, %d hz\n",
 		__FUNCTION__, spi->mode, spi->bits_per_word,
 		spi->max_speed_hz);
 
@@ -192,7 +211,7 @@ static int iop321_spi_setup(struct spi_device *spi)
 static inline unsigned int hw_txbyte(struct iop321_spi *hw, int count)
 {
 	unsigned rc = hw->tx ? hw->tx[count] : 0;
-	dev_dbg(hw->dev, "TX:%02x\n", rc);
+	DEV_DBG(hw->dev, "TX:%02x\n", rc);
 	return rc;
 }
 
@@ -209,9 +228,9 @@ static void iop321_rx(struct iop321_spi *hw, int nread)
 		u32 rx = *IOP3XX_SSDR;
 		if (hw->rx && hw->rx_count < hw->len){
 			hw->rx[hw->rx_count++] = rx;	
-			dev_dbg(hw->dev, "RX:%02x\n", rx);
+			DEV_DBG(hw->dev, "RX:%02x\n", rx);
 		}else{
-			dev_dbg(hw->dev, "RX_%02x\n", rx);
+			DEV_DBG(hw->dev, "RX_%02x\n", rx);
 		}
 	}
 }
@@ -235,7 +254,7 @@ static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 {
 	struct iop321_spi *hw = to_hw(spi);
 
-	dev_dbg(hw->dev, "txrx: tx %p, rx %p, len %d\n",
+	DEV_DBG(hw->dev, "txrx: tx %p, rx %p, len %d\n",
 		t->tx_buf, t->rx_buf, t->len);
 
 	hw->tx = t->tx_buf;
@@ -263,22 +282,23 @@ static irqreturn_t iop321_spi_irq(int irq, void *dev)
 	struct iop321_spi *hw = dev;
 	u32 sssr = *IOP3XX_SSSR;
 	static u32 old_sssr;
-	static int nprint;
 
 	if (sssr != old_sssr || irq_report_ok){
-		dev_dbg(hw->dev, "IRQ:SSSR %08x\n", sssr);
+		DEV_DBG(hw->dev, "IRQ:SSSR %08x\n", sssr);
 		old_sssr = sssr;
 		irq_report_ok = 0;
 	}
 	iop321_tx(hw);
 	if (tx_complete(hw)){	
-		dev_dbg(hw->dev, "IRQ: TX complete\n");	
+		DEV_DBG(hw->dev, "IRQ: TX complete\n");	
 		*IOP3XX_SSCR1 &= ~SSCR1_TIE;
 	}
-	iop321_rx(hw, SSSR_RxCount(sssr));
+	if (sssr&SSSR_RFS){
+		iop321_rx(hw, SSSR_RxCount(sssr));
+	}
 
 	if (rx_complete(hw)){
-		dev_dbg(hw->dev, "RX complete\n");
+		DEV_DBG(hw->dev, "RX complete\n");
 		*IOP3XX_SSCR1 &= ~SSCR1_RIE;
 	}
 
@@ -303,6 +323,7 @@ static int register_associated_devices(
 
 
 	for (i = 0; i < hw->pdata->board_size; i++, bi++) {
+		printk(KERN_INFO "register_associated_devices() %d %s\n", i, bi->modalias);
 		dev_info(hw->dev, "registering %s\n", bi->modalias);
 
 		bi->controller_data = hw;
@@ -321,7 +342,8 @@ static int iop321_spi_probe(struct platform_device *pdev)
 //	struct resource *res;
 	int err = 0;
 
-	dev_dbg(&pdev->dev, "probe\n");
+	printk(KERN_INFO "iop321_spi_probe()\n");
+	DEV_DBG(&pdev->dev, "iop321_spi_probe()\n");
 	master = spi_alloc_master(&pdev->dev, sizeof(struct iop321_spi));
 	if (master == NULL) {
 		dev_err(&pdev->dev, "No memory for spi_master\n");
@@ -353,7 +375,7 @@ static int iop321_spi_probe(struct platform_device *pdev)
 	hw->bitbang.txrx_bufs      = iop321_spi_txrx;
 	hw->bitbang.master->setup  = iop321_spi_setup;
 
-	dev_dbg(hw->dev, "bitbang at %p\n", &hw->bitbang);
+	DEV_DBG(hw->dev, "bitbang at %p\n", &hw->bitbang);
 
 	/* find and map our resources */
 #if 0
@@ -484,6 +506,7 @@ static struct platform_driver iop321_spidrv = {
 
 static int __init iop321_spi_init(void)
 {
+	printk(KERN_INFO "iop321_spi_init\n");
         return platform_driver_register(&iop321_spidrv);
 }
 
