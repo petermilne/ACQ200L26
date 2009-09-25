@@ -407,7 +407,7 @@ struct TBLOCK {
 };
 
 typedef int (*GetChannelData)(
-	struct TBLOCK* tb, short **base, int channel, int offset);
+	struct TBLOCK* tb, void **base, int channel, int offset);
 
 #define NHISTO 16
 
@@ -1246,9 +1246,9 @@ extern void acq200_setChannelLut(const int *lut, int nlut);
  */
 
 extern 
-int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset);
+int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset);
 extern 
-int getChannelData32(struct TBLOCK* tb, short **base, int channel, int offset);
+int getChannelData32(struct TBLOCK* tb, void **base, int channel, int offset);
 
 extern unsigned getChannelNumSamples(int lchan);
 

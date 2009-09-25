@@ -73,7 +73,7 @@ int tblock_raw_extractor32(
 	short* ubuf, int maxbuf, 
 	int channel, int offset, int stride)
 {
-	short* bblock_base = (short*)(
+	void* bblock_base = (void*)(
 		va_buf(DG) + this->offset + channel*sizeof(u32));
 	unsigned *usbuf = (unsigned *)ubuf;
 	int cplen;
@@ -85,6 +85,8 @@ int tblock_raw_extractor32(
 	stride *= NCHAN * 2;		/* two shorts per sample */
 	offset *= NCHAN * 2;
 
+	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
+
 	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
 		COPY_TO_USER(usbuf+cplen, bblock_base + offset, sizeof(u32));
 		offset += stride;
@@ -95,7 +97,7 @@ int tblock_raw_extractor32(
 }
 
 
-int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
+int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset)
 {
 	int bblock_samples = tb->length/NCHAN/sizeof(short);
 	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
@@ -104,11 +106,13 @@ int getChannelData(struct TBLOCK* tb, short **base, int channel, int offset)
 	*base = bblock_base + offset;
 	return bblock_samples;
 }
-int getChannelData32(struct TBLOCK* tb, short **base, int channel, int offset)
+int getChannelData32(struct TBLOCK* tb, void **base, int channel, int offset)
 {
 	int bblock_samples = tb->length/NCHAN/sizeof(u32);
-	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
+	u32* bblock_base = (u32*)(va_buf(DG) + tb->offset + 
 				channel*bblock_samples*sizeof(u32));
+
+	DBG(1, "offset %d setting base %p", offset, bblock_base+offset);
 
 	*base = bblock_base + offset;
 	return bblock_samples;
@@ -122,7 +126,7 @@ int tblock_cooked_extractor(
 
 	short* bblock_base;
 	int bblock_samples = DG->bigbuf.tblocks.getChannelData(
-					this, &bblock_base, channel, offset);
+		this, (void **)&bblock_base, channel, offset);
 
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 
@@ -152,7 +156,7 @@ int tblock_cooked_extractor32(
 	unsigned *usbuf = (unsigned *)ubuf;
 	short* bblock_base;
 	int bblock_samples = DG->bigbuf.tblocks.getChannelData(
-					this, &bblock_base, channel, offset);
+		this, (void**)&bblock_base, channel, offset);
 
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 /* @@todo offset is in shorts - does this affect price of eggs ?? */
