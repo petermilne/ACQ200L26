@@ -496,7 +496,7 @@ static void enable_acq164_start(void)
 	disable_acq();
 
 	if (acq164_trigger_detect()){
-		err("WOAAH - triggered already, an not yet enabled not good\n"
+		err("WOAAH - triggered already, and not yet enabled not good\n"
 		    "FIFCON: 0x%08x\n"
 		    "FIFSTAT:0x%08x\n"
 		    "SYSCON: 0x%08x",

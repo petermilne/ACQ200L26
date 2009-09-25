@@ -82,7 +82,8 @@ extern int acq200_lookup_pchan(int lchannel);
  *   EVENT_MAGIC_MASK - discard these bits when making ident
  */
 
-#ifdef ACQ216
+#if defined(ACQ216)
+
 #define EVENT_MAGIC      0xaa550000
 #define EVENT_MAGIC_MASK 0x0000ffff      
 
@@ -100,12 +101,38 @@ extern int acq200_lookup_pchan(int lchannel);
 #define EVENT_MAGIC_MIN_MATCH	2
 
 #elif defined(ACQ132)
+
 #define EVENT_MAGIC      0xaa55aa55
 #define EVENT_MAGIC_MASK 0x00000000
 
 #define ES_SIZE  (8*sizeof(short))
 #define EVENT_MAGIC_EXEMPT(ipair) ((ipair&1) == 1)
 #define EVENT_MAGIC_MIN_MATCH	2
+
+#elif defined(ACQ164)
+
+#define EVENT_MAGIC	 0xaa55f000
+#define EVENT_MAGIC_MASK 0x00000fff
+
+static inline int acq164_event_magic_exempt(int ipair)
+{
+	if (ipair <= 14){
+		return 0;
+	}else if (ipair == 63){
+		return 0;
+	}else if (ipair >= 32 && ipair < 40){
+		return 0;
+	}else{
+		return 1;
+	}
+}
+#define EVENT_MAGIC_EXEMPT(ipair) acq164_event_magic_exempt(ipair)
+
+
+#define ES_SIZE		(sample_size())
+
+#define EVENT_MAGIC_MIN_MATCH	8
+
 #else
 /* ACQ196 event appears to be 0xaa55fBxx B {123} */
 #define EVENT_MAGIC      0xaa55f000

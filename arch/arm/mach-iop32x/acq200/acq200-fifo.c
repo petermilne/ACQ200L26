@@ -2474,6 +2474,8 @@ int acq200_check_entire_es(unsigned *es)
 #define EVENT_MAGIC_FAIL(ip) \
 	(!EVENT_MAGIC_EXEMPT(ip) && !IS_EVENT_MAGIC(es[ip]))
 
+        if (es_debug) info( "sample_size:%d npairs %d", sample_size(), npairs);
+
 	for (ipair = 0; ipair != npairs; ++ipair){
 		if (es_debug){
 			info("%2d 0x%08x %s %s",
