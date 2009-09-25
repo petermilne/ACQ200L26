@@ -17,7 +17,11 @@ static inline void boxcar32_init(struct BOXCAR32 *b32, int maxelems)
 		;
 	}
 	maxelems = 1 << ibit;
+#ifdef __KERNEL__
 	b32->history = kzalloc(sizeof(u32)*maxelems, GFP_KERNEL);
+#else
+	b32->history = calloc(maxelems, sizeof(u32));
+#endif
 	b32->maxelems = maxelems;
 	b32->cursor = 0;
 	b32->mask = maxelems - 1;
@@ -25,7 +29,11 @@ static inline void boxcar32_init(struct BOXCAR32 *b32, int maxelems)
 
 static inline void boxcar32_free(struct BOXCAR32 *b32)
 {
+#ifdef __KERNEL__
 	kfree(b32->history);
+#else
+	free(b32->history);
+#endif
 }
 
 static inline u32 boxcar32_process(struct BOXCAR32 *b32, u32 xx)
