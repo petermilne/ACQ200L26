@@ -667,6 +667,27 @@ static void initAIdma_SyncAO(void)
 }
 
 
+static void initAIdma_AO16(void)
+{
+	struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
+
+	ao_dmad->NDA = 0;
+	ao_dmad->PDA = dg.settings.AO_src;
+	ao_dmad->PUAD = dg.settings.PUAD;
+	ao_dmad->LAD = DG->fpga.fifo.pa;
+	ao_dmad->BC = acq100_llc_sync2V_AO_len == 0?
+		AO_BC + AO_SCRATCHPAD_SIZE:
+		acq100_llc_sync2V_AO_len;
+	ao_dmad->DC = DMA_DCR_PCI_MR;
+	dma_append_chain(&ai_dma, ao_dmad, "AO");
+
+	if (acq100_mem2mem){
+		ao_dmad->PDA = pa_buf(DG) + 0x100000;
+		ao_dmad->LAD = DG->fpga.fifo.pa;
+		ao_dmad->DC = DMA_DCR_MEM2MEM;			
+	}
+}
+
 static void initAIdma_AO32(void)
 /* AO32 : pull entire AO vector to local memory (to be allocated) *
  * THEN do local AO32
@@ -712,6 +733,19 @@ static void initAIdma_AO32(void)
 	}
 
 	dbg(1, "99 slaves %d", ii);
+}
+
+static void initAIdma_AltVI2(void)
+{
+	struct iop321_dma_desc *alt_dmad = acq200_dmad_alloc();
+	alt_dmad->NDA = 0;
+	alt_dmad->PDA = dg.settings.alt_VI_target;
+	alt_dmad->PUAD = dg.settings.PUAD;
+	alt_dmad->LAD = pa_buf(DG);
+	alt_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
+	alt_dmad->DC = DMA_DCR_PCI_MW;
+	/* Q at the end */
+	dma_append_chain(&ai_dma, alt_dmad, "VI ALT");
 }
 
 static void initAIdma_AI(void)
@@ -988,39 +1022,16 @@ static void llPreamble2V(void)
 
 	}
 
-	if (dg.settings.ao32.count){
-		initAIdma_AO32();
-	}
 	if (dg.settings.AO_src){
-		struct iop321_dma_desc *ao_dmad = acq200_dmad_alloc();
-
-		ao_dmad->NDA = 0;
-		ao_dmad->PDA = dg.settings.AO_src;
-		ao_dmad->PUAD = dg.settings.PUAD;
-		ao_dmad->LAD = DG->fpga.fifo.pa;
-		ao_dmad->BC = acq100_llc_sync2V_AO_len == 0?
-			AO_BC + AO_SCRATCHPAD_SIZE:
-			acq100_llc_sync2V_AO_len;
-		ao_dmad->DC = DMA_DCR_PCI_MR;
-		dma_append_chain(&ai_dma, ao_dmad, "AO");
-
-		if (acq100_mem2mem){
-			ao_dmad->PDA = pa_buf(DG) + 0x100000;
-			ao_dmad->LAD = DG->fpga.fifo.pa;
-			ao_dmad->DC = DMA_DCR_MEM2MEM;			
+		if (dg.settings.ao32.count){
+			initAIdma_AO32();	/* does AO16 also */
+		}else{
+			initAIdma_AO16();
 		}
 	}
 
 	if (dg.settings.alt_VI_target){
-		struct iop321_dma_desc *alt_dmad = acq200_dmad_alloc();
-		alt_dmad->NDA = 0;
-		alt_dmad->PDA = dg.settings.alt_VI_target;
-		alt_dmad->PUAD = dg.settings.PUAD;
-		alt_dmad->LAD = pa_buf(DG);
-		alt_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
-		alt_dmad->DC = DMA_DCR_PCI_MW;
-		/* Q at the end */
-		dma_append_chain(&ai_dma, alt_dmad, "VI ALT");
+		initAIdma_AltVI2();
 	}
 	if (dg.settings.dma_poll_holdoff > 0){
 		dbg(1, "dmacPollCompletion_cp() selected");
