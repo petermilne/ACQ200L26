@@ -133,7 +133,7 @@ struct Destination {
 	int interval;
 	int block_len;
 	int dest_inc;
-
+	int seq;
 	Descriptor* (*build)(struct Destination* this, int idx);
 };
 
@@ -239,7 +239,13 @@ static char* descriptor_to_string(Descriptor* d, char buf[])
 
 static int shouldBuild(struct Destination* this, int idx)
 {
-	if (this->interval){
+	if (this->block_len == 1){
+		if (this->interval == 1){
+			return 1;
+		}else{
+			return idx % this->interval == this->seq;
+		}
+	}else if (this->interval){
 		return idx % this->interval == this->block_len - 1;
 	}else{
 		return 0;
@@ -306,24 +312,29 @@ static Descriptor* buildDescriptorPbi2Mem(struct Destination* this, int idx)
 static ssize_t showDestination(
 	struct Destination* dest, struct device * dev, char * buf)
 {
-	return sprintf(buf, "0x%08x %d %d %d %s\n",
+	return sprintf(buf, "0x%08x %d %d %d %d %s\n",
 		       dest->base_pa,
 		       dest->interval,
 		       dest->block_len,
 		       dest->dest_inc,
+		       dest->seq,
 		       FNAME_BUILD(dest->build));
 }
 static ssize_t storeDestination(
 	struct Destination* dest,
 	struct device * dev, const char * buf, size_t count)
 {
-	int rc = sscanf(buf, "0x%08x %d %d %d",
+	int rc = sscanf(buf, "0x%08x %d %d %d %d",
 		       &dest->base_pa,
 		       &dest->interval,
 		       &dest->block_len,
-		       &dest->dest_inc);
+		       &dest->dest_inc,
+		       &dest->seq);
 
-	if (rc != 4){
+	if (rc == 4){
+		dest->seq = 0;
+	}
+	if (rc < 4){
 		err("parsing FAILED");
 	}
 	return strlen(buf);
