@@ -109,7 +109,7 @@ module_param(acq100_scatter_debug, int, 0664);
 
 
 #define MAXDEST 6             
-#define SAMPLE_SIZE (96*2)
+#define SAMPLE_SIZE sample_size()
 #define ENTRIES_PER_CYCLE 1000
 
 #define MAXPOOL (MAXDEST*ENTRIES_PER_CYCLE*2)
