@@ -315,7 +315,7 @@ static inline int sfpga_conf_done(void) {
 
 static inline int pulse_fifo_full(void)
 {
-	u32 ptr = *ACQ132_FIFSTAT & ACQ132_FIFSTAT_GPG_PTR;
+	u32 ptr = (*ACQ132_FIFSTAT & ACQ132_FIFSTAT_GPG_PTR) >> 8;
 
 	return !(ptr < ACQ132_FIFSTAT_GPG_PTR - 8);
 }
