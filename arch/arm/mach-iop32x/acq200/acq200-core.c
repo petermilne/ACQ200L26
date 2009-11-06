@@ -913,14 +913,25 @@ int acq200_get_mac( int imac, int nmac, unsigned char the_mac[] )
 {
 	unsigned char* psrc;
 	int ibyte;
+	unsigned char tmac[6];
 	
 	switch( imac ){
 	case 0:
 		psrc = acq200_gEmac0; break;
 	case 1:
-		psrc = acq200_gEmac1; break;
+		psrc = acq200_gEmac1; 
+		if (acq200_gEmac1[3] != '\0' ||
+		    acq200_gEmac1[4] != '\0' ||
+		    acq200_gEmac1[5] != '\0'    ){
+			break;
+		}
+		/* else fall thru */
 	default:
-		return -1;
+		/* invent a second mac address as f(mac0) */
+		psrc = tmac;
+		memcpy(tmac, acq200_gEmac0, sizeof(tmac));
+		tmac[3] += imac;
+		break;
 	}
 
 	nmac = MIN( nmac, 6 );
