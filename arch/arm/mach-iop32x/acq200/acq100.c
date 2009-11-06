@@ -33,6 +33,7 @@
 #include <asm-arm/arch-iop32x/acq200.h>
 #include <asm/arch/acqX00-irq.h>
 
+#include "acq200-sys.h"
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -65,8 +66,10 @@ extern void __init acqX00_init_machine(void);
 void __init acq100_init_machine(void)
 {
 	acqX00_init_machine();
-	smc91x_resources[0].parent = acq200_pbi_resource;
-	(void) platform_add_devices(devices, ARRAY_SIZE(devices));
+	if (acq100_get_pci_env() != ACQ100_PCIENV_SSM){
+		smc91x_resources[0].parent = acq200_pbi_resource;
+		(void) platform_add_devices(devices, ARRAY_SIZE(devices));
+	}
 }
 
 extern struct sys_timer acqX00_timer;

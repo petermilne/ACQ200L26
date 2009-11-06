@@ -72,6 +72,8 @@ acq100_map_irq(struct pci_dev *dev, u8 idsel, u8 pin)
 }
 
 
+#define ACQ132_IRQ_PCIBACKPLANE	28
+
 static int
 acq132_map_irq(struct pci_dev *dev, u8 idsel, u8 pin)
 {
@@ -90,10 +92,7 @@ acq132_map_irq(struct pci_dev *dev, u8 idsel, u8 pin)
 	case 3:
 		break;
 	default:
-		rv = irq_ext_pci;
-		if (irq_ext_pci == 31){
-			acq100_setCpldMaskBit(slot);
-		}
+		return ACQ132_IRQ_PCIBACKPLANE;
 		break;
 	}
 
@@ -284,11 +283,16 @@ static void acq196_check_cpld_capability(void)
 }
 
 
+
 /* R3 boards - enable PCI A,B,C,D + ROUTE XINT3 */
-static unsigned acq100_cpld_pci_mask = 0x1f;	
+static unsigned acq100_cpld_pci_mask = 0x1f;
 
 static void __init set_system_slot(char **p)
 {
+	if (machine_is_acq132()){
+		acq100_cpld_pci_mask = 0x0f;	
+	}
+
 	is_system_slot = memparse(*p, p);
 	if (**p == ',') {
 		irq_ext_pci = memparse((*p) + 1, p);
@@ -304,52 +308,87 @@ __early_param("sysslot=", set_system_slot);
 
 extern void iop32x_check_pci_bus_speed(void);
 
-static int __init acq100_pci_init(void)
+#define ACQ100_PCIENV_SSM 0           /** system slot master */
+#define ACQ100_PCIENV_PM  1           /** peripheral mode    */
+#define ACQ100_PCIENV_SAM 2           /** standalone mode    */
+
+#define ACQ132_PCI_ABCD_MASK	0xf
+
+static int __init acq132_pci_init(void)
 {
-	if (machine_is_acq132()){
-		if (acq100_get_pci_env() != ACQ100_PCIENV_PM){
-			mmr_setup();
-			printk("PCI:acq132 system slot device debug %d\n",
-				G_iop321_pci_debug);
-			pci_common_init(&acq132_pci);
-			pci_enable_bridges(pci_find_bus(0, 0));
-		}else{
-			acq100_mmr_setup();
-			acq100_allocate_resources();
+	switch(acq100_get_pci_env()){
+	case ACQ100_PCIENV_PM:
+		acq100_mmr_setup();
+		acq100_allocate_resources();
+		printk("PCI:acq132 PERIPHERAL slot device\n");
+		iop32x_check_pci_bus_speed();
+		break;
+	case ACQ100_PCIENV_SAM:
+		/* setup local pci for GigE */
+		mmr_setup();
+		acq200_set_cpld_mask_byte(ACQ132_PCI_ABCD_MASK);
+		printk("PCI:acq132 STANDALONE device "
+		       "debug %d cpld mask %02x\n",
+		       G_iop321_pci_debug, ACQ132_PCI_ABCD_MASK);
+		pci_common_init(&acq132_pci);
+		pci_enable_bridges(pci_find_bus(0, 0));
+		break;
+	case ACQ100_PCIENV_SSM:
+		/* setup PCI, for local GigE AND backplane */
+		mmr_setup();
+		acq200_set_cpld_mask_byte(ACQ132_PCI_ABCD_MASK);
+		printk("PCI:acq132 SYSTEM SLOT device "
+		       "debug %d cpld mask %02x\n",
+		       G_iop321_pci_debug, ACQ132_PCI_ABCD_MASK);
+		pci_common_init(&acq132_pci);
+		pci_enable_bridges(pci_find_bus(0, 0));
+		break;
+	default:
+		printk ("ERROR: bad cpld mode\n");	
+	}
+	return 0;
+}
+
+static int __init _acq100_pci_init(void)
+{
+	if (is_system_slot == 0){
+		/* only do this for DEFAULT config */
+		acq196_check_cpld_capability();
+	}
+	if (acq100_is_system_slot_enabled()){
+		if (irq_ext_pci == IRQ_EXT_PCI_NEW){
+			printk("PCI: ext int %d set cpld %x\n",
+			       irq_ext_pci, acq100_cpld_pci_mask);
+			acq200_set_cpld_mask_byte(acq100_cpld_pci_mask);
+		}
+		mmr_setup();
+		printk("PCI:acq100 system slot device debug %d\n",
+		       G_iop321_pci_debug);
+		pci_common_init(&acq100_pci);
+		pci_enable_bridges(pci_find_bus(0, 0));
+	}else{
+		acq100_mmr_setup();
+		acq100_allocate_resources();
+		switch(acq100_get_pci_env()){
+		case ACQ100_PCIENV_PM:
 			printk("PCI:acq100 peripheral slot device\n");
 			iop32x_check_pci_bus_speed();
-		}
-	}else if (machine_is_acq100()){
-		if (is_system_slot == 0){
-			/* only do this for DEFAULT config */
-			acq196_check_cpld_capability();
-		}
-		if (acq100_is_system_slot_enabled()){
-			if (irq_ext_pci == IRQ_EXT_PCI_NEW){
-				printk("PCI: ext int %d set cpld %x\n",
-				       irq_ext_pci, acq100_cpld_pci_mask);
-				acq200_set_cpld_mask_byte(acq100_cpld_pci_mask);
-			}
-			mmr_setup();
-			printk("PCI:acq100 system slot device debug %d\n",
-				G_iop321_pci_debug);
-			pci_common_init(&acq100_pci);
-			pci_enable_bridges(pci_find_bus(0, 0));
-		}else{
-			acq100_mmr_setup();
-			acq100_allocate_resources();
-			switch(acq100_get_pci_env()){
-			case ACQ100_PCIENV_PM:
-				printk("PCI:acq100 peripheral slot device\n");
-				iop32x_check_pci_bus_speed();
-				break;
-			case ACQ100_PCIENV_SAM:
-				printk("PCI:acq100 standalone device\n");
-				break;
-			}
+			break;
+		case ACQ100_PCIENV_SAM:
+			printk("PCI:acq100 standalone device\n");
+			break;
 		}
 	}
 	return 0;
+}
+
+static int __init acq100_pci_init(void)
+{
+	if (machine_is_acq132()){
+		return acq132_pci_init();
+	}else if (machine_is_acq100()){
+		return _acq100_pci_init();
+	}
 }
 
 subsys_initcall(acq100_pci_init);
