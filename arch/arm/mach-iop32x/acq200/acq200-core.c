@@ -954,6 +954,7 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 	unsigned dmac[6] = { 0, };	/* octets, dec decoded */
 	int ito, ifrom;				
 	int is_decimal_def = 0;		/* once dec discovered, all dec */
+	int is_hex_def = 0;		/* if hex char found, all hex */
  
 /** IEEE standard is to define octets in hex. 
  *  We do this by default
@@ -966,15 +967,26 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 			&hmac[0], &hmac[1], &hmac[2],
 			&hmac[3], &hmac[4], &hmac[5] );
 
-	sscanf(str, DECFMT,
+	int ic, len;
+	for (ic = 0, len = strlen(str); ic < len; ++ic){
+		if (strchr("abcdefABCDEF", str[ic])){
+			is_hex_def = 1;				
+		}
+	}
+	
+	if (!is_hex_def){
+		sscanf(str, DECFMT,
 			&dmac[0], &dmac[1], &dmac[2],
 			&dmac[3], &dmac[4], &dmac[5] );
+	}
 
 
 	/* fill the mac from the back. The front side is already there */
 	
 	for (ifrom = replace_count, ito = 5; ifrom--; ito--){
-		if (is_decimal_def == 0 && hmac[ifrom] <= 255){			
+		if (is_hex_def){
+			the_mac[ito] = hmac[ifrom];
+		}else if (is_decimal_def == 0 && hmac[ifrom] <= 255){
 			if (ito == 5 &&
                             (machine_is_acq100() || machine_is_acq200()) &&
 			    hmac[ifrom] < 100 && dmac[ifrom] > 0	     ){

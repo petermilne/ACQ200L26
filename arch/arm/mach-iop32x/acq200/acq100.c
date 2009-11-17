@@ -66,9 +66,16 @@ extern void __init acqX00_init_machine(void);
 void __init acq100_init_machine(void)
 {
 	acqX00_init_machine();
+	smc91x_resources[0].parent = acq200_pbi_resource;
+	platform_add_devices(devices, ARRAY_SIZE(devices));
+}
+
+void __init acq132_init_machine(void)
+{
+	acqX00_init_machine();
 	if (acq100_get_pci_env() != ACQ100_PCIENV_SSM){
 		smc91x_resources[0].parent = acq200_pbi_resource;
-		(void) platform_add_devices(devices, ARRAY_SIZE(devices));
+		platform_add_devices(devices, ARRAY_SIZE(devices));
 	}
 }
 
@@ -97,5 +104,5 @@ MACHINE_START(ACQ132, "D-TACQ ACQ132")
         .timer		= &acqX00_timer,
 	.map_io		= acq100_map_io,
 	.init_irq	= acq132_init_irq,
-        .init_machine	= acq100_init_machine,
+        .init_machine	= acq132_init_machine,
 MACHINE_END
