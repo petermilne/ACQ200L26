@@ -100,12 +100,12 @@ static int acq132_gate_pulse_open(struct inode *inode, struct file *file)
 
 #define GATE_TO	1	/* timeout, jiffies .. ensures minimal loading */
 
-static int _pulse_fifo_full() 
+static int pulse_fifo_has_space() 
 {
 	int pff = pulse_fifo_full();
 
 	if (pff) ++gpg_numwait;
-	return pff;
+	return !pff;
 }
 
 static ssize_t acq132_gate_pulse_write(
@@ -125,7 +125,7 @@ static ssize_t acq132_gate_pulse_write(
 		}
 		do {
 			rc = wait_event_interruptible_timeout(
-				wq, !_pulse_fifo_full(), GATE_TO);
+				wq, pulse_fifo_has_space(), GATE_TO);
 		} while (rc == 0);
 
 		if (rc < 0){
