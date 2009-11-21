@@ -205,6 +205,7 @@ static ssize_t clear_status(
 
 static DEVICE_ATTR(status, S_IRUGO|S_IWUGO, show_status, clear_status);
 
+#define COUNTS_FROM_ZERO	1
 
 static ssize_t show_depth(
 	struct device * dev, 
@@ -213,7 +214,7 @@ static ssize_t show_depth(
 {
 	int depth = *ACQ196_MACCON & ACQ196_MACCON_LENGTH;
 
-        return sprintf(buf,"%d\n", depth);
+        return sprintf(buf,"%d\n", depth + COUNTS_FROM_ZERO);
 }
 
 static ssize_t store_depth(
@@ -226,7 +227,7 @@ static ssize_t store_depth(
 	if (sscanf(buf, "%d", &depth) == 1 &&
 	    depth >= 1 && depth <= 0xfff){
 		*ACQ196_MACCON &= ~ACQ196_MACCON_LENGTH;
-		*ACQ196_MACCON |= depth;
+		*ACQ196_MACCON |= depth - COUNTS_FROM_ZERO;
 	}
 	
 	return strlen(buf);
