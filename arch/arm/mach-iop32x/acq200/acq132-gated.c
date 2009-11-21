@@ -54,6 +54,12 @@ module_param(gpg_busy, int, 0444);
 int use_gpg_reset;
 module_param(use_gpg_reset, int, 0600);
 
+int gpg_numgpd;
+module_param(gpg_numgpd, int, 0444);
+
+int gpg_numwait;
+module_param(gpg_numwait, int, 0444);
+
 static spinlock_t gpg_lock = SPIN_LOCK_UNLOCKED;
 static pid_t gpg_owner;
 
@@ -79,6 +85,7 @@ static int acq132_gate_pulse_open(struct inode *inode, struct file *file)
 		spin_unlock(&gpg_lock);
 		return -EBUSY;
 	}else{
+		gpg_numgpd = gpg_numwait = 0;
 		gpg_busy = 1;
 		gpg_owner = current->pid;
 		acq200_add_end_of_shot_hook(&gpg_end_of_shot_hook);
@@ -91,7 +98,15 @@ static int acq132_gate_pulse_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-#define GATE_TO	2	/* timeout, jiffies .. ensures minimal loading */
+#define GATE_TO	1	/* timeout, jiffies .. ensures minimal loading */
+
+static int _pulse_fifo_full() 
+{
+	int pff = pulse_fifo_full();
+
+	if (pff) ++gpg_numwait;
+	return pff;
+}
 
 static ssize_t acq132_gate_pulse_write(
 	struct file *file, const char *buf, size_t len, loff_t *offset
@@ -110,7 +125,7 @@ static ssize_t acq132_gate_pulse_write(
 		}
 		do {
 			rc = wait_event_interruptible_timeout(
-				wq, !pulse_fifo_full(), GATE_TO);
+				wq, !_pulse_fifo_full(), GATE_TO);
 		} while (rc == 0);
 
 		if (rc < 0){
@@ -121,6 +136,7 @@ static ssize_t acq132_gate_pulse_write(
 		dbg(1, "write %d stat: 0x%08x", isend, *ACQ132_FIFSTAT);
 
 		*ACQ132_GATE_PULSE_FIFO = data;
+		++gpg_numgpd;
 	}
 	*offset += isend;
 	return isend;
