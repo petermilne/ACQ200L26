@@ -102,7 +102,6 @@
 #define ACQ132_SYSCON_TRG_SHIFT 16
 
 
-
 #define ACQ132_FIFSTAT_ADC_EV	0x00400000	/* Event or Gate (RGM) */
 #define ACQ132_FIFSTAT_ADC_TRG  0x00200000	/* ADC system has triggered */
  
@@ -317,7 +316,7 @@ static inline int pulse_fifo_full(void)
 {
 	u32 ptr = (*ACQ132_FIFSTAT & ACQ132_FIFSTAT_GPG_PTR) >> 8;
 
-	return !(ptr < ACQ132_FIFSTAT_GPG_PTR - 8);
+	return !(ptr < (ACQ132_FIFSTAT_GPG_PTR>>8) - 8);
 }
 
 extern int acq132_sfpga_get_rev(void);
