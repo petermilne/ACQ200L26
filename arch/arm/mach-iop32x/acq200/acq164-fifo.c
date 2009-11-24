@@ -52,11 +52,7 @@
  */
 #define ACQ164_DECIM	128
 
-#ifdef TEST_COMPLETE
 #define ACQ200_CLK_HZ	32768000
-#else
-#define ACQ200_CLK_HZ	33333000	
-#endif
 
 #define INT_CLK_CALC_ROUNDING 0x80
 //#define BEST_ICSINPUT_HZ 20000000
