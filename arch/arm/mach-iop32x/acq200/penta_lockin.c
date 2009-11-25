@@ -550,33 +550,34 @@ static DEVICE_ATTR(subcon, S_IRUGO|S_IWUGO, show_subcon, store_subcon);
 #define COUNTS_FROM_ZERO	1
 
 /* @@TODO */
-static ssize_t show_depth(
+static ssize_t show_mac_length(
 	struct device * dev, 
 	struct device_attribute *attr,
 	char * buf)
 {
-	int depth = *LKR_MACCON & ACQ196_MACCON_LENGTH;
+	int mac_length = *LKR_MACCON & LKR_MACCON_LENGTH;
 
-        return sprintf(buf,"%d\n", depth + COUNTS_FROM_ZERO);
+        return sprintf(buf,"%d\n", mac_length + COUNTS_FROM_ZERO);
 }
 
-static ssize_t store_depth(
+static ssize_t store_mac_length(
 	struct device * dev, 
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	int depth = 0;
+	int mac_length = 0;
 
-	if (sscanf(buf, "%d", &depth) == 1 &&
-	    depth >= 1 && depth <= 0xfff){
-		*ACQ196_MACCON &= ~ACQ196_MACCON_LENGTH;
-		*ACQ196_MACCON |= depth - COUNTS_FROM_ZERO;
+	if (sscanf(buf, "%d", &mac_length) == 1 &&
+	    mac_length >= 1 && mac_length <= 0xfff){
+		*LKR_MACCON &= ~LKR_MACCON_LENGTH;
+		*LKR_MACCON |= mac_length - COUNTS_FROM_ZERO;
 	}
 	
 	return strlen(buf);
 }
 
-static DEVICE_ATTR(depth, S_IRUGO|S_IWUGO, show_depth, store_depth);
+static DEVICE_ATTR(mac_length, S_IRUGO|S_IWUGO, 
+	show_mac_length, store_mac_length);
 
 static ssize_t show_enable(
 	struct device * dev, 
@@ -614,7 +615,7 @@ static int mk_lockin_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_K2);
 	DEVICE_CREATE_FILE(dev, &dev_attr_K3);
 	DEVICE_CREATE_FILE(dev, &dev_attr_status);
-	DEVICE_CREATE_FILE(dev, &dev_attr_depth);
+	DEVICE_CREATE_FILE(dev, &dev_attr_mac_length);
 	DEVICE_CREATE_FILE(dev, &dev_attr_subcon);	
 	DEVICE_CREATE_FILE(dev, &dev_attr_enable);
 	return 0;
