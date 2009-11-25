@@ -50,7 +50,7 @@
 #endif
 
 /* keep debug local to this module */
-#define acq200_debug acq196_lockin_debug   
+#define acq200_debug plockin_debug   
 
 #include "acqX00-port.h"
 #include "acq200_debug.h"
@@ -69,12 +69,14 @@
 
 #define LFS_MAGIC	0xa19610c1
 
-int acq196_lockin_debug;
-module_param(acq196_lockin_debug, int, 0664);
+int plockin_debug;
+module_param(plockin_debug, int, 0664);
 
-int acq196_lockin_word_size = sizeof(u32);
-module_param(acq196_lockin_word_size, int , 0664);
+int plockin_word_size = sizeof(u32);
+module_param(plockin_word_size, int , 0664);
 
+int test_dummy;
+module_param(test_dummy, int, 0644);
 
 #define VERID "$Revision: 1.3 $ build B1012 "
 
@@ -89,9 +91,9 @@ char acq196_lockin_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 #define MAXBU32	(MAXREF*sizeof(u16)/sizeof(u32))
 
 #define TD_SZ  (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((2+MAXREF*(numchan)+1)*TD_SZ)
+#define MY_FILES_SZ ((2+MAXREF+1)*TD_SZ)
 
-#define INO2IX(ino) ((ino)-1)
+#define INO2IX(ino) ((ino)-2)
 
 struct FunctionBuf {
 	u16 *p_start;
@@ -104,7 +106,8 @@ struct FunctionBuf {
 #define ADDR_R211_R210 0x00301800
 #define ADDR_R221_R220 0x00302000
 #define ADDR_R310_R300 0x00302800
-#define ADDR_R000_R321 0x00303000
+#define ADDR_R320_R311 0x00303000
+#define ADDR_R000_R321 0x00303800
 
 
 /*
@@ -125,9 +128,6 @@ struct FunctionBuf {
 #define LKR_SUBCON_ENABLE	0xffff0000
 
 
-int test_dummy;
-module_param(test_dummy, int, 0644);
-
 
 struct Globs {
 	struct FunctionBuf fb[MAXREF];
@@ -140,7 +140,8 @@ struct Globs {
 	.fpga_buffers[3] = ADDR_R211_R210,
 	.fpga_buffers[4] = ADDR_R221_R220,
 	.fpga_buffers[5] = ADDR_R310_R300,
-	.fpga_buffers[6] = ADDR_R000_R321 
+	.fpga_buffers[6] = ADDR_R320_R311,
+	.fpga_buffers[7] = ADDR_R000_R321
 };
 
 static struct tree_descr *my_files;
@@ -148,6 +149,7 @@ static struct tree_descr *my_files;
 #define FB(filp) ((struct FunctionBuf *)(filp)->private_data)
 #define SET_FB(filp, fb) ((filp)->private_data = (fb))
 
+#define IFB2IBU32(ifb)	((ifb)/2)
 
 static int new_buffers(void)
 {
@@ -155,7 +157,7 @@ static int new_buffers(void)
 	int ifb = 0;	/* index the channel buffers */
 
 	for (ib32 = 0; ib32 < MAXBU32; ++ib32){
-		u32 *bu32 = kmalloc(REFLEN*sizeof(32), GFP_KERNEL);
+		u32 *bu32 = kzalloc(REFLEN*sizeof(32), GFP_KERNEL);
 
 		LG.buffers[ib32] = bu32;
 		LG.fb[ifb].p_start = (u16*)bu32;
@@ -176,13 +178,15 @@ static void delete_buffers(void)
 	kfree(my_files);
 }
 static int data_open(struct inode *inode, struct file *filp)
-{
+{	
 	int iref = INO2IX(inode->i_ino);
 
 	if (!IN_RANGE(iref, 0, MAXREF)){
 		return -ENODEV;
 	}
-	filp->private_data = (void*)iref;
+	dbg(1, "inode:%d iref:%d", inode->i_ino, iref);
+
+	SET_FB(filp, &LG.fb[iref]);
 	if ((filp->f_mode & FMODE_WRITE) != 0){
 		/* truncate on write */
 		FB(filp)->p_cur = FB(filp)->p_start; 
@@ -198,26 +202,27 @@ static ssize_t data_write(
 	u16 tmp;
 	u16 *ubuf = (u16*)buf;
 	u16 ucount = count/sizeof(u16);
-	int iref = (int)filp->private_data;
 	int nwords = 0;
+	
 
 	if (*offset >= MAXREF){
 		return -EINVAL;
 	}
 		
-
-	while (ucount-- > 0 && *offset < MAXREF){
+	/* stride thru array[u16] double spaced */
+	while (ucount-- > 0 && *offset + nwords < MAXREF){
 		get_user(tmp, ubuf);
-		LG.fb[iref].p_start[*offset++] = tmp;		
-		++nwords;
+		*FB(filp)->p_cur = tmp;
 		++ubuf;
+		++nwords;
+		FB(filp)->p_cur += 2;
 	}
-		
-	FB(filp)->p_cur += nwords;
 	*offset += nwords;
 	filp->f_dentry->d_inode->i_size += count;
 	
-	return nwords*sizeof(u16);
+	dbg(1, "count %d return %d", count, nwords*sizeof(u16));
+
+	return nwords*sizeof(u16) + count&1;
 }
 
 static ssize_t data_read(
@@ -226,19 +231,18 @@ static ssize_t data_read(
 	u16 tmp;
 	u16 *ubuf = (u16*)buf;
 	u16 ucount = count/sizeof(u16);
-	int iref = (int)filp->private_data;
 	int nwords = 0;
 
-	if (*offset >= LG.fb[iref].p_cur - LG.fb[iref].p_start){
+	if (*offset >= FB(filp)->p_cur - FB(filp)->p_start){
 		return 0;
 	}
 		
 
-	while (ucount-- > 0 && *offset < MAXREF){
-		tmp = LG.fb[iref].p_start[*offset++];
+	while (ucount-- > 0 && *offset + nwords < MAXREF){
+		tmp = FB(filp)->p_start[2*nwords];
 		put_user(tmp, ubuf);
-		++nwords;
 		++ubuf;
+		++nwords;
 	}
 		
 	*offset += nwords;
@@ -258,26 +262,37 @@ static int data_mmap(
 }
 
 
+
 static void flush(int ibuf)
 {
+		
 	void *to = (test_dummy? BB_PTR(0): DG->fpga.fifo.va)+
 			LG.fpga_buffers[ibuf];
 	void *from = LG.buffers[ibuf];
 	int nbytes = MAXREF*sizeof(u32);
 
-	dbg(1, "memcpy(%p, %p, %d)", to, from, nbytes);
+	if (test_dummy <= 1){
+		dbg(1, "[%d] memcpy(%p, %p, %d)", 
+			ibuf, to, from, nbytes);
 
-	memcpy(to, from, nbytes);
+		memcpy(to, from, nbytes);
+	}else{
+		dbg(1, "[%d] memcpy(%p, %p, %d) STUBBED", 
+			ibuf, to, from, nbytes);
+	}
 }
 
 static int data_release(
         struct inode *inode, struct file *file)
 {
 	if ((file->f_mode & FMODE_WRITE) != 0){
+		int iref = INO2IX(inode->i_ino);
 		/* flush on close. Wasteful - may have to write twice
 		 *  who cares - simple is good
 		 */
-		flush(((int)file->private_data) & ~1);
+		dbg(1, "inode:%d iref:%d", inode->i_ino, iref);
+
+		flush(IFB2IBU32(iref));
 	}	
 	return 0;
 }
@@ -295,7 +310,7 @@ static int lockin_fs_fill_super (struct super_block *sb, void *data, int silent)
 		"R100", "R110", "R111", "R120", "R121",
 		"R200", "R210", "R211", "R220", "R221",
 		"R300", "R310", "R311", "R320", "R321",
-		"NC"
+		"XNC"
 	};
 	static struct tree_descr front = {
 		NULL, NULL, 0
@@ -306,22 +321,23 @@ static int lockin_fs_fill_super (struct super_block *sb, void *data, int silent)
 	
 	int iref;
 	int myfino = 0;
-	my_files = kmalloc(MY_FILES_SZ(NCHAN), GFP_KERNEL);
+	my_files = kzalloc(MY_FILES_SZ, GFP_KERNEL);
 
 	memcpy(&my_files[myfino++], &front, TD_SZ);
 	/* linux 2.6.21 ... ino starts at 2 */
 	memcpy(&my_files[myfino++], &front, TD_SZ); 
 
 	for (iref = 0; iref < MAXREF; ++iref, ++myfino){
-		my_files[myfino].name = ref_names[myfino];
+		my_files[myfino].name = ref_names[iref];
 		my_files[myfino].ops = &data_ops;
 		my_files[myfino].mode = S_IWUSR|S_IRUGO;
 	}	
 
 	memcpy(&my_files[myfino++], &backstop, TD_SZ);
 	return simple_fill_super(sb, LFS_MAGIC, my_files);
-	return 0;
 }
+
+
 static int lockin_fs_get_super(
 		struct file_system_type *fst,
 		int flags, const char *devname, void *data,
@@ -670,9 +686,9 @@ static struct platform_device acq196_lockin_device = {
 static int __init acq196_lockin_init( void )
 {
 	int rc;
-	acq200_debug = acq196_lockin_debug;
+	acq200_debug = plockin_debug;
 
-	CAPDEF_set_word_size(acq196_lockin_word_size);
+	CAPDEF_set_word_size(plockin_word_size);
 	rc = driver_register(&acq196_lockin_driver);
 	if (rc){
 		return rc;
