@@ -50,7 +50,7 @@
 #endif
 
 /* keep debug local to this module */
-#define acq200_debug plockin_debug   
+#define acq200_debug pl_debug   
 
 #include "acqX00-port.h"
 #include "acq200_debug.h"
@@ -69,21 +69,21 @@
 
 #define LFS_MAGIC	0xa19610c1
 
-int plockin_debug;
-module_param(plockin_debug, int, 0664);
+int pl_debug;
+module_param(pl_debug, int, 0664);
 
-int plockin_word_size = sizeof(u32);
-module_param(plockin_word_size, int , 0664);
+int pl_word_size = sizeof(u32);
+module_param(pl_word_size, int , 0664);
 
 int test_dummy;
 module_param(test_dummy, int, 0644);
 
 #define VERID "$Revision: 1.3 $ build B1012 "
 
-char acq196_lockin_driver_name[] = "acq196-lockin";
-char acq196_lockin_driver_string[] = "D-TACQ Low Latency Control Device";
-char acq196_lockin_driver_version[] = VERID __DATE__;
-char acq196_lockin_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
+char penta_lockin_driver_name[] = "acq196-lockin";
+char penta_lockin_driver_string[] = "D-TACQ Low Latency Control Device";
+char penta_lockin_driver_version[] = VERID __DATE__;
+char penta_lockin_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 
 #define REFLEN	512
 
@@ -114,20 +114,19 @@ struct FunctionBuf {
  * same regs as original ACQ196 MAC, different bits
  * LocK Register LKR
  */
-#define LKR_MACCON	ACQ196_MACCON
-#define LKR_SUBCON	ACQ196_MACSUB
+#define LKR_MACCON	FPGA_REG(0x30)
+#define LKR_SUBCON	FPGA_REG(0x34)
+#define LKR_MACSTA	FPGA_REG(0x38)
 
 #define LKR_MACCON_ADC3_REF_SEL_SHL	20
 #define LKR_MACCON_ADC2_REF_SEL_SHL	18
 #define LKR_MACCON_ADC1_REF_SEL_SHL	16
-
-#define LKR_MACCON_OVFL	0x7fff
 #define LKR_MACCON_LEN	0x07ff
 
 #define LKR_SUBCON_SUBTRACT	0x0000ffff
 #define LKR_SUBCON_ENABLE	0xffff0000
 
-
+#define LKR_MACSTA_OVFL	0x7fff
 
 struct Globs {
 	struct FunctionBuf fb[MAXREF];
@@ -184,8 +183,6 @@ static int data_open(struct inode *inode, struct file *filp)
 	if (!IN_RANGE(iref, 0, MAXREF)){
 		return -ENODEV;
 	}
-	dbg(1, "inode:%d iref:%d", inode->i_ino, iref);
-
 	SET_FB(filp, &LG.fb[iref]);
 	if ((filp->f_mode & FMODE_WRITE) != 0){
 		/* truncate on write */
@@ -222,7 +219,8 @@ static ssize_t data_write(
 	
 	dbg(1, "count %d return %d", count, nwords*sizeof(u16));
 
-	return nwords*sizeof(u16) + count&1;
+	/* round up to allow apps with odd char count to terminate */
+	return nwords*sizeof(u16) + (count&1);
 }
 
 static ssize_t data_read(
@@ -272,13 +270,17 @@ static void flush(int ibuf)
 	int nbytes = MAXREF*sizeof(u32);
 
 	if (test_dummy <= 1){
-		dbg(1, "[%d] memcpy(%p, %p, %d)", 
-			ibuf, to, from, nbytes);
+		dbg(1, "[%d] %06x memcpy(%p, %p, %d)", 
+			ibuf, 
+			LG.fpga_buffers[ibuf],
+			to, from, nbytes);
 
 		memcpy(to, from, nbytes);
 	}else{
-		dbg(1, "[%d] memcpy(%p, %p, %d) STUBBED", 
-			ibuf, to, from, nbytes);
+		dbg(1, "[%d] %06x memcpy(%p, %p, %d) STUBBED", 
+			ibuf, 
+			LG.fpga_buffers[ibuf],
+			to, from, nbytes);
 	}
 }
 
@@ -290,8 +292,6 @@ static int data_release(
 		/* flush on close. Wasteful - may have to write twice
 		 *  who cares - simple is good
 		 */
-		dbg(1, "inode:%d iref:%d", inode->i_ino, iref);
-
 		flush(IFB2IBU32(iref));
 	}	
 	return 0;
@@ -349,7 +349,7 @@ static int lockin_fs_get_super(
 
 static struct file_system_type lockin_fs_type = {
 	.owner 		= THIS_MODULE,
-	.name		= "acq196_lockinfs",
+	.name		= "penta_lockinfs",
 	.get_sb		= lockin_fs_get_super,
 	.kill_sb	= kill_litter_super,
 };
@@ -393,10 +393,10 @@ static ssize_t show_version(
 	char * buf)
 {
         return sprintf(buf, "%s\n%s\n%s\n%s\n",
-		       acq196_lockin_driver_name,
-		       acq196_lockin_driver_string,
-		       acq196_lockin_driver_version,
-		       acq196_lockin_copyright
+		       penta_lockin_driver_name,
+		       penta_lockin_driver_string,
+		       penta_lockin_driver_version,
+		       penta_lockin_copyright
 		);
 }
 
@@ -502,7 +502,7 @@ static ssize_t show_status(
 	struct device_attribute *attr,
 	char * buf)
 {
-	int status = (*LKR_MACCON & LKR_MACCON_OVFL);
+	int status = (*LKR_MACSTA & LKR_MACSTA_OVFL);
 
 	
         return sprintf(buf,"0x%04x\n", status);
@@ -513,7 +513,7 @@ static ssize_t clear_status(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	*LKR_MACCON |= LKR_MACCON_OVFL;
+	*LKR_MACSTA |= LKR_MACSTA_OVFL;
 	return strlen(buf);
 }
 
@@ -621,7 +621,7 @@ static int mk_lockin_sysfs(struct device *dev)
 }
 
 
-static void acq196_lockin_dev_release(struct device * dev)
+static void penta_lockin_dev_release(struct device * dev)
 {
 	info("");
 }
@@ -642,9 +642,9 @@ static void register_custom_transformer(void)
 		err("transformer %s NOT registered", transformer.name);
 	}
 }
-static struct device_driver acq196_lockin_driver;
+static struct device_driver penta_lockin_driver;
 
-static int acq196_lockin_probe(struct device *dev)
+static int penta_lockin_probe(struct device *dev)
 {
 	info("");
 	register_custom_transformer();
@@ -653,7 +653,7 @@ static int acq196_lockin_probe(struct device *dev)
 	return lockin_fs_create(dev);
 }
 
-static int acq196_lockin_remove(struct device *dev)
+static int penta_lockin_remove(struct device *dev)
 {
 	delete_buffers();
 	unregister_filesystem(&lockin_fs_type);
@@ -661,21 +661,21 @@ static int acq196_lockin_remove(struct device *dev)
 }
 
 
-static struct device_driver acq196_lockin_driver = {
-	.name     = "acq196_lockin",
-	.probe    = acq196_lockin_probe,
-	.remove   = acq196_lockin_remove,
+static struct device_driver penta_lockin_driver = {
+	.name     = "penta_lockin",
+	.probe    = penta_lockin_probe,
+	.remove   = penta_lockin_remove,
 	.bus	  = &platform_bus_type,	
 };
 
 
 static u64 dma_mask = 0x00000000ffffffff;
 
-static struct platform_device acq196_lockin_device = {
-	.name = "acq196_lockin",
+static struct platform_device penta_lockin_device = {
+	.name = "penta_lockin",
 	.id   = 0,
 	.dev = {
-		.release    = acq196_lockin_dev_release,
+		.release    = penta_lockin_dev_release,
 		.dma_mask   = &dma_mask
 	}
 
@@ -683,35 +683,35 @@ static struct platform_device acq196_lockin_device = {
 
 
 
-static int __init acq196_lockin_init( void )
+static int __init penta_lockin_init( void )
 {
 	int rc;
-	acq200_debug = plockin_debug;
+	acq200_debug = pl_debug;
 
-	CAPDEF_set_word_size(plockin_word_size);
-	rc = driver_register(&acq196_lockin_driver);
+	CAPDEF_set_word_size(pl_word_size);
+	rc = driver_register(&penta_lockin_driver);
 	if (rc){
 		return rc;
 	}
 
-	return platform_device_register(&acq196_lockin_device);
+	return platform_device_register(&penta_lockin_device);
 }
 
 
 static void __exit
-acq196_lockin_exit_module(void)
+penta_lockin_exit_module(void)
 {
 	info("");
-	platform_device_unregister(&acq196_lockin_device);
-	driver_unregister(&acq196_lockin_driver);
+	platform_device_unregister(&penta_lockin_device);
+	driver_unregister(&penta_lockin_driver);
 }
 
-module_init(acq196_lockin_init);
-module_exit(acq196_lockin_exit_module);
+module_init(penta_lockin_init);
+module_exit(penta_lockin_exit_module);
 
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
-MODULE_DESCRIPTION("Driver for ACQ196 LOCKIN");
+MODULE_DESCRIPTION("Driver for ACQ196 PENTA_LOCKIN");
 
 
