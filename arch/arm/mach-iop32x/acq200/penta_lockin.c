@@ -78,17 +78,19 @@ module_param(pl_word_size, int , 0664);
 int test_dummy;
 module_param(test_dummy, int, 0644);
 
-#define VERID "B1000"
+#define VERID "B1001"
 
 char penta_lockin_driver_name[] = "penta-lockin";
 char penta_lockin_driver_string[] = "Penta Lockin device";
 char penta_lockin_driver_version[] = VERID __DATE__;
 char penta_lockin_copyright[] = "Copyright (c) 2009 D-TACQ Solutions Ltd";
 
-#define REFLEN	512
+#define REFLEN_SAMPLES	512
+#define REFLEN		REFLEN_SAMPLES
+#define REFLEN_U32	(REFLEN_SAMPLES/2)
 
 #define MAXREF	16
-#define MAXBU32	(MAXREF*sizeof(u16)/sizeof(u32))
+
 
 #define TD_SZ  (sizeof(struct tree_descr))
 #define MY_FILES_SZ ((2+MAXREF+1)*TD_SZ)
@@ -100,14 +102,8 @@ struct FunctionBuf {
 	u16 *p_cur;
 };
 
-#define ADDR_R110_R100 0x00300000
-#define ADDR_R120_R111 0x00300800
-#define ADDR_R200_R121 0x00301000
-#define ADDR_R211_R210 0x00301800
-#define ADDR_R221_R220 0x00302000
-#define ADDR_R310_R300 0x00302800
-#define ADDR_R320_R311 0x00303000
-#define ADDR_R000_R321 0x00303800
+#define ADDR_R100	0x00300000
+#define ADDR_RDELTA	0x00000800	/* 1k words spacing */
 
 
 /*
@@ -130,49 +126,33 @@ struct FunctionBuf {
 
 struct Globs {
 	struct FunctionBuf fb[MAXREF];
-	u32 * buffers[MAXBU32];
-	u32 fpga_buffers[MAXBU32];
-} LG = {
-	.fpga_buffers[0] = ADDR_R110_R100,
-	.fpga_buffers[1] = ADDR_R120_R111,
-	.fpga_buffers[2] = ADDR_R200_R121,
-	.fpga_buffers[3] = ADDR_R211_R210,
-	.fpga_buffers[4] = ADDR_R221_R220,
-	.fpga_buffers[5] = ADDR_R310_R300,
-	.fpga_buffers[6] = ADDR_R320_R311,
-	.fpga_buffers[7] = ADDR_R000_R321
-};
+	u16 *buffers[MAXREF];
+	int fpga_buffers[MAXREF];
+} LG;
 
 static struct tree_descr *my_files;
 
 #define FB(filp) ((struct FunctionBuf *)(filp)->private_data)
 #define SET_FB(filp, fb) ((filp)->private_data = (fb))
 
-#define IFB2IBU32(ifb)	((ifb)/2)
-
 static int new_buffers(void)
 {
-	int ib32;	/* index the 32 bit buffers */
-	int ifb = 0;	/* index the channel buffers */
+	int iref = 0;	/* index the channel buffers */
 
-	for (ib32 = 0; ib32 < MAXBU32; ++ib32){
-		u32 *bu32 = kzalloc(REFLEN*sizeof(32), GFP_KERNEL);
-
-		LG.buffers[ib32] = bu32;
-		LG.fb[ifb].p_start = (u16*)bu32;
-		++ifb;
-		LG.fb[ifb].p_start = (u16*)bu32 + 1;
-		++ifb;
+	for (iref = 0; iref < MAXREF; ++iref){
+		u16 *bp = kzalloc(REFLEN*sizeof(u16), GFP_KERNEL);
+		LG.fb[iref].p_start = LG.fb[iref].p_cur = LG.buffers[iref] = bp;
+		LG.fpga_buffers[iref] = ADDR_R100 + iref * ADDR_RDELTA;
 	}
 	return 0;
 }
 
 static void delete_buffers(void)
 {
-	int ib32;	/* index the 32 bit buffers */
+	int iref;      
 
-	for (ib32 = 0; ib32 < MAXBU32; ++ib32){
-		kfree(LG.buffers[ib32]);
+	for (iref = 0; iref < MAXREF; ++iref){
+		kfree(LG.buffers[iref]);
 	}
 	kfree(my_files);
 }
@@ -210,11 +190,11 @@ static ssize_t data_write(
 	while (ucount-- > 0 && *offset + nwords < REFLEN){
 		get_user(tmp, ubuf+nwords);
 		*FB(filp)->p_cur = tmp;
-		FB(filp)->p_cur += 2;
+		FB(filp)->p_cur += 1;
 		++nwords;
 	}
 	*offset += nwords;
-	filp->f_dentry->d_inode->i_size += count;
+	filp->f_dentry->d_inode->i_size += nwords*sizeof(u16);
 	
 	dbg(1, "count %d return %d", count, nwords*sizeof(u16));
 
@@ -229,7 +209,7 @@ static ssize_t data_read(
 	u16 *ubuf = (u16*)buf;
 	u16 ucount = count/sizeof(u16);
 	int nwords = 0;
-	int lenwords = (FB(filp)->p_cur - FB(filp)->p_start)/2;
+	int lenwords = (FB(filp)->p_cur - FB(filp)->p_start);
 
 	if (*offset >= lenwords){
 		return 0;
@@ -237,7 +217,7 @@ static ssize_t data_read(
 		
 
 	while (ucount-- > 0 && *offset + nwords < lenwords){
-		tmp = FB(filp)->p_start[2*nwords];
+		tmp = FB(filp)->p_start[nwords];
 		put_user(tmp, ubuf);
 		++ubuf;
 		++nwords;
@@ -263,24 +243,20 @@ static int data_mmap(
 
 static void flush(int ibuf)
 {
-		
-	void *to = (test_dummy? BB_PTR(0): DG->fpga.fifo.va)+
-			LG.fpga_buffers[ibuf];
-	void *from = LG.buffers[ibuf];
-	int nbytes = MAXREF*sizeof(u32);
+	void *bp = test_dummy? BB_PTR(0): DG->fpga.fifo.va;
+	u32 *to = (u32*)(bp + LG.fpga_buffers[ibuf]);
+	u32 *from = (u32*)LG.buffers[ibuf];
+	int nwrites = REFLEN_U32;
+	int stubbed = test_dummy > 1;
 
-	if (test_dummy <= 1){
-		dbg(1, "[%d] %06x memcpy(%p, %p, %d)", 
-			ibuf, 
-			LG.fpga_buffers[ibuf],
-			to, from, nbytes);
+	dbg(1, "[%d] %06x (%p = %p, %d*4) %s", 
+	    ibuf, LG.fpga_buffers[ibuf], to, from, nwrites,
+	    stubbed? "STUBBED": test_dummy? "TEST_DUMMY": "");
 
-		memcpy(to, from, nbytes);
-	}else{
-		dbg(1, "[%d] %06x memcpy(%p, %p, %d) STUBBED", 
-			ibuf, 
-			LG.fpga_buffers[ibuf],
-			to, from, nbytes);
+	if (!stubbed){
+		while(nwrites--){
+			*to++ = *from++;
+		}		       
 	}
 }
 
@@ -292,7 +268,7 @@ static int data_release(
 		/* flush on close. Wasteful - may have to write twice
 		 *  who cares - simple is good
 		 */
-		flush(IFB2IBU32(iref));
+		flush(iref);
 	}	
 	return 0;
 }
@@ -714,5 +690,3 @@ module_exit(penta_lockin_exit_module);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
 MODULE_DESCRIPTION("Driver for ACQ196 PENTA_LOCKIN");
-
-
