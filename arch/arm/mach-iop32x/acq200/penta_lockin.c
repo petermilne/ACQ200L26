@@ -78,12 +78,12 @@ module_param(pl_word_size, int , 0664);
 int test_dummy;
 module_param(test_dummy, int, 0644);
 
-#define VERID "$Revision: 1.3 $ build B1012 "
+#define VERID "B1000"
 
-char penta_lockin_driver_name[] = "acq196-lockin";
-char penta_lockin_driver_string[] = "D-TACQ Low Latency Control Device";
+char penta_lockin_driver_name[] = "penta-lockin";
+char penta_lockin_driver_string[] = "Penta Lockin device";
 char penta_lockin_driver_version[] = VERID __DATE__;
-char penta_lockin_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
+char penta_lockin_copyright[] = "Copyright (c) 2009 D-TACQ Solutions Ltd";
 
 #define REFLEN	512
 
@@ -202,17 +202,16 @@ static ssize_t data_write(
 	int nwords = 0;
 	
 
-	if (*offset >= MAXREF){
-		return -EINVAL;
+	if (*offset >= REFLEN){
+		return -EFBIG;
 	}
 		
 	/* stride thru array[u16] double spaced */
-	while (ucount-- > 0 && *offset + nwords < MAXREF){
-		get_user(tmp, ubuf);
+	while (ucount-- > 0 && *offset + nwords < REFLEN){
+		get_user(tmp, ubuf+nwords);
 		*FB(filp)->p_cur = tmp;
-		++ubuf;
-		++nwords;
 		FB(filp)->p_cur += 2;
+		++nwords;
 	}
 	*offset += nwords;
 	filp->f_dentry->d_inode->i_size += count;
@@ -230,13 +229,14 @@ static ssize_t data_read(
 	u16 *ubuf = (u16*)buf;
 	u16 ucount = count/sizeof(u16);
 	int nwords = 0;
+	int lenwords = (FB(filp)->p_cur - FB(filp)->p_start)/2;
 
-	if (*offset >= FB(filp)->p_cur - FB(filp)->p_start){
+	if (*offset >= lenwords){
 		return 0;
 	}
 		
 
-	while (ucount-- > 0 && *offset + nwords < MAXREF){
+	while (ucount-- > 0 && *offset + nwords < lenwords){
 		tmp = FB(filp)->p_start[2*nwords];
 		put_user(tmp, ubuf);
 		++ubuf;
