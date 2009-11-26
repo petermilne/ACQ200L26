@@ -88,6 +88,7 @@ char penta_lockin_copyright[] = "Copyright (c) 2009 D-TACQ Solutions Ltd";
 #define REFLEN_SAMPLES	512
 #define REFLEN		REFLEN_SAMPLES
 #define REFLEN_U32	(REFLEN_SAMPLES/2)
+#define REFLEN_BYTES	(REFLEN_SAMPLES*2)
 
 #define MAXREF	16
 
@@ -166,7 +167,8 @@ static int data_open(struct inode *inode, struct file *filp)
 	SET_FB(filp, &LG.fb[iref]);
 	if ((filp->f_mode & FMODE_WRITE) != 0){
 		/* truncate on write */
-		FB(filp)->p_cur = FB(filp)->p_start; 
+		FB(filp)->p_cur = FB(filp)->p_start;
+		memset(FB(filp)->p_start, 0, RELEN_BYTES);
 
 		filp->f_dentry->d_inode->i_size = 0;
 	}	
