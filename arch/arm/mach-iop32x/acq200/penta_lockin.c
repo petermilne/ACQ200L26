@@ -168,7 +168,7 @@ static int data_open(struct inode *inode, struct file *filp)
 	if ((filp->f_mode & FMODE_WRITE) != 0){
 		/* truncate on write */
 		FB(filp)->p_cur = FB(filp)->p_start;
-		memset(FB(filp)->p_start, 0, RELEN_BYTES);
+		memset(FB(filp)->p_start, 0, REFLEN_BYTES);
 
 		filp->f_dentry->d_inode->i_size = 0;
 	}	
