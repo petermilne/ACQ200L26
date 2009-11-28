@@ -78,11 +78,11 @@ module_param(pl_word_size, int , 0664);
 int test_dummy;
 module_param(test_dummy, int, 0644);
 
-#define VERID "B1001"
+#define VERID "B1003"
 
-char penta_lockin_driver_name[] = "penta-lockin";
+char penta_lockin_driver_name[] = "penta_lockin";
 char penta_lockin_driver_string[] = "Penta Lockin device";
-char penta_lockin_driver_version[] = VERID __DATE__;
+char penta_lockin_driver_version[] = VERID ":" __DATE__;
 char penta_lockin_copyright[] = "Copyright (c) 2009 D-TACQ Solutions Ltd";
 
 #define REFLEN_SAMPLES	512
@@ -124,7 +124,6 @@ struct FunctionBuf {
 #define LKR_SUBCON_ENABLE	0xffff0000
 
 #define LKR_MACSTA_OVFL	0x7fff
-
 struct Globs {
 	struct FunctionBuf fb[MAXREF];
 	u16 *buffers[MAXREF];
@@ -245,7 +244,7 @@ static int data_mmap(
 
 static void flush(int ibuf)
 {
-	void *bp = test_dummy? BB_PTR(0): DG->fpga.fifo.va;
+	void *bp = test_dummy? BB_PTR(0): DG->fpga.regs.va;
 	u32 *to = (u32*)(bp + LG.fpga_buffers[ibuf]);
 	u32 *from = (u32*)LG.buffers[ibuf];
 	int nwrites = REFLEN_U32;
@@ -516,8 +515,10 @@ static ssize_t store_subcon(
 
 	if (sscanf(buf, "0x%x", &subcon) == 1 || 
 	    sscanf(buf, "%d", &subcon) == 1       ){
-		*LKR_SUBCON &= ~LKR_SUBCON_SUBTRACT;
-		*LKR_SUBCON |= subcon;
+		u32 lkr_subcon = *LKR_SUBCON;
+		lkr_subcon &= ~LKR_SUBCON_SUBTRACT;
+		lkr_subcon |= subcon;
+		*LKR_SUBCON = lkr_subcon;
 	}
 	
 	return strlen(buf);
@@ -547,8 +548,10 @@ static ssize_t store_mac_length(
 
 	if (sscanf(buf, "%d", &mac_length) == 1 &&
 	    mac_length >= 1 && mac_length <= 0xfff){
-		*LKR_MACCON &= ~LKR_MACCON_LENGTH;
-		*LKR_MACCON |= mac_length - COUNTS_FROM_ZERO;
+		u32 lkr_maccon = *LKR_MACCON;
+		lkr_maccon &= ~LKR_MACCON_LENGTH;
+		lkr_maccon |= mac_length - COUNTS_FROM_ZERO;
+		*LKR_MACCON = lkr_maccon;
 	}
 	
 	return strlen(buf);
@@ -557,13 +560,32 @@ static ssize_t store_mac_length(
 static DEVICE_ATTR(mac_length, S_IRUGO|S_IWUGO, 
 	show_mac_length, store_mac_length);
 
+
+static u32 pl_get_enable(void) {
+	return (*LKR_SUBCON & LKR_SUBCON_ENABLE) >> 16;
+}
+
+static unsigned pl_getNumChanEquivalent(void)
+{
+	u32 enable = pl_get_enable();
+	u32 mask = 0x8000;
+	unsigned nblocks;
+
+	for (nblocks = 0; mask; mask >>= 1){
+		if ((enable&mask) != 0){
+			++nblocks;
+		}
+	}
+	return nblocks * 32;
+}
+
 static ssize_t show_enable(
 	struct device * dev, 
 	struct device_attribute *attr,
 	char * buf)
 {
-	return sprintf(buf, "%08x\n", 
-		       (*LKR_SUBCON & LKR_SUBCON_ENABLE) >> 16);
+	u32 enable = pl_get_enable();
+	return sprintf(buf, "0x%04x\n", enable);
 }
 
 static ssize_t store_enable(
@@ -574,8 +596,12 @@ static ssize_t store_enable(
 	int enables = 0;
 
 	if (sscanf(buf, "0x%x", &enables) || sscanf(buf, "%x", &enables)){
-			*LKR_SUBCON &= ~LKR_SUBCON_ENABLE;
-			*LKR_SUBCON |= enables << 16;
+		/* NB MUST work on mask reg... good practise anyway */
+		u32 lkr_subcon = *LKR_SUBCON;
+		lkr_subcon &= ~LKR_SUBCON_ENABLE;
+		lkr_subcon |= enables << 16;
+		*LKR_SUBCON = lkr_subcon;
+		CAPDEF_set_nchan(pl_getNumChanEquivalent());
 	}
 	return strlen(buf);
 }
@@ -641,7 +667,7 @@ static int penta_lockin_remove(struct device *dev)
 
 
 static struct device_driver penta_lockin_driver = {
-	.name     = "penta_lockin",
+	.name     = penta_lockin_driver_name,
 	.probe    = penta_lockin_probe,
 	.remove   = penta_lockin_remove,
 	.bus	  = &platform_bus_type,	
@@ -668,6 +694,7 @@ static int __init penta_lockin_init( void )
 	acq200_debug = pl_debug;
 
 	CAPDEF_set_word_size(pl_word_size);
+	CAPDEF_set_nchan(pl_getNumChanEquivalent());
 	rc = driver_register(&penta_lockin_driver);
 	if (rc){
 		return rc;
