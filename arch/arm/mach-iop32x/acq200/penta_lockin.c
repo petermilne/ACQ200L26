@@ -132,6 +132,49 @@ struct Globs {
 
 static struct tree_descr *my_files;
 
+
+static void to_bit_array(char ba[], int nbits, unsigned pattern)
+{
+	int ibit;
+	u32 mask = 0x1;
+	int cursor;
+
+	for (ibit = cursor = 0; ibit < nbits; mask <<= 1){
+		ba[cursor++] = pattern&mask? '1': '0';
+		ba[cursor++] = ++ibit < nbits? ',': '\0';
+	}
+}
+
+static int from_bit_array(const char ba[], int nbits, unsigned *ppattern)
+{
+	int ibit = 0;
+	int cursor = 0;
+	u32 mask = 0x1;
+	u32 pattern = 0;
+	
+	while(ibit < nbits){
+		switch(ba[cursor]){
+		case ',':
+			++cursor;
+			continue;
+		case '1':
+			pattern |= mask;	/* fall through */
+		case '0':
+			++cursor;
+			++ibit;
+			mask <<= 1;
+			break;
+		case '\n':
+		case '\0':
+		default:
+			goto _done;
+		}
+	}
+_done:
+	*ppattern = pattern;
+	return 0;
+}
+
 #define FB(filp) ((struct FunctionBuf *)(filp)->private_data)
 #define SET_FB(filp, fb) ((filp)->private_data = (fb))
 
@@ -480,9 +523,10 @@ static ssize_t show_status(
 	char * buf)
 {
 	int status = (*LKR_MACSTA & LKR_MACSTA_OVFL);
-
+	char ba[40];
+	to_bit_array(ba, MAXREF, status);
 	
-        return sprintf(buf,"0x%04x\n", status);
+        return sprintf(buf,"0x%04x %s\n", status, ba);
 }
 
 static ssize_t clear_status(
@@ -565,6 +609,7 @@ static u32 pl_get_enable(void) {
 	return (*LKR_SUBCON & LKR_SUBCON_ENABLE) >> 16;
 }
 
+
 static unsigned pl_getNumChanEquivalent(void)
 {
 	u32 enable = pl_get_enable();
@@ -579,13 +624,26 @@ static unsigned pl_getNumChanEquivalent(void)
 	return nblocks * 32;
 }
 
+
+static void pl_set_enable(u32 enables)
+{
+	u32 lkr_subcon = *LKR_SUBCON;
+	lkr_subcon &= ~LKR_SUBCON_ENABLE;
+	lkr_subcon |= enables << 16;
+	*LKR_SUBCON = lkr_subcon;
+	CAPDEF_set_nchan(pl_getNumChanEquivalent());
+}
+
+
 static ssize_t show_enable(
 	struct device * dev, 
 	struct device_attribute *attr,
 	char * buf)
 {
+	char ba[40];
 	u32 enable = pl_get_enable();
-	return sprintf(buf, "0x%04x\n", enable);
+	to_bit_array(ba, MAXREF, enable); 
+	return sprintf(buf, "0x%04x %s\n", enable, ba);
 }
 
 static ssize_t store_enable(
@@ -593,15 +651,16 @@ static ssize_t store_enable(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	int enables = 0;
+	unsigned enables = 0;
 
-	if (sscanf(buf, "0x%x", &enables) || sscanf(buf, "%x", &enables)){
+	if (sscanf(buf, "0x%x", &enables)){
 		/* NB MUST work on mask reg... good practise anyway */
-		u32 lkr_subcon = *LKR_SUBCON;
-		lkr_subcon &= ~LKR_SUBCON_ENABLE;
-		lkr_subcon |= enables << 16;
-		*LKR_SUBCON = lkr_subcon;
-		CAPDEF_set_nchan(pl_getNumChanEquivalent());
+		pl_set_enable(enables);
+	}else if (strstr(buf, ",")){
+		
+		if (from_bit_array(buf, MAXREF, &enables) == 0){
+			pl_set_enable(enables);
+		}
 	}
 	return strlen(buf);
 }
