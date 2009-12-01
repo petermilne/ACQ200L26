@@ -594,6 +594,9 @@ static ssize_t store_mac_length(
 	    mac_length >= 1 && mac_length <= 0xfff){
 		u32 lkr_maccon = *LKR_MACCON;
 		lkr_maccon &= ~LKR_MACCON_LENGTH;
+		if (mac_length < 2){
+			mac_length = 2;
+		}
 		lkr_maccon |= mac_length - COUNTS_FROM_ZERO;
 		*LKR_MACCON = lkr_maccon;
 	}
