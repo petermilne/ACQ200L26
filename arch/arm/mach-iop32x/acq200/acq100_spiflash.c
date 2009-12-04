@@ -26,12 +26,28 @@
 #include <linux/spi/spi.h>
 #include <asm/arch/iop321_spi.h>
 
+#include "acq200_debug.h"
 
+#include "acq100.h"
+
+#define FLASHCON FPGA_REG(0x58)
+#define CS_BIT 29
+
+void cs_action(struct iop321_spi_info *spi, int cs, int pol)
+{
+	dbg(1, "%d %d", pol);
+
+	if (pol){
+		*FLASHCON = 1<<CS_BIT;
+	}else{
+		*FLASHCON = 0;
+	}
+}
 static struct spi_board_info acq100_spidevices[] = {
 	{
 		/* DataFlash chip */
 		.modalias	= "mtd_dataflash",
-		.chip_select	= 0,
+		.chip_select	= 37,
 		.max_speed_hz	= 15 * 1000 * 1000,
 		.mode = SPI_CS_HIGH 
 	}
@@ -40,7 +56,8 @@ static struct spi_board_info acq100_spidevices[] = {
 struct iop321_spi_info acq100_spi_info = {
 	.ext_clk_hz = 0,
 	.board_size = 1,
-	.board_info = acq100_spidevices
+	.board_info = acq100_spidevices,
+	.set_cs = cs_action
 };
 
 static u64 spi_dmamask = 0xffffffffUL;
@@ -62,6 +79,8 @@ static struct platform_device *acq100_devices[] __initdata = {
 
 static int __init acq100_spiflash_init(void)
 {
+	info("calling platform_add_devices()");
+	acq100_spidevices[0].chip_select = (int)cs_action;
 	platform_add_devices(acq100_devices, ARRAY_SIZE(acq100_devices));
 	return 0;
 }
