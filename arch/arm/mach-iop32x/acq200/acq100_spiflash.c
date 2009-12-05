@@ -32,6 +32,7 @@
 
 #define FLASHCON FPGA_REG(0x58)
 #define CS_BIT 29
+#define RESET_BIT	31
 
 void cs_action(struct iop321_spi_info *spi, int cs, int pol)
 {
@@ -42,6 +43,13 @@ void cs_action(struct iop321_spi_info *spi, int cs, int pol)
 	}else{
 		*FLASHCON = 0;
 	}
+}
+
+static void reset_action(void)
+{
+	*FLASHCON = 1<<	RESET_BIT;
+	*FLASHCON = 0;
+	msleep(20);
 }
 static struct spi_board_info acq100_spidevices[] = {
 	{
@@ -79,6 +87,7 @@ static struct platform_device *acq100_devices[] __initdata = {
 
 static int __init acq100_spiflash_init(void)
 {
+	reset_action();
 	info("calling platform_add_devices()");
 	acq100_spidevices[0].chip_select = (int)cs_action;
 	platform_add_devices(acq100_devices, ARRAY_SIZE(acq100_devices));

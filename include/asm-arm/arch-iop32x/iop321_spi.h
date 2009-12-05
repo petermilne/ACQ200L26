@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------- */
 /* drivers/spi/iop321_spi.h spi device driver interface for IOP321           */
 /* ------------------------------------------------------------------------- */
-/*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
+/*   Copyright (C) 2009 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
 
     This program is free software; you can redistribute it and/or modify

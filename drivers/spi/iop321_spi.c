@@ -112,7 +112,7 @@ module_param(SP0, int, 0644);
 int SPH;
 module_param(SPH, int, 0644);
 
-int do_every_time=1;	/* init every setup - shouldn't be necessary */
+int do_every_time=0;	/* init every setup - shouldn't be necessary */
 module_param(do_every_time, int, 0644);
 
 struct iop321_spi {
