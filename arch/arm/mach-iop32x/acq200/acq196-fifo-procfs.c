@@ -261,27 +261,27 @@ static ssize_t show_FIRK##bank(						\
 	struct device * dev,						\
 	struct device_attribute *attr,					\
 	char * buf) {							\
-	return show_FIRK(dev, attr, buf, bank);				\
+	return show_FIRK(dev, attr, buf, bank-1);				\
 }									\
 static ssize_t store_FIRK##bank(					\
 	struct device* dev,						\
 	struct device_attribute *attr,					\
 	const char * buf, size_t count) {				\
-	return store_FIRK(dev, attr, buf, count, bank);			\
+	return store_FIRK(dev, attr, buf, count, bank-1);			\
 }									\
 static DEVICE_ATTR(							\
-	FIRK##bank, S_IRUGO|S_IWUGO, show_FIRK##bank, store_FIRK##bank	\
+	FIR_MODE_##bank, S_IRUGO|S_IWUGO, show_FIRK##bank, store_FIRK##bank \
 );
 
-#define DECL_FIRK_GROUP DECL_FIRQ(0); DECL_FIRQ(1); DECL_FIRQ(2)
+#define DECL_FIRK_GROUP DECL_FIRQ(1); DECL_FIRQ(2); DECL_FIRQ(3)
 
 #define DEVICE_CREATE_FIRK(dev, bank) \
-        DEVICE_CREATE_FILE(dev, &dev_attr_FIRK##bank)
+        DEVICE_CREATE_FILE(dev, &dev_attr_FIR_MODE_##bank)
 
 #define DEVICE_CREATE_FIRK_GROUP(dev) do {	\
-	DEVICE_CREATE_FIRK(dev, 0);		\
 	DEVICE_CREATE_FIRK(dev, 1);		\
 	DEVICE_CREATE_FIRK(dev, 2);		\
+	DEVICE_CREATE_FIRK(dev, 3);		\
 } while(0)
 
 DECL_FIRK_GROUP;
