@@ -227,7 +227,7 @@ static ssize_t store_AO_coding(
 static DEVICE_ATTR(
 	AO_coding, S_IRUGO|S_IWUGO, show_AO_coding, store_AO_coding);
 
-#ifdef ACQ196F
+#if defined (ACQ196F) || defined(ACQ196M)
 static ssize_t show_FIRK(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -491,6 +491,9 @@ DEFINE_SIGNAL_ATTR(ao_clk);
 DEFINE_SIGNAL_ATTR(sync_trig_src);
 DEFINE_SIGNAL_ATTR(sync_trig_mas);
 
+#if defined(ACQ196M)
+#warning this is ACQ196M
+#endif
 
 static void acq196_mk_dev_sysfs(struct device *dev)
 {
@@ -508,7 +511,8 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ao_clk);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_trig_mas);
-#ifdef ACQ196F
+#if defined (ACQ196F) || defined (ACQ196M)
+#warning FIRK enabled
 	DEVICE_CREATE_FIRK_GROUP(dev);
 #endif
 	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
