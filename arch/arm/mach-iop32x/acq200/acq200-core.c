@@ -945,6 +945,8 @@ int acq200_get_mac( int imac, int nmac, unsigned char the_mac[] )
 
 EXPORT_SYMBOL_GPL(acq200_get_mac);
 
+static int is_hex_def = 0;		/* if hex char found, all hex */
+
 static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 /* str should be a sequence of bytes :XX:XX:XX */
 {
@@ -954,7 +956,7 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 	unsigned dmac[6] = { 0, };	/* octets, dec decoded */
 	int ito, ifrom;				
 	int is_decimal_def = 0;		/* once dec discovered, all dec */
-	int is_hex_def = 0;		/* if hex char found, all hex */
+
  
 /** IEEE standard is to define octets in hex. 
  *  We do this by default
@@ -975,7 +977,7 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 	}
 	
 	if (!is_hex_def){
-		sscanf(str, DECFMT,
+		replace_count = sscanf(str, DECFMT,
 			&dmac[0], &dmac[1], &dmac[2],
 			&dmac[3], &dmac[4], &dmac[5] );
 	}
@@ -1019,6 +1021,31 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 	return 0;
 }
 
+/*
+date: 2008/04/16 10:24:42;  author: pgm;  state: Exp;  lines: +5 -5
+MAC address in hex coded octets as per IEEE
+*/
+
+static int __init init_sn(char *str)
+/* early cards had a mac def set in u-boot in decimal.
+ * that was an ERROR, but we have to live with it ..
+ */
+{
+	int sn;
+	if (sscanf(str, "d%d", &sn) > 0){
+		if (sn > 40000){
+			/* acq216 >= 87 */
+			if (sn >= 41087){
+				is_hex_def = 1;
+			}
+		}else{
+			/* all acq196 >= 200 and all acq132, acq164 */
+			if (sn >= 30200){
+				is_hex_def = 1;
+			}
+		}
+	}	
+}
 static int __init init_mac0(char *str)
 {
 	return acq200_decode_mac( str, acq200_gEmac0 );
@@ -1029,8 +1056,9 @@ static int __init init_mac1(char *str)
 	return acq200_decode_mac( str, acq200_gEmac1 );
 }
 
-__setup( "gEmac0=", init_mac0 );
-__setup( "gEmac1=", init_mac1 );
+__setup("serialnum=", init_sn);
+__setup("gEmac0=", init_mac0);
+__setup("gEmac1=", init_mac1);
 
 module_init(acq200_core_init);
 
