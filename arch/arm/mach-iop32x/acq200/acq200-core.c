@@ -1044,7 +1044,8 @@ static int __init init_sn(char *str)
 				is_hex_def = 1;
 			}
 		}
-	}	
+	}
+	return 0;	
 }
 static int __init init_mac0(char *str)
 {
