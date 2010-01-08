@@ -767,10 +767,6 @@ static void enable_acq132_start(void)
 
 	DMC_WO->trigger_detect = acq196_trigger_detect;
 
-	DBGSF("set events");
-	signalCommit(CAPDEF->ev[0]);
-
-
 	DBGSF("FINAL:next enable FIFCON");
 	enable_fifo(CAPDEF->channel_mask);
 
@@ -1414,11 +1410,13 @@ void acq132_set_obclock(int FDW, int RDW, int R, int Sx)
 
 static void global_set_adc_range(u32 channels)
 {
+	u32 syscon = *ACQ132_SYSCON;
         if (channels){
-		*ACQ132_SYSCON |= ACQ132_SYSCON_RANGE_HI;
+		syscon |= ACQ132_SYSCON_RANGE_HI;
 	}else{
-		*ACQ132_SYSCON &= ~ACQ132_SYSCON_RANGE_HI;
+		syscon &= ~ACQ132_SYSCON_RANGE_HI;
 	}
+	*ACQ132_SYSCON = syscon;
 }
 
 void acq132_setScanList(int scanlen, u32 scanlist)
