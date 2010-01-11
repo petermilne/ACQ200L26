@@ -512,7 +512,7 @@ ssize_t acq200_fifo_bigbuf_read (
 {
 	struct BigbufReadPrams bbrp = { 0, };
 
-	dbg(1, "01: len:%u offset:%u", len, *offset);
+	dbg(1, "01: len:%u offset:%u", (unsigned)len, (unsigned)*offset);
 
 	if (unlikely(len <= 0)){
 		return 0;
@@ -1134,6 +1134,124 @@ static ssize_t acq200_fifo_bigbuf_xxl_read (
 }
 
 
+/* ONLY valid for linear data starting at BIGBUF:
+ * ie a TRANSIENT after
+ * set.dtacq set.dtacq free_tblocks 1
+ * setArm
+ * NO TRANSFORM
+ * now upload...
+ * @todo - find a way to ensure these conditions are valid ...
+ */
+
+static ssize_t bigbuf_data_extractPages(
+	int maxbytes,
+	int offset,
+	read_descriptor_t * desc,
+	read_actor_t actor	
+	)
+{
+	char* cursor = (char*)(va_buf(DG) + offset);
+	unsigned long cplen = 0;
+
+	while (cplen < maxbytes){
+		struct page *page = virt_to_page(cursor);
+		unsigned poff = (unsigned)(cursor)&(PAGE_SIZE-1);
+		unsigned long len = min(PAGE_SIZE, maxbytes-cplen);
+
+		actor(desc, page, poff, len);
+		
+		cplen += len;
+		cursor += len;
+	}
+
+	return cplen;
+}
+
+static ssize_t bigbuf_data_mapping_read ( 
+	struct file * file, loff_t *offset,
+	read_descriptor_t * desc,
+	read_actor_t actor
+)
+/** read a linear buffer. len, offset in bytes pass the data a page at a time
+ *  to actor.
+ */
+/*
+ * BEWARE: this is a nightmare of mixed units
+ *
+ * contract with caller: read bytes, return bytes
+ * contract with extract: units are words
+ *
+ */
+{
+	int maxbytes = min(sample_size()*SAMPLES, (int)desc->count);
+
+	int rc = bigbuf_data_extractPages(
+		maxbytes,
+		*offset,
+		desc,
+		actor);
+
+	if (rc > 0){
+		*offset += rc;
+	}
+	return rc;
+}
+
+
+static int bigbuf_linear_data_mmap(
+	struct file *filp, struct vm_area_struct *vma)
+{
+	int rc = io_remap_pfn_range( 
+		vma, vma->vm_start, 
+		__phys_to_pfn(pa_buf(DG)), 
+		vma->vm_end - vma->vm_start, 
+		vma->vm_page_prot 
+	);
+
+	dbg(1, "mapping phys:%u len:%lu rc %d", 
+	    pa_buf(DG), vma->vm_end - vma->vm_start, rc);
+
+	return rc;
+}
+
+static ssize_t bigbuf_linear_data_sendfile(struct file *in_file, loff_t *ppos,
+			 size_t count, read_actor_t actor, void __user *target)
+{
+	read_descriptor_t desc = {
+		.written = 0,
+		.count = count,
+		.arg.data = target,
+		.error = 0
+	};
+	ssize_t rc;
+
+	if (!count)
+		return 0;
+
+	dbg(1, "STEP:A1 count %d", count);
+
+	while (desc.written < count){
+		rc = bigbuf_data_mapping_read(
+			in_file, ppos, &desc, actor);
+
+		if (rc == 0){
+			break;
+		}else if (rc < 0){
+			dbg(1, "ERROR returning %d", rc);
+			return rc;
+		}
+
+		dbg(1, "desc.written %d count %d rc %d desc.count %d", 
+		    desc.written, count, rc, desc.count);
+	}
+		
+	dbg(1, "returning %d", desc.written);
+
+	if (desc.written > 0){
+		DG->stats.sendfile_bytes += desc.written;
+	}
+	return desc.written;
+}
 
 
 /*
@@ -1143,7 +1261,9 @@ static ssize_t acq200_fifo_bigbuf_xxl_read (
 static struct file_operations fifo_bigbuf_xxp_fops = {
 	.open = acq200_fifo_bigbuf_xx_open,
 	.read = acq200_fifo_bigbuf_xxp_read,
-	.release = acq200_fifo_bigbuf_xx_release
+	.release = acq200_fifo_bigbuf_xx_release,
+	.mmap		= bigbuf_linear_data_mmap,
+	.sendfile	= bigbuf_linear_data_sendfile
 };
 static struct file_operations fifo_bigbuf_xxl_fops = {
 	.open = acq200_fifo_bigbuf_xxl_open,
