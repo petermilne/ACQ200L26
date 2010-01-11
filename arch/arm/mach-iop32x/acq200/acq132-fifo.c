@@ -359,7 +359,9 @@ static int _set_ob_clock(int khz)
 	static char *argv[6];
 	int ii;
 
-	acq132_set_best_decimation(khz, &khz, 0);
+	if (acq132_set_best_decimation(khz, &khz, 0) != 0){
+		return -1;
+	}
 
 	sprintf(fin_def, "%d", acq200_clk_hz/1000);
 	sprintf(fout_def, "%d", khz);
@@ -387,9 +389,6 @@ static int _set_ob_clock(int khz)
 static int set_ob_clock(int hz)
 /* returns 0 = OK */
 {	
-	if (hz < 1000000){
-		return -1;
-	}
 	_setIntClkHz(obclock_input_rate);
 	return _set_ob_clock(hz/1000);
 }
@@ -400,7 +399,7 @@ void acq200_setIntClkHz( int hz )
 	}else if (DG->use_ob_clock && set_ob_clock(hz) == 0){
 		;
 	}else{
-		_setIntClkHz(hz);
+		err("CLOCK %d Hz TOO SLOW", hz);
 	}
 }
 static int fifo_read_init_action(void);
