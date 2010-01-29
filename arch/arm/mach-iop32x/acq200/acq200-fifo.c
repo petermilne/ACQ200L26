@@ -2914,7 +2914,8 @@ void search_epos(struct Phase* phase, int search_metric)
 
 
 
-	dbg(1, "01");	
+	dbg(1, "01 tblock:%d isearch:%d ",
+		    TBLOCK_INDEX(isearch), isearch);	
 
 	if (search_metric < 0){
 		isearch += search_metric * DMA_BLOCK_LEN; /* decrement */

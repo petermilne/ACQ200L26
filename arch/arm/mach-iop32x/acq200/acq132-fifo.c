@@ -642,6 +642,11 @@ static struct file_operations acq132_sfpga_load_ops = {
 	}
 
 
+extern int acq132_find_event(
+       struct Phase *phase, unsigned *first, unsigned *ilast);
+
+#define FIND_EVENT     acq132_find_event
+
 #define ACQ200_CUSTOM_FPGA_OPEN
 #include "acq200-fifo.c"
 
