@@ -75,6 +75,10 @@ module_param(time_stamp_size, int, 0444);
 int time_stamp_adj = 2;
 module_param(time_stamp_adj, int, 0644);
 
+int stub_acq132_find_event = 0;
+module_param(stub_acq132_find_event, int, 0644);
+
+
 #define TIMEBASE_ENCODE_GATE_PULSE_INDEX_MOD256 0
 #define TIMEBASE_ENCODE_GATE_PULSE		1
 
@@ -106,6 +110,9 @@ static struct ES_META_DATA{
 }
 	g_esm;
 
+static Tbxo G_current_transform_tbxo;	/* hack avoids extra call prams */
+static int G_rows;
+
 
 #define DEBUGGING
 #ifdef DEBUGGING
@@ -124,10 +131,6 @@ short* from2;
 
 typedef unsigned ChannelData[MAXCHAN];
 
-static ChannelData startOffsets;	/* offset in shorts */
-static ChannelData sampleCounts;
-static ChannelData *tblockChannels;	/* [TBLOCKS] */
-
 typedef unsigned * pUNS;
 
 struct Bank {
@@ -142,6 +145,9 @@ struct Bank {
 
 #define TBOFF(tb)	((tb)&~0xff000000U)
 #define TBIX(tb)	((tb) >> 24)
+
+#define TO_TBIX(ix)	((ix) << 24)
+
 
 static void * tbxo2va(Tbxo tb)
 {
@@ -247,7 +253,7 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 		const int bsamples = min(nw, block_words)/rows/ROW_CHAN;
 		int row;
 
-		TBG(2, "block:%d to:%p from:%p bsamples %d", 
+		TBG(3, "block:%d to:%p from:%p bsamples %d", 
 		    block, to, from, bsamples);
 
 		for (row = 0; row < rows; ++row){
@@ -260,7 +266,7 @@ static void acq132_transform(short *to, short *from, int nwords, int stride)
 			from += bsamples*ROW_CHAN;
 		}
 		to += bsamples;
-		TBG(2, "block:%d to:%p from:%p", block, to, from);
+		TBG(3, "block:%d to:%p from:%p", block, to, from);
 	}
 
 	TBG(1, "99");
@@ -404,7 +410,7 @@ static int already_known(unsigned ts)
 
 	return 0;
 }
-int remove_es(int sam, unsigned short* ch, void *cursor)
+int remove_es(int sam, unsigned short* ch, void *before)
 /* NB: cursor points to start of pulse, AFTER ES */
 {
 	const char* id = "none";
@@ -418,21 +424,41 @@ int remove_es(int sam, unsigned short* ch, void *cursor)
 			id = "already_known";
 			rc = 1;
 		}else{
+/* before is the exact position in the temporary buffer
+ * but we need to record what the exact position was in the original buffer
+ */      
+			Tbxo pos_temp = va2tbxo(before);
 			struct ES_DESCRIPTOR es_descr;
-			es_descr.va = cursor;
-			es_descr.tbxo = va2tbxo(cursor);
+
+			es_descr.tbxo = TO_TBIX(TBIX(G_current_transform_tbxo))
+						|TBOFF(pos_temp);
+
+			es_descr.va = before;	/* dubious */
+/* should be:
+			es_descr.va =  tbxo2va(es_descr.va);
+  ... why bother with the va field at all?
+*/						
+      		      
+
 			es_descr.ts = ts;
 			es_descr.spare = 0;
 			*g_esm.es_cursor++ = es_descr;
 			id = "remove";
 			rc = 1;
+
+			dbg(2, "TBIX: %d TBOFF :%d before:%p",
+			    TBIX(es_descr.tbxo), TBOFF(es_descr.tbxo), before);
 		}
+
 		dbg(1, 
 		    "sam:%6d ts:%8u "
 		    "%04x %04x %04x %04x %04x %04x %04x %04x %s ret:%d",
 		    sam, ts, 
 		    ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7],
 		    id,	rc);
+	}else{
+		err("es_cursor is null");
+		rc = 0;
 	}
 
 	return rc;
@@ -485,16 +511,20 @@ int acq132_transform_row_es(
 
 	}
 	for (sam = nsamples; sam != 0; --sam){
+		void *before = full;
 		buf.ull[0] = *full++;
 		buf.ull[1] = *full++;
 
-		/* rapid fail ES_MAGIC test */
+		/* rapid fail ES_MAGIC test 
+		 aa55 aa55 0000 0000 aa55 aa55 0000 0000
+		 */
 		if (buf.ch[0] == ES_MAGIC_WORD &&
 		    buf.ch[1] == ES_MAGIC_WORD &&
-		    buf.ch[2] == ES_MAGIC_WORD &&
-		    buf.ch[3] == ES_MAGIC_WORD &&
+		    buf.ch[4] == ES_MAGIC_WORD &&
+		    buf.ch[5] == ES_MAGIC_WORD &&
+		    !DG->show_event	       &&		    
 		    /* remove pre-increment from cursor */
-		    remove_es(nsamples-sam, buf.ch, full-2)){
+		    remove_es(nsamples-sam, buf.ch, before)){
 			continue;
 		}
 #ifdef DEBUGGING
@@ -546,6 +576,9 @@ static void acq132_transform_unblocked(
 		err("rows %d > MAX_ROWS", rows);
 		return;
 	}
+
+	G_rows = rows;
+
 	for (row = 0; row < rows; ++row){
 		row_off[row] = DQ_BLOCK_OFF(row)/sizeof(short);
 	}
@@ -575,7 +608,7 @@ static void acq132_transform_unblocked(
 	TBG(1, "99");
 }
 
-static void acq132_deblock(short * const from, int nwords, int stride)
+static void* acq132_deblock(short * const from, int nwords, int stride)
 {
 	void* const to = BB_PTR(g_esm.es_deblock->tblock->offset);
 	void *frm = from;
@@ -606,265 +639,24 @@ static void acq132_deblock(short * const from, int nwords, int stride)
 	 * could be a DMA of course, or, deblock should be done at source
          * then this function can disappear
 	 */
-	memcpy(from, to, TBLOCK_LEN(DG));
- 
 	for (block = 0; block != 4; ++block){
 		dbg(1+block, "99b:%d", row_off[block]);
 	}
-       
+	return to;
+
 }
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
-	acq132_deblock(from, nwords, stride);
-	acq132_transform_unblocked(to, from, nwords, stride);
+	dbg(1, "to:tblock:%d from:tblock:%d", 
+	    TBLOCK_INDEX((void*)to - va_buf(DG)),
+	    TBLOCK_INDEX((void*)from - va_buf(DG)));
+
+	G_current_transform_tbxo = va2tbxo(from);
+
+	acq132_transform_unblocked(
+		to, acq132_deblock(from, nwords, stride), nwords, stride);
 }
 
-/** esmmnr = Event Signature Multi Rate */
-#define MAXSCAN		4
-
-struct BankController {
-	int nbanks;			/* in scan */
-	struct Bank* scan[MAXSCAN];
-	struct Bank banks[4];
-} bc;						/* @todo: should be dynamic?*/
-
-int pc_calls;
-
-static void printCursors(struct Bank *b, int lr)
-{
-	char buf[128];
-	int qc;
-	char *pb = buf;
-
-	if (!print_cursors) return;
-
-	if (++pc_calls > 100){
-		pc_calls = 0;
-		print_cursors = 0;
-		return;
-	}
-	for (qc = 0; qc < QUADCH; ++qc, pb += strlen(pb)){
-		sprintf(pb, "%d:%p=%06x ", qc, 
-			b->bk_channelCursors[lr][qc],
-			*b->bk_channelCursors[lr][qc]);
-	}
-
-	info("%s", buf);
-}
-static void printBankController(void)
-{
-	int scan;
-	if (!print_cursors) return;
-
-	info("nbanks:%d\n", bc.nbanks);
-	for (scan = 0; scan < bc.nbanks; ++scan){
-		struct Bank *b = bc.scan[scan];
-		if (b){
-			info("[%d] id %c nchan %d\n",scan,b->id+'A',b->nchan);
-			printCursors(b, 0);
-			printCursors(b, 1);
-		}
-	}
-}
-#define NEXT_BANK(bank) ((bank)+1 >= bc.nbanks? 0: (bank)+1)
-
-#define IDX(id)	((id)-BANK_A)
-
-static void setChannelOffsets(void)
-{
-	int chan;
-	int shares = 0;
-	int offset = 0;
-	const char* csm = acq132_getChannelSpeedMask();
-	ChannelData channelSpeeds = {};
-	int offset1;
-
-	dbg(1, "01 sizeof startOffsets:%d %p %p",
-	    sizeof(startOffsets), &startOffsets[0], &startOffsets[1]);		
-
-	for (chan = 0; chan < MAXCHAN && csm[chan]; ++chan){
-		char cmul = csm[chan];
-		if (cmul >= '0' && cmul <= '9'){
-			channelSpeeds[chan] = cmul - '0';
-		}else if (cmul >= 'A' && cmul <= 'Z'){
-			channelSpeeds[chan] = cmul - 'A' + 10;
-		}else{
-			err("channel %d bad speed %c", chan, cmul);
-		}
-	}	
-
-	for (chan = 0; chan < MAXCHAN; ++chan){
-		shares += channelSpeeds[chan];
-	}
-
-	if (shares == 0){
-		err("NO shares in mask");
-		return;
-	}
-
-	offset1 = TBLOCK_LEN(DG)/sizeof(short)/shares;
-
-	for (chan = 0; chan < MAXCHAN; ++chan){		
-		if (channelSpeeds[chan]){
-			startOffsets[chan] = offset;
-			offset += offset1 * channelSpeeds[chan];
-
-			dbg(1, "ch %02d spd %d so %d",
-			    chan, channelSpeeds[chan], startOffsets[chan]);
-		}else{
-			startOffsets[chan] = NOTINMASK;
-		}
-	}
-}
-
-
-static void updateChannelCount(unsigned *cc)
-{
-	int chan;
-
-	for (chan = 0; chan < MAXCHAN; ++chan){
-		sampleCounts[chan] += cc[chan] - startOffsets[chan];
-	}
-}
-
-
-int acq132_transform_row_esmr(
-	int row,
-	short *base,
-	struct Bank *to,
-	short *from, int nsamples, int channel_sam)
-{
-	union {
-		unsigned long long ull[ROW_CHAN/4];
-		unsigned short ch[ROW_CHAN];
-	} buf;
-	unsigned long long *full = (unsigned long long *)from;
-	int sam;
-	int tosam = 0;
-	int chx;	
-	dbg(2, "01 %c row:%d base:%p nsamples:%d", 
-	    to->id+'A', row, base, nsamples);
-
-	printCursors(to, 0);
-	printCursors(to, 1);
-
-	for (sam = nsamples; sam != 0; --sam){
-		buf.ull[0] = *full++;
-		buf.ull[1] = *full++;
-
-		if (buf.ch[0] == ES_MAGIC_WORD &&
-		    buf.ch[1] == ES_MAGIC_WORD &&
-		    buf.ch[2] == ES_MAGIC_WORD &&
-		    buf.ch[3] == ES_MAGIC_WORD &&
-		    remove_es(nsamples-sam, buf.ch, full)){
-			continue;
-		}
-
-		for (chx = 0; chx < ROW_CHAN; ++chx){
-			int lr = ROWCHAN2LRCH(chx);
-			int qc = ROWCHAN2QUADCH(chx);
-
-			int cc = *to->bk_channelCursors[lr][qc];
-			base[cc] = buf.ch[chx];
-
-			*to->bk_channelCursors[lr][qc] = cc + 1;
-#ifdef DEBUG
-			if (sam < 2){
-				dbg(3, "%c %d cc = [%d][%d] %06x",
-				    to->id+'A',chx,lr,qc,cc);
-			}
-#endif
-		}
-		++tosam;
-	}
-
-	dbg(2, "99 ret:%d", tosam);
-	printCursors(to, 0);
-	printCursors(to, 1);
-
-	return tosam;
-}
-
-static unsigned* initBankController(int itb)
-{
-        unsigned *channelCursors = (unsigned*)&tblockChannels[itb];
-	int bank;
-
-	dbg(1, "itb:%d channelCursors:%p startOffsets:%p",
-	    itb, channelCursors, startOffsets);
-
-	memcpy(channelCursors, startOffsets, sizeof(ChannelData));
-
-	for (bank = 0; bank < bc.nbanks; ++bank){
-		int id = acq132_getScanlistEntry(bank);
-		struct Bank *scanb = &bc.banks[IDX(id)];
-
-		dbg(1, "id %c idx:%d scanb %p", id+'A', IDX(id), scanb);
-
-		if (scanb->id == 0){
-			ChannelBank channels = {};
-			int qc;
-/* getChannelsInMask returns index from 1, zero it: */
-#define ZIC(c) ((c)-1)		
-
-			scanb->nchan = getChannelsInMask(id, channels);
-			
-			for (qc = 0; qc < QUADCH; ++qc){
-				scanb->bk_channelCursors[0][qc] = 
-					&channelCursors[ZIC(channels[0][qc])];
-				scanb->bk_channelCursors[1][qc] =
-					&channelCursors[ZIC(channels[1][qc])];
-			}
-			scanb->id = id;
-		}
-		bc.scan[bank] = scanb;
-#undef ZIC
-	}
-	printBankController();
-	return channelCursors;
-}
-
-
-
-static void acq132_transform_esmr(
-	short *to, short *from, int nwords, int stride)
-/* valid stride == sample_size() only */
-{
-/* for each bank ... transform bank ...*/
-	int bank;
-	int nw = nwords;
-	const int rows = stride/ROW_CHAN;
-	const int block_words = rows * ROW_CHAN * ROW_SAM;
-
-	unsigned* channelCursors= 
-		initBankController(TBLOCK_INDEX((void*)from - va_buf(DG)));
-
-	dbg(1, "01: to:%p from:%p nwords:%d stride:%d",
-	    to, from, nwords, stride);
-
-	if (stub_transform > 2){
-		return;
-	}
-	for (bank = 0; nw > 0; nw -= ROW_WORDS, bank = NEXT_BANK(bank)){
-		acq132_transform_row_esmr(
-				bank, to, bc.scan[bank], from,
-				min(nw, block_words)/rows/ROW_CHAN, 0);
-	}
-
-	updateChannelCount(channelCursors);
-}
-
-int acq132_getChannelDataMr(
-	struct TBLOCK* tb, short **base, int pchan, int offset)
-{
-	unsigned *channelCursors = (unsigned*)&tblockChannels[tb->iblock];
-	int bblock_samples = channelCursors[pchan] - startOffsets[pchan];
-	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
-				      channelCursors[pchan]*sizeof(short));
-
-	*base = bblock_base + offset;
-	return bblock_samples;	
-}
 static 	struct Transformer transformer = {
 	.name = "acq132",
 	.transform = acq132_transform
@@ -923,54 +715,7 @@ static struct Hookup transformer_es_hook = {
 };
 
 
-static struct Transformer transformer_esmr = {
-	.name = "acq132esmr",
-	.transform = acq132_transform_esmr
-};
 
-
-
-static unsigned acq132_getChannelNumSamplesMr(int pchan)
-{
-	return sampleCounts[pchan];
-}
-
-
-static void transformer_esmr_onStart(void* unused)
-{
-	if (!TRANSFORM_SELECTED(acq132_transform_esmr)){
-		return;
-	}else{
-		int nbanks = acq132_getScanlistLen();
-
-		DG->bigbuf.tblocks.getChannelData = acq132_getChannelDataMr;
-		DG->getChannelNumSamples = acq132_getChannelNumSamplesMr;
-
-		if (!tblockChannels){
-			tblockChannels = kzalloc(TBLOCKCHSZ, GFP_KERNEL);
-			if (!tblockChannels){
-				err("ERROR: failed to alloc %d", TBLOCKCHSZ);
-				return;
-			}
-			info("tblockChannels %p size %d", 
-					       tblockChannels, TBLOCKCHSZ);	
-			info("first block %p", &tblockChannels[0]);
-			info("last  block %p", &tblockChannels[MAXTBLOCKS]);
-		}else{
-			memset(tblockChannels, 0, TBLOCKCHSZ);
-		}
-		memset(sampleCounts, 0, sizeof(sampleCounts));
-
-		setChannelOffsets();
-
-		memset(&bc, 0, sizeof(bc));	
-		bc.nbanks = nbanks;
-	}
-}
-
-static struct Hookup transformer_esmr_hook = {
-	.the_hook = transformer_esmr_onStart
-};
 
 void acq132_register_transformers(void)
 {
@@ -978,9 +723,7 @@ void acq132_register_transformers(void)
 	it = acq200_registerTransformer(&transformer);
 	if (it >= 0){
 		acq200_add_start_of_shot_hook(&transformer_es_hook);
-		acq200_add_start_of_shot_hook(&transformer_esmr_hook);
 		acq200_registerTransformer(&transformer_es);
-		acq200_registerTransformer(&transformer_esmr);
 		acq200_setTransformer(it);
 	}else{
 		err("transformer %s NOT registered", transformer.name);
@@ -1038,6 +781,7 @@ void acq132_event_adjust(
 	int newlast = *last + eslen * (nblocks-1 + event_adjust_delta_blocks);
 
 	
+	dbg(1, "stub_event_adjust:%d", stub_event_adjust);
 	dbg(1, "eslen %d nblocks %d event_adjust_delta_blocks %d",
 	    eslen, nblocks, event_adjust_delta_blocks);
 
@@ -1046,8 +790,7 @@ void acq132_event_adjust(
 	}
 
 	if (mark_event_data){
-		memset(BB_PTR(*first-8*sizeof(short)), 0xfe, 8*sizeof(short));
-		memset(BB_PTR(*last), 0xde, 8*sizeof(short));
+		memset(BB_PTR(*first-4*sizeof(short)), 0xee, 4*sizeof(short));
 	}
 	dbg(1, "nblocks:%d first,last: 0x%08x,0x%08x => 0x%08x,0x%08x",
 	    nblocks, *first, *last, *first, newlast);
@@ -1055,19 +798,51 @@ void acq132_event_adjust(
 	if (stub_event_adjust <= 0){
 		dbg(1, "updating last");
 		*last = newlast;
-	}
-
-	if (stub_event_adjust < -1){
-/* here be empirical black magic. TODO: find theory that fits facts */
-/* also, this is probably only valid in 32 ch case.. */
-		int modulo = (isearch/sizeof(short))%ROW_WORDS;
-		int deltasam = 3*modulo/8 - 3;
-
-		*first += deltasam * sample_size();
-		*last += deltasam * sample_size();;
-
-		dbg(1, "deltasam %d => 0x%08x,0x%08x", deltasam, *first, *last);
 	}	
+}
+
+extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
+
+int acq132_find_event(
+	struct Phase *phase, unsigned *first, unsigned *ilast)
+/* search next DMA_BLOCK_LEN of data for event word, 
+ * return 1 and update iput if found 
+ */
+{
+	dbg(1, "*first %d tblock: %d off-in-block 0%06x",
+	    *first, TBLOCK_INDEX(*first), TBLOCK_OFFSET(*first));
+
+	/* ACQ132 - may work better to adjust event AFTER transform */
+	if (stub_acq132_find_event == 0 && 
+		g_esm.es_cursor != 0 && g_esm.es_cursor - g_esm.es_base >= 1){
+
+		unsigned search_tbix = TBLOCK_INDEX(*first);
+		unsigned es_tbix = TBIX(g_esm.es_base->tbxo);
+
+		if (search_tbix == es_tbix){
+			unsigned es_tboff = TBOFF(g_esm.es_base->tbxo)*G_rows;
+			unsigned tb_offset = 
+				DG->bigbuf.tblocks.the_tblocks[es_tbix].offset;
+
+			dbg(1, "TBIX match %d let's do it, first was %d", 
+			    search_tbix, *first);
+
+			*first = tb_offset + es_tboff;
+			*ilast = tb_offset + es_tboff + sample_size();
+
+			dbg(1, "*first %d tblock: %d off-in-block 0%06x",
+			    *first, TBLOCK_INDEX(*first), 
+					TBLOCK_OFFSET(*first));
+			dbg(1, "*first %u *ilast %u", *first, *ilast);
+			return 1;
+		}else{
+			dbg(1, "HAVE ES but not my tblock: search:%d es:%d",
+			    search_tbix, es_tbix);
+			return 0;
+		}
+	}else{
+		return findEvent(phase, first, ilast);
+	}
 }
 
 
