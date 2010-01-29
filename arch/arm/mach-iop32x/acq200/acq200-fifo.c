@@ -176,6 +176,9 @@ static void increment_scc(struct SampleClockCounter *scc);
 
 static struct IPC* IPC;
 
+#ifndef FIND_EVENT
+#define FIND_EVENT findEvent
+#endif
 
 
 /*
@@ -2645,7 +2648,7 @@ static void copyDiags(unsigned* searchp, unsigned ileft)
 	memcpy(ES_DIAG_BUFFER, searchp+ileft, ndiag);
 }
 
-static int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
+int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 /* search next DMA_BLOCK_LEN of data for event word, 
  * return 1 and update iput if found 
  */
@@ -2785,7 +2788,7 @@ void find_es_anywhere(void)
 	unsigned * first = va_buf(DG);
 	unsigned * last  = first + len_buf(DG)/sizeof(unsigned);
 
-	findEvent(0, first, last);
+	FIND_EVENT(0, first, last);
 }
 
 /*
@@ -2875,7 +2878,7 @@ int search_for_epos_in_tblock(
 	unsigned ilast;
 
 	for (dma_block = 0; dma_block != max_dma_blocks; ++dma_block){
-		if (findEvent(phase, &isearch, &ilast)){
+		if (FIND_EVENT(phase, &isearch, &ilast)){
 
 			dbg(1, "FOUND AT phase:%s 0x%08x ilast 0x%08x ",
 			    phase->name, isearch, ilast);
