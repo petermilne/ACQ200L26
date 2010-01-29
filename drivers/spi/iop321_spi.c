@@ -98,7 +98,7 @@
 #define SSSR_TFL	0x00000f00
 #define SSSR_RFL	0x0000f000
 
-#define SSSR_RxCount(sssr) (1+((sssr)&SSSR_RNE? ((sssr)&SSSR_RFL) >> 12: 0))
+#define SSSR_RxCount(sssr) ((sssr)&SSSR_RNE? (1+(((sssr)&SSSR_RFL) >> 12)): 0)
 
 #ifdef DEBUG
 int iop321_debug;
@@ -111,9 +111,6 @@ int SP0;
 module_param(SP0, int, 0644);
 int SPH;
 module_param(SPH, int, 0644);
-
-int do_every_time=0;	/* init every setup - shouldn't be necessary */
-module_param(do_every_time, int, 0644);
 
 struct iop321_spi {
 	/* bitbang has to be first */
@@ -194,9 +191,6 @@ static int iop321_spi_setupxfer(struct spi_device *spi,
 {
 	struct iop321_spi *hw = to_hw(spi);
 	dbg(2, "01");
-	if (do_every_time){
-		iop321_ssp_init();
-	}
 	spin_lock(&hw->bitbang.lock);
 	if (!hw->bitbang.busy) {
 		;
@@ -249,6 +243,8 @@ static void iop321_tx(struct iop321_spi *hw)
 	}	
 }
 
+u32 rx_push;
+
 static void iop321_rx(struct iop321_spi *hw, int nread)
 {
 	dbg(2, "01: nread:%d hw->rx:%d hw->len %d", 
@@ -265,6 +261,10 @@ static void iop321_rx(struct iop321_spi *hw, int nread)
 			hw->rx[hw->rx_count++] = rx;	
 			dbg(1, "RX:%02x", rx);
 		}else{
+			if (hw->rx == 0 && rx != 0){
+				rx_push = rx;
+				dbg(1, "RXp%02x", rx);
+			}
 			dbg(1, "RX_%02x", rx);
 		}
 	}
@@ -287,7 +287,6 @@ static inline int txrx_complete(struct iop321_spi *hw)
 
 static int irq_report_ok = 1;
 
-#define PGMKNOWSBEST 0
 static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 {
 	struct iop321_spi *hw = to_hw(spi);
@@ -301,21 +300,15 @@ static int iop321_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 	hw->len = t->len;
 	hw->tx_count = hw->rx_count = 0;
 
+	if (hw->tx == 0 && hw->rx && hw->len == 1 && rx_push != 0){
+		hw->rx[hw->rx_count++] = rx_push;
+		rx_push = 0;
+		return hw->len;
+	}
 	/* send the first byte[s] */
 
-	irq_report_ok = 1;
-
-	
-#if PGMKNOWSBEST
-	if (hw->tx){
-		sscr1 |= SSCR1_TIE;
-	}
-	if (hw->rx){
-		sscr1 |= SSCR1_RIE;
-	}	
-#else	
 	sscr1 |= SSCR1_TIE|SSCR1_RIE;
-#endif
+
 	dbg(2, "sscr1 = %08x", sscr1);
 	*IOP3XX_SSCR1 = sscr1;
 
@@ -337,23 +330,17 @@ static irqreturn_t iop321_spi_irq(int irq, void *dev)
 {
 	struct iop321_spi *hw = dev;
 	u32 sssr = *IOP3XX_SSSR;
-	static u32 old_sssr;
 
-	if (sssr != old_sssr || irq_report_ok){
-		dbg(2, "IRQ:SSSR %08x", sssr);
-		old_sssr = sssr;
-		irq_report_ok = 0;
-	}
+	dbg(2, "IRQ:SSSR %08x", sssr);
 
 	iop321_tx(hw);
+
 	if (tx_complete(hw)){	
 		dbg(2, "IRQ: TX complete");	
 		*IOP3XX_SSCR1 &= ~SSCR1_TIE;
 	}
 
 	if (sssr&SSSR_RFS){
-		dbg(2, "sssr %08x &SSSR_RFS %08x SSSR_RxCount %d call iop321_rx",
-		    sssr, sssr&SSSR_RFS, SSSR_RxCount(sssr));
 		iop321_rx(hw, SSSR_RxCount(sssr));
 
 		if (rx_complete(hw)){
