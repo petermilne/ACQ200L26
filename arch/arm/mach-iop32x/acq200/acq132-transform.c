@@ -59,9 +59,8 @@ module_param(acq132_transform_debug, int, 0664);
 int es_tblock;
 module_param(es_tblock, int, 0444);
 
-/* event_adjust_delta_blocks = 1; // the one true value that works */
-int event_adjust_delta_blocks = 1;
-module_param(event_adjust_delta_blocks, int, 0600);
+int event_offset_samples = 0;
+module_param(event_offset_samples, int, 0644);
 
 int mark_event_data = 0;
 module_param(mark_event_data, int, 0600);
@@ -414,15 +413,13 @@ int remove_es(int sam, unsigned short* ch, void *before)
 /* NB: cursor points to start of pulse, AFTER ES */
 {
 	const char* id = "none";
-	int rc = 1;
-
+	int rc = DG->show_event == 0; /* remove unless show_event */
 	
 	if (g_esm.es_cursor){	
 		unsigned ts = ch[5] << 16 | ch[7];
 		if (already_known(ts)){
 			/* catch close bunched TS */
 			id = "already_known";
-			rc = 1;
 		}else{
 /* before is the exact position in the temporary buffer
  * but we need to record what the exact position was in the original buffer
@@ -444,7 +441,6 @@ int remove_es(int sam, unsigned short* ch, void *before)
 			es_descr.spare = 0;
 			*g_esm.es_cursor++ = es_descr;
 			id = "remove";
-			rc = 1;
 
 			dbg(2, "TBIX: %d TBOFF :%d before:%p",
 			    TBIX(es_descr.tbxo), TBOFF(es_descr.tbxo), before);
@@ -522,7 +518,6 @@ int acq132_transform_row_es(
 		    buf.ch[1] == ES_MAGIC_WORD &&
 		    buf.ch[4] == ES_MAGIC_WORD &&
 		    buf.ch[5] == ES_MAGIC_WORD &&
-		    !DG->show_event	       &&		    
 		    /* remove pre-increment from cursor */
 		    remove_es(nsamples-sam, buf.ch, before)){
 			continue;
@@ -693,12 +688,15 @@ static void transformer_es_onStart(void *unused)
 	if (!TRANSFORM_SELECTED(acq132_transform_es)){
 		return;
 	}else{
-		if ((g_esm.es_tble = reserveFreeTblock("ES")) == 0){
+
+		if (g_esm.es_tble == 0 &&
+			(g_esm.es_tble = reserveFreeTblock("ES")) == 0){
 			return;
 		}else{
 			es_tblock = g_esm.es_tble->tblock->iblock;
 		}
-		if ((g_esm.es_deblock = reserveFreeTblock("DEBLOCK")) == 0){
+		if (g_esm.es_deblock == 0 &&
+			(g_esm.es_deblock = reserveFreeTblock("DEBLOCK")) == 0){
 			return;
 		}
 
@@ -768,41 +766,32 @@ static int check_first_row(unsigned* first, unsigned* last)
 }
 
 
-void acq132_event_adjust(
-	struct Phase *phase, unsigned isearch, 
-	unsigned* first, unsigned* last)
-/* acq132 data is in N blocks.
- * so the ES is N* bigger than detected... move out last to 
- * represent this
- */
-{
-	int nblocks = acq132_getScanlistLen();
-	int eslen = *last - *first;
-	int newlast = *last + eslen * (nblocks-1 + event_adjust_delta_blocks);
-
-	
-	dbg(1, "stub_event_adjust:%d", stub_event_adjust);
-	dbg(1, "eslen %d nblocks %d event_adjust_delta_blocks %d",
-	    eslen, nblocks, event_adjust_delta_blocks);
-
-	if (check_first_row(first, last) != 0){
-		err("FAILED to VALIDATE ES");	
-	}
-
-	if (mark_event_data){
-		memset(BB_PTR(*first-4*sizeof(short)), 0xee, 4*sizeof(short));
-	}
-	dbg(1, "nblocks:%d first,last: 0x%08x,0x%08x => 0x%08x,0x%08x",
-	    nblocks, *first, *last, *first, newlast);
-
-	if (stub_event_adjust <= 0){
-		dbg(1, "updating last");
-		*last = newlast;
-	}	
-}
 
 extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
 
+/* What if tblock is slightly shorter - because we removed an ES?
+ * tblock->length appears to be constant, not a reflection of #samples
+ */
+static unsigned acq132_adjust_event(unsigned es_tboff)
+{
+	int event_offset_bytes = event_offset_samples * sample_size();
+
+	if (event_offset_bytes > 0){
+		if ((es_tboff += event_offset_bytes) > TBLOCK_LEN(DG)){
+			es_tboff = TBLOCK_LEN(DG);
+			err("Best effort: TBLOCK_round down");
+		}				       
+	}else if (event_offset_bytes < 0){
+		if (likely(es_tboff > ABS(event_offset_bytes))){
+			es_tboff += event_offset_bytes;
+		}else{
+			es_tboff = 0;
+			err("Best effort: TBLOCK truncate");
+		}
+	}
+
+	return es_tboff;
+}
 int acq132_find_event(
 	struct Phase *phase, unsigned *first, unsigned *ilast)
 /* search next DMA_BLOCK_LEN of data for event word, 
@@ -827,8 +816,11 @@ int acq132_find_event(
 			dbg(1, "TBIX match %d let's do it, first was %d", 
 			    search_tbix, *first);
 
+			es_tboff = acq132_adjust_event(es_tboff);
+
 			*first = tb_offset + es_tboff;
-			*ilast = tb_offset + es_tboff + sample_size();
+			/* we already removed the ES .. */
+			*ilast = tb_offset + es_tboff;
 
 			dbg(1, "*first %d tblock: %d off-in-block 0%06x",
 			    *first, TBLOCK_INDEX(*first), 

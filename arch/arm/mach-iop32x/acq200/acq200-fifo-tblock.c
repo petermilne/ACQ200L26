@@ -337,7 +337,7 @@ void acq200_sort_free_tblocks(void)
 		}
 		
 		if (ib_search == search_before && ib_search < MAXTB){
-			err("Missing block %d", ib_search);
+			err("Missing block %d", ib_search++);
 		}		
 	}
 }

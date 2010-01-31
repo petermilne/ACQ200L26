@@ -72,8 +72,6 @@ module_param(rgm_with_es, int, 0600);
 
 /* acq132-transform.c */
 extern void acq132_register_transformers(void);
-extern void acq132_event_adjust(
-	struct Phase *phase, unsigned isearch, unsigned* first, unsigned* last);
 extern struct file_operations acq132_timebase_ops;
 
 /* acq132-gated.c */
@@ -630,16 +628,6 @@ static struct file_operations acq132_sfpga_load_ops = {
 };
 
 
-
-#undef DTACQ_MACH_EVENT_ADJUST						
-#define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last)		\
-	dbg(1, "DTACQ_MACH_EVENT_ADJUST: isearch 0x%08x modulo 1024 %d %s %d", \
-		isearch, (isearch/sizeof(short))%ROW_WORDS,		\
-	    stub_event_adjust >0? "STUB": "adjust",			\
-		stub_event_adjust);					\
-	if (stub_event_adjust <= 0){					\
-	        acq132_event_adjust(phase, isearch, first, last);	\
-	}
 
 
 extern int acq132_find_event(
