@@ -87,7 +87,7 @@ int timebase_encoding = 0;
 module_param(timebase_encoding, int, 0644);
 
 /* -1: advance, 0: ignore, 1: retard */
-int control_event_adjust = 0;
+int control_event_adjust = -1;
 module_param(control_event_adjust, int, 0644);
 
 /* 2 sample pipeline, could be more: eg with FIR */
