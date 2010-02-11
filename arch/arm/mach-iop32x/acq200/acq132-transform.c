@@ -50,9 +50,6 @@
 int stub_transform;
 module_param(stub_transform, int, 0664);
 
-int print_cursors;
-module_param(print_cursors, int, 0664);
-
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
@@ -61,9 +58,6 @@ module_param(es_tblock, int, 0444);
 
 int event_offset_samples = 0;
 module_param(event_offset_samples, int, 0644);
-
-int mark_event_data = 0;
-module_param(mark_event_data, int, 0600);
 
 int show_timebase_calcs = 0;
 module_param(show_timebase_calcs, int, 0600);
@@ -92,8 +86,14 @@ module_param_array(acq132_es_cold_samples, int, NULL, 0444);
 int timebase_encoding = 0;
 module_param(timebase_encoding, int, 0644);
 
+/* -1: advance, 0: ignore, 1: retard */
 int control_event_adjust = 0;
 module_param(control_event_adjust, int, 0644);
+
+/* 2 sample pipeline, could be more: eg with FIR */
+int es_cold_offset_samples = 2;
+module_param(es_cold_offset_samples, int, 0644);
+
 
 /* @TODO: make this variable 4byte, 8 byte 4byte = 4s worth of nsecs */
 
@@ -764,47 +764,11 @@ void acq132_register_transformers(void)
 }
 
 
-static int check_first_row(unsigned* first, unsigned* last)
-{
-	unsigned *searchp = (unsigned*)va_buf(DG);
-	int ifirst = *first / USS;
-	int nblocks = acq132_getScanlistLen();
-	int block;
-
-	if (TBLOCK_OFFSET(*first) > ROW_SIZE){
-		if (IS_EVENT_MAGIC(searchp[ifirst - ROW_SIZE/USS])){
-			err("previous MAGIC at 0x%08x", ifirst - ROW_LONGS);
-			return -1;
-		}else{
-			dbg(1, "no previous MAGIC (good)");
-		}
-	}else{
-		dbg(1, "too close to tblock start, can't look back");
-	}
-
-	for (block = 1; block < nblocks; ++block){
-		if (TBLOCK_OFFSET(*first) + block*ROW_SIZE < TBLOCK_LEN(DG)){
-			if (IS_EVENT_MAGIC(searchp[ifirst + block*ROW_LONGS])){
-				dbg(1, "got a magic going forward %d [Good]", 
-				    block);
-			}else{
- 				err( "no MAGIC going forward %d", block);
-				return -1;
-			}
-		}else{
-			dbg(1, "too close to tblock end, can't look");
-			return -1;
-		}
-	}	
-
-	return 0;
-}
-
 
 
 extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
 
-#define ES_COLD_OFFSET_SAMPLES	2	/* found empirically */
+#define ES_COLD_OFFSET_SAMPLES	es_cold_offset_samples	/* found empirically */
 
 /* What if tblock is slightly shorter - because we removed an ES?
  * tblock->length appears to be constant, not a reflection of #samples
