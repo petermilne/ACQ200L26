@@ -404,5 +404,19 @@ const char* acq132_getChannelSpeedMask(void);
 
 
 
+
+/** Event Signature ES
+ */
+/* ACQ132 event: 
+ * EVENT_MAGIC is 0xaa55aa55xxxxxxxx
+ * GATE_MAGIC is  0xaa55aa55aa55aa55
+ */
+
+#define ACQ132_ES_DATA_MASK 0x07c0
+#define ACQ132_ES_COLD_SAMPLES(es) (((es)&ACQ132_ES_DATA_MASK)>>6)
+
+
+
+
 #endif	/*  __ACQ132_H__ */
 

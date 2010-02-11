@@ -2608,7 +2608,7 @@ static void initPhaseDiagBuf(void)
 {
 	pdb.found = 0;
 }
-static void initPhaseDiagBufFound(
+void initPhaseDiagBufFound(
 	short valid, int matches, 
 	u32 last_before, u32 first_es, u32 last_es, u32 first_after,
 	u32 first, u32 last
@@ -2640,7 +2640,7 @@ static void initPhaseDiagBufNotFound(int metric, int searchlen)
 	pdb.searchlen = searchlen;
 }
 
-static void copyDiags(unsigned* searchp, unsigned ileft)
+void copyDiags(unsigned* searchp, unsigned ileft)
 {
 	int ndiag = 3*DIAG_BASE*sizeof(long);
 	assert(ndiag <= sizeof(ES_DIAG_BUFFER));

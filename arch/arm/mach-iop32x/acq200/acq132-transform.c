@@ -77,12 +77,23 @@ module_param(time_stamp_adj, int, 0644);
 int stub_acq132_find_event = 0;
 module_param(stub_acq132_find_event, int, 0644);
 
+/*
+int xxs_readsam[NCB];
+module_param_array(xxs_readsam, int, NULL, 0644);
+*/
+int acq132_es_cold_samples[8];
+module_param_array(acq132_es_cold_samples, int, NULL, 0444);
 
 #define TIMEBASE_ENCODE_GATE_PULSE_INDEX_MOD256 0
 #define TIMEBASE_ENCODE_GATE_PULSE		1
 
+
+
 int timebase_encoding = 0;
 module_param(timebase_encoding, int, 0644);
+
+int control_event_adjust = 0;
+module_param(control_event_adjust, int, 0644);
 
 /* @TODO: make this variable 4byte, 8 byte 4byte = 4s worth of nsecs */
 
@@ -409,6 +420,24 @@ static int already_known(unsigned ts)
 
 	return 0;
 }
+
+
+static void stash_es_cold_samples(unsigned short *ch)
+{
+	acq132_es_cold_samples[0] = ACQ132_ES_COLD_SAMPLES(ch[2]);
+	acq132_es_cold_samples[1] = ACQ132_ES_COLD_SAMPLES(ch[3]);
+			
+	acq132_es_cold_samples[2] = ACQ132_ES_COLD_SAMPLES(ch[6]);
+	acq132_es_cold_samples[3] = ACQ132_ES_COLD_SAMPLES(ch[7]);
+}		
+
+extern void copyDiags(unsigned* searchp, unsigned ileft);
+extern void initPhaseDiagBufFound(
+	short valid, int matches, 
+	u32 last_before, u32 first_es, u32 last_es, u32 first_after,
+	u32 first, u32 last
+	);
+
 int remove_es(int sam, unsigned short* ch, void *before)
 /* NB: cursor points to start of pulse, AFTER ES */
 {
@@ -444,6 +473,10 @@ int remove_es(int sam, unsigned short* ch, void *before)
 
 			dbg(2, "TBIX: %d TBOFF :%d before:%p",
 			    TBIX(es_descr.tbxo), TBOFF(es_descr.tbxo), before);
+
+			copyDiags((unsigned *)ch, 0);
+			initPhaseDiagBufFound(1, 1, 0, 0, 0, 0, 0, 0);
+			stash_es_cold_samples(ch);
 		}
 
 		dbg(1, 
@@ -487,7 +520,7 @@ int acq132_transform_row_es(
 	short *to, 
 /*      short *to[ROW_CHAN], */
 	short *from, int nsamples, int channel_sam)
-/* read a block of data from to and farm 8 channels to from */
+/* read a1 block of data from to and farm 8 channels to from */
 {
 	union {
 		unsigned long long ull[ROW_CHAN/4];
@@ -705,6 +738,8 @@ static void transformer_es_onStart(void *unused)
 				BB_PTR(g_esm.es_tble->tblock->offset);
 		dbg(1, "g_esm.es_cursor reset %p", g_esm.es_base);
 		memset(g_esm.es_cursor, 0, TBLOCK_LEN(DG));
+		memset(acq132_es_cold_samples, 0, 
+		       sizeof(acq132_es_cold_samples));
 	}
 }
 
@@ -769,12 +804,43 @@ static int check_first_row(unsigned* first, unsigned* last)
 
 extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
 
+#define ES_COLD_OFFSET_SAMPLES	2	/* found empirically */
+
 /* What if tblock is slightly shorter - because we removed an ES?
  * tblock->length appears to be constant, not a reflection of #samples
  */
 static unsigned acq132_adjust_event(unsigned es_tboff)
 {
-	int event_offset_bytes = event_offset_samples * sample_size();
+	int event_offset_bytes;
+	int cold_adj_samples = 0;
+
+	if (control_event_adjust){
+		int cold_sam = acq132_es_cold_samples[0];
+		int ii;
+		int mismatch = 0;
+		int total = cold_sam;
+
+		for (ii = 1; ii <= 3; ++ii){
+			if (cold_sam != acq132_es_cold_samples[ii]){
+				err("cold samples mismatch");
+				mismatch = 1;
+			}
+			total += acq132_es_cold_samples[ii];
+		}
+		cold_sam = total/4 + ES_COLD_OFFSET_SAMPLES;
+
+		dbg(1-mismatch, "%2d %2d %2d %2d, mean %2d",
+		    acq132_es_cold_samples[0],	
+		    acq132_es_cold_samples[1],	
+		    acq132_es_cold_samples[2],	
+		    acq132_es_cold_samples[3],	
+		    cold_sam);
+			
+		cold_adj_samples = cold_sam * control_event_adjust;
+	}
+
+	event_offset_bytes = 
+		(event_offset_samples + cold_adj_samples) * sample_size();
 
 	if (event_offset_bytes > 0){
 		if ((es_tboff += event_offset_bytes) > TBLOCK_LEN(DG)){
@@ -789,6 +855,7 @@ static unsigned acq132_adjust_event(unsigned es_tboff)
 			err("Best effort: TBLOCK truncate");
 		}
 	}
+
 
 	return es_tboff;
 }
