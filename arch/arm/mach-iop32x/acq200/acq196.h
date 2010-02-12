@@ -257,6 +257,7 @@ static inline u32 acq196_syscon_dac_clr(u32 flags){
 #define ACQ196_CLKCON_OCS_DOx(x) ((x) << ACQ196_CLKCON_OCS_SHIFT)
 
 
+#define ACQ196_CLKDAT_CLKDIV	0x0000ffff
 
 #define ACQ196_TCR_MASK         0x00000fff   /* 12 bit counter */
 
@@ -403,12 +404,16 @@ static inline u32 acq196_get_soft_fifo_count(void)
 
 static inline u32 arch_get_int_clk_div(void)
 {
-	return *ACQ200_CLKDAT;
+	return *ACQ200_CLKDAT & ACQ196_CLKDAT_CLKDIV;
 }
 
 static inline u32 arch_set_int_clk_div(u32 clkdiv)
 {
-	return *ACQ200_CLKDAT = clkdiv;
+	u32 clkdat = *ACQ200_CLKDAT;
+
+	clkdat &= ~ACQ196_CLKDAT_CLKDIV;
+	clkdat |= clkdiv;
+	return *ACQ200_CLKDAT = clkdat;
 }
 
 static inline u32 acq196_lineCode(int DIx)
