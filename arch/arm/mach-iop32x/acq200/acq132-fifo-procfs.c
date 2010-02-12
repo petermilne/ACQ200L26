@@ -883,7 +883,7 @@ static ssize_t show_clksel(
 	default:
 		ukey = "";
 	}
-	return sprintf(buf, "%d %s\n", clkdat>>24, ukey);
+	return sprintf(buf, "0x%02x %s\n", clkdat>>24, ukey);
 }
 
 static ssize_t store_clksel(

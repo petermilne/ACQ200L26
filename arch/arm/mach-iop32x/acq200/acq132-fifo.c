@@ -46,7 +46,8 @@
 
 #define INT_CLK_CALC_ROUNDING 0x80
 //#define BEST_ICSINPUT_HZ 20000000
-#define BEST_ICSINPUT_HZ 66666000
+#define LO_CLK_HZ	 33333000
+#define BEST_ICSINPUT_HZ 33333000	/* this _is_ actually the crystal */
 
 int int_clk_calcmode;
 module_param(int_clk_calcmode, int, 0664);
@@ -69,7 +70,7 @@ module_param(intclock_actual_rate, int, 0444);
 int rgm_with_es = 1;
 module_param(rgm_with_es, int, 0600);
 
-int use_lo_ics = 0;
+int use_lo_ics = 1;
 module_param(use_lo_ics, int, 0600);
 
 /* acq132-transform.c */
@@ -364,6 +365,8 @@ static int _set_ob_clock(int khz, int src_clk)
 		return -1;
 	}
 
+	obclock_input_rate = src_clk;
+
 	sprintf(fin_def, "%d", src_clk/1000);
 	sprintf(fout_def, "%d", khz);
 
@@ -391,22 +394,25 @@ static int set_ob_clock(int hz)
 {	
 	if (use_lo_ics){
 		acq132_initClkDatFields(LO_ICS);
-		return _set_ob_clock(hz/1000, MASTERCLK_66);
+		return _set_ob_clock(hz/1000, LO_CLK_HZ);
 	}else{
+		_setIntClkHz(BEST_ICSINPUT_HZ);
 		acq132_initClkDatFields(INTCLK_ICS);
-		return _set_ob_clock(hz/1000, acq200_clk_hz);
+		return _set_ob_clock(hz/1000, intclock_actual_rate);
 	}
 }
 void acq200_setIntClkHz( int hz )
 {
 	if ( hz == 0 ){
 		signalCommit(CAPDEF->ext_clk);
-	}else if (DG->use_ob_clock && set_ob_clock(hz) == 0){
-		;
-	}else{
-		acq132_initClkDatFields(INTCLK_NOICS);
-		_setIntClkHz(hz);
+		return;
+	}else if (DG->use_ob_clock){
+		if (set_ob_clock(hz) == 0){
+			return;
+		}
 	}
+	acq132_initClkDatFields(INTCLK_NOICS);
+	_setIntClkHz(hz);
 }
 static int fifo_read_init_action(void);
 
