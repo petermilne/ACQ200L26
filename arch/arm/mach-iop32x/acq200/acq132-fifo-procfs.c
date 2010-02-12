@@ -864,6 +864,58 @@ static ssize_t store_ChannelSpeedMask(
 static DEVICE_ATTR(ChannelSpeedMask, S_IRUGO|S_IWUGO, 
 		   show_ChannelSpeedMask, store_ChannelSpeedMask);
 
+
+static ssize_t show_clksel(
+	struct device *dev,
+	struct device_attribute *attr,
+	char* buf)
+{
+	u32 clkdat = *ACQ132_CLKDAT & ~ACQ196_CLKDAT_CLKDIV;
+	const char *ukey;
+
+	switch(clkdat){
+	case LO_ICS:	 
+		ukey = "LO_ICS";       break;
+	case INTCLK_ICS: 
+		ukey = "INTCLK_ICS";   break;
+	case INTCLK_NOICS: 
+		ukey = "INTCLK_NOICS"; break;
+	default:
+		ukey = "";
+	}
+	return sprintf(buf, "%d %s\n", clkdat>>24, ukey);
+}
+
+static ssize_t store_clksel(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	u32 clksel;
+	if ((clksel = simple_strtoul(buf, 0, 0) << 24) != 0){
+		acq132_initClkDatFields(clksel);
+	}else{
+		if (strncmp(buf, "LO_ICS", strlen("LO_ICS")) == 0){
+			acq132_initClkDatFields(LO_ICS);	
+		}else if (
+			strncmp(buf, "INTCLK_ICS", strlen("INTCLK_ICS")) == 0){
+			acq132_initClkDatFields(INTCLK_ICS);
+		}else if (
+			strncmp(buf,"INTCLK_NOICS",strlen("INTCLK_NOICS"))==0){
+			acq132_initClkDatFields(INTCLK_NOICS);
+		}else{
+			return -1;
+		}
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(clksel, S_IRUGO|S_IWUGO, 
+		   show_clksel, store_clksel);
+
+
+
 extern int acq132_showClkCounter(char *buf);
 
 static ssize_t show_ClkCounter(
@@ -937,6 +989,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ChannelSpeedMask);
 	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
 	DEVICE_CREATE_FILE(dev, &dev_attr_best_decimation);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clksel);
 }
 
 
@@ -1084,6 +1137,7 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ132_SYSCON),
 		REGS_LUT_ENTRY(ACQ132_SFPGA_CONF),
 		REGS_LUT_ENTRY(ACQ132_ICS527),
+		REGS_LUT_ENTRY(ACQ132_CLKDAT),
 		REGS_LUT_ENTRY(ACQ132_CLK_COUNTER),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_LEN),
@@ -1125,6 +1179,8 @@ int acq200_dumpregs_diag(char* buf, int len)
 	APPEND(ACQ132_FIFSTAT);
 	APPEND(ACQ132_SFPGA_CONF);
 	APPEND(ACQ132_ICS527);
+	APPEND(ACQ132_CLKDAT),
+	APPEND(ACQ132_CLK_COUNTER),
 	APPEND(ACQ132_SCAN_LIST_DEF);
 	APPEND(ACQ132_SCAN_LIST_LEN);
 	APPEND_ADC(BANK_A);

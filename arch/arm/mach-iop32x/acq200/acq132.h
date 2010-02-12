@@ -33,6 +33,7 @@
 /* custom regs */
 #define ACQ132_SFPGA_CONF	FPGA_REG(0x10)
 #define ACQ132_ICS527		FPGA_REG(0x18)
+#define ACQ132_CLKDAT		ACQ200_CLKDAT
 #define ACQ132_CLK_COUNTER	FPGA_REG(0x4c)
 #define ACQ132_SCAN_LIST_DEF	FPGA_REG(0x50)
 #define ACQ132_SCAN_LIST_LEN	FPGA_REG(0x54)
@@ -188,6 +189,30 @@
 
 
 #define NORMALISE_MASK(mask, shft) (((mask)&(0xfU << (shft))) >> (shft))
+
+#define BIT(n)		(1<<(n))
+
+#define ACQ132_CLKDAT_INTCLK_OE		BIT(31) /* INTCLK -> ICS */
+#define ACQ132_CLKDAT_CPLDCLK_OE	BIT(30)	/* NC */
+#define ACQ132_CLKDAT_LO_CLK_OE1	BIT(29) /* LO66 -> ICS */
+#define ACQ132_CLKDAT_ICS1_OE		BIT(28) /* ICS div 1 output */
+#define ACQ132_CLKDAT_ICS2_OE		BIT(27) /* ICS div 2 output */
+#define ACQ132_CLKDAT_LO_CLK_OE2	BIT(26) /* LO66 -> DDS */
+#define ACQ132_CLKDAT_CLKSEL		BIT(25)	/* ICSnDDS */
+#define ACQ132_CLKDAT_DDS_CLKOUT_OE	BIT(24) /* Use IntClk when no DDS */
+
+#define LO_ICS		(ACQ132_CLKDAT_LO_CLK_OE1|ACQ132_CLKDAT_ICS1_OE)
+#define INTCLK_ICS	(ACQ132_CLKDAT_INTCLK_OE|ACQ132_CLKDAT_ICS1_OE)
+#define INTCLK_NOICS	(ACQ132_CLKDAT_INTCLK_OE|\
+			ACQ132_CLKDAT_CLKSEL|ACQ132_CLKDAT_DDS_CLKOUT_OE)
+
+static void acq132_initClkDatFields(unsigned bits)
+{
+	u32 clkdat = *ACQ132_CLKDAT & ACQ196_CLKDAT_CLKDIV;
+
+	clkdat |= bits;
+	*ACQ132_CLKDAT = clkdat;
+}
 
 /* @todo one bit, all bits. multiple settings todo */
 void acq132_set_adc_range(u32 channels);

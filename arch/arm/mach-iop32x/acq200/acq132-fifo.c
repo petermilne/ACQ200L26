@@ -46,7 +46,7 @@
 
 #define INT_CLK_CALC_ROUNDING 0x80
 //#define BEST_ICSINPUT_HZ 20000000
-#define BEST_ICSINPUT_HZ 1000000
+#define BEST_ICSINPUT_HZ 66666000
 
 int int_clk_calcmode;
 module_param(int_clk_calcmode, int, 0664);
@@ -69,6 +69,8 @@ module_param(intclock_actual_rate, int, 0444);
 int rgm_with_es = 1;
 module_param(rgm_with_es, int, 0600);
 
+int use_lo_ics = 0;
+module_param(use_lo_ics, int, 0600);
 
 /* acq132-transform.c */
 extern void acq132_register_transformers(void);
@@ -245,6 +247,7 @@ static void __setIntClkHz(int clkdiv, long masterclk, u32 clksel, int hz)
 }
 /*                    12345xxx */
 #define MASTERCLK_100 99999000  
+#define MASTERCLK_66  66666000
 
 #define MASTERCLK MASTERCLK_100
 
@@ -343,7 +346,7 @@ int acq132_set_best_decimation(int khz, int *khz_clock, int *decim)
 }
 
 // ./ob_calc_527 --fin 20000  32000
-static int _set_ob_clock(int khz)
+static int _set_ob_clock(int khz, int src_clk)
 /* set ICS527 clock */
 {
 	static char* envp[] = {
@@ -361,7 +364,7 @@ static int _set_ob_clock(int khz)
 		return -1;
 	}
 
-	sprintf(fin_def, "%d", acq200_clk_hz/1000);
+	sprintf(fin_def, "%d", src_clk/1000);
 	sprintf(fout_def, "%d", khz);
 
         ii = 0;
@@ -383,12 +386,16 @@ static int _set_ob_clock(int khz)
 	return ii;
 }
 
-
 static int set_ob_clock(int hz)
 /* returns 0 = OK */
 {	
-	_setIntClkHz(obclock_input_rate);
-	return _set_ob_clock(hz/1000);
+	if (use_lo_ics){
+		acq132_initClkDatFields(LO_ICS);
+		return _set_ob_clock(hz/1000, MASTERCLK_66);
+	}else{
+		acq132_initClkDatFields(INTCLK_ICS);
+		return _set_ob_clock(hz/1000, acq200_clk_hz);
+	}
 }
 void acq200_setIntClkHz( int hz )
 {
@@ -397,7 +404,8 @@ void acq200_setIntClkHz( int hz )
 	}else if (DG->use_ob_clock && set_ob_clock(hz) == 0){
 		;
 	}else{
-		err("CLOCK %d Hz TOO SLOW", hz);
+		acq132_initClkDatFields(INTCLK_NOICS);
+		_setIntClkHz(hz);
 	}
 }
 static int fifo_read_init_action(void);
