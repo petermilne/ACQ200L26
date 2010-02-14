@@ -206,7 +206,7 @@
 #define INTCLK_NOICS	(ACQ132_CLKDAT_INTCLK_OE|\
 			ACQ132_CLKDAT_CLKSEL|ACQ132_CLKDAT_DDS_CLKOUT_OE)
 
-static void acq132_initClkDatFields(unsigned bits)
+static inline void acq132_initClkDatFields(unsigned bits)
 {
 	u32 clkdat = *ACQ132_CLKDAT & ACQ196_CLKDAT_CLKDIV;
 

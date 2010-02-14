@@ -100,7 +100,7 @@ static int acq132_gate_pulse_open(struct inode *inode, struct file *file)
 
 #define GATE_TO	1	/* timeout, jiffies .. ensures minimal loading */
 
-static int pulse_fifo_has_space() 
+static int pulse_fifo_has_space(void) 
 {
 	int pff = pulse_fifo_full();
 
