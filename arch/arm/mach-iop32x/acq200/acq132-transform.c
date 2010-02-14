@@ -186,6 +186,12 @@ static Tbxo va2tbxo(void *va)
 	return tbxo;
 }
 
+struct TBLOCK* getTblock(Tbxo tb)
+{
+	return &DG->bigbuf.tblocks.the_tblocks[TBIX(tb)];
+}
+
+
 void acq132_transform_row(
 	short *to, short *from, int nsamples, int channel_sam)
 /* read a block of data from to and farm 8 channels to from */
@@ -478,6 +484,12 @@ int remove_es(int sam, unsigned short* ch, void *before)
 			copyDiags((unsigned *)ch, 0);
 			initPhaseDiagBufFound(1, 1, 0, 0, 0, 0, 0, 0);
 			stash_es_cold_samples(ch);
+
+			if (rc == 1){	
+				struct TBLOCK* tb = 
+					getTblock(G_current_transform_tbxo);
+				tb->tb_length -= sample_size();
+			}
 		}
 
 		dbg(1, 
@@ -553,7 +565,8 @@ int acq132_transform_row_es(
 		    buf.ch[4] == ES_MAGIC_WORD &&
 		    buf.ch[5] == ES_MAGIC_WORD &&
 		    /* remove pre-increment from cursor */
-		    remove_es(nsamples-sam, buf.ch, before)){
+			remove_es(nsamples-sam, buf.ch, before)){
+			
 			continue;
 		}
 #ifdef DEBUGGING
