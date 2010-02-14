@@ -2002,17 +2002,7 @@ static ssize_t store_finalize_phases(
 
 	dbg(1, "list1");
 	list_for_each_entry(phase, &DMC_WO->phases, list){
-#if 0
-		dbg(1, "phase_len %d required %d %s",
-		    phase->actual_len, phase->required_len,
-		    phase->actual_len > phase->required_len? "rollup": "");
-
-		if (phase->actual_len > phase->required_len){
-			acq200_phase_rollup_excess(phase);
-		}
-#else
 		acq200_phase_rollup_excess(phase);
-#endif
 	}	
 
 	dbg(1, "list2");

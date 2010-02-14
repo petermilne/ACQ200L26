@@ -729,7 +729,7 @@ void acq200_phase_rollup_excess(struct Phase* phase)
  * reduce phase size until actual_samples == required_len
  */
 {
-	DBG(1, "01:start 0x%08x len %d flags %d",  
+	dbg(1, "01:start 0x%08x len %d flags %d",  
 	    phase->start_off, phase->actual_len, phase->flags);
 
 	if ((phase->flags&PH_FIXED_AT_START) != 0){
@@ -738,7 +738,7 @@ void acq200_phase_rollup_excess(struct Phase* phase)
 	if ((phase->flags&PH_FIXED_AT_END) != 0){
 		phase_rollup_end_fixed(phase);
 	}
-	DBG(1, "99:start 0x%08x len %d",  phase->start_off, phase->actual_len);
+	dbg(1, "99:start 0x%08x len %d",  phase->start_off, phase->actual_len);
 }
 
 TBLE* acq200_reserveFreeTblock(void)

@@ -56,9 +56,6 @@ module_param(acq132_transform_debug, int, 0664);
 int es_tblock;
 module_param(es_tblock, int, 0444);
 
-int event_offset_samples = 0;
-module_param(event_offset_samples, int, 0644);
-
 int show_timebase_calcs = 0;
 module_param(show_timebase_calcs, int, 0600);
 
@@ -95,6 +92,9 @@ module_param(control_event_adjust, int, 0644);
 int es_cold_offset_samples[2] = { -4, 2 };
 module_param_array(es_cold_offset_samples, int, NULL, 0644);
 
+int fix_event_stats[3];
+/* pre, cur, next */
+module_param_array(fix_event_stats, int, NULL, 0644);
 
 /* @TODO: make this variable 4byte, 8 byte 4byte = 4s worth of nsecs */
 
@@ -819,66 +819,175 @@ static int acq132_get_event_adjust(void)
 		cold_adj_samples = cold_sam * control_event_adjust;
 	}
 
-	event_offset_bytes = 
-		(event_offset_samples + cold_adj_samples) * sample_size();
+	event_offset_bytes = cold_adj_samples * sample_size();
 
 	return event_offset_bytes;
 }
-static unsigned acq132_adjust_event(unsigned es_tboff)
-{
-	int event_offset_bytes = acq132_get_event_adjust();
 
-	if (event_offset_bytes > 0){
-		if ((es_tboff += event_offset_bytes) > TBLOCK_LEN(DG)){
-			es_tboff = TBLOCK_LEN(DG);
-			err("Best effort: TBLOCK_round down");
-		}				       
-	}else if (event_offset_bytes < 0){
-		if (likely(es_tboff > ABS(event_offset_bytes))){
-			es_tboff += event_offset_bytes;
-		}else{
-			es_tboff = 0;
-			err("Best effort: TBLOCK truncate");
+
+
+struct TblockListElement *_locateTblockInPhase(struct Phase *phase, int tbix)
+{
+	struct TblockListElement* tble;
+
+	list_for_each_entry(tble, &phase->tblocks, list){
+		if (tble->tblock->iblock == tbix){
+			dbg(1, "tblock %d found in phase %s", 
+						tbix, phase->name);
+			return tble;
 		}
 	}
 
-	return es_tboff;
+	return 0;
 }
+
+struct TblockListElement *locateTblockInPhase(struct Phase *phase, int tbix)
+{
+	struct TblockListElement* tble;
+	struct Phase *found_in_phase;
+
+
+	tble = _locateTblockInPhase(found_in_phase = phase, tbix);
+
+	if (tble == 0){
+		struct Phase *nphase = NEXT_PHASE(phase);
+		if ((found_in_phase = nphase) != 0){
+			tble = _locateTblockInPhase(nphase, tbix);
+		}
+	}
+	if (tble == 0){
+		struct Phase *pphase = PREV_PHASE(phase);
+		if ((found_in_phase = pphase) != 0){
+			tble = _locateTblockInPhase(pphase, tbix);
+		}
+	}
+
+	dbg(1, "tbix:%d %s %s", tbix, tble? "FOUND": "", found_in_phase->name);
+
+	return tble;
+}
+
+
+struct TblockListElement *locatePrevTblockInPhase(struct Phase *phase, 
+       struct TblockListElement *tble)
+{
+	struct TblockListElement* new_tble;
+
+	if (tble->list.prev != &tble->list){
+		new_tble = TBLE_LIST_ENTRY(tble->list.prev);
+
+		dbg(1, "TBLOCK %d found in current phase %s",
+		    new_tble->tblock->iblock, phase->name);
+		return new_tble;
+
+	}else{		 
+		struct Phase *prev_phase = PREV_PHASE(phase);
+		if (prev_phase){
+			list_for_each_entry_reverse(
+				new_tble, &prev_phase->tblocks, list){
+				if (new_tble->tblock != tble->tblock){
+					dbg(1, "TBlock %d found in %s",
+					    new_tble->tblock->iblock, 
+					    prev_phase->name);
+					return new_tble;
+				}
+			}
+		}
+	}
+	
+	return 0;
+}
+
+struct TblockListElement *locateNextTblockInPhase(struct Phase *phase, 
+       struct TblockListElement *tble)
+{
+	struct TblockListElement* new_tble;
+
+	if (tble->list.next != &tble->list){
+		new_tble = TBLE_LIST_ENTRY(tble->list.next);
+
+		dbg(1, "TBLOCK %d found in current phase %s",
+		    new_tble->tblock->iblock, phase->name);
+		return new_tble;
+
+	}else{
+		struct Phase *next_phase = NEXT_PHASE(phase);
+
+		if (next_phase){
+			list_for_each_entry(
+				new_tble, &next_phase->tblocks, list){
+				if (new_tble->tblock != tble->tblock){
+					dbg(1, "TBlock %d found in %s",
+					    new_tble->tblock->iblock,
+					    next_phase->name);
+					return new_tble;
+				}
+			}
+		}
+	}
+	
+	return 0;
+}
+
 
 
 
 int _acq132_fix_event_already_found(
 	struct Phase *phase, unsigned *first, unsigned *ilast)
+/* Fix in current TBLOCK if that's the right place, else find prev or next
+ * as appropriate.
+ */
 {
-	unsigned search_tbix = TBLOCK_INDEX(*first);
 	unsigned es_tbix = TBIX(g_esm.es_base->tbxo);
-
-	if (search_tbix == es_tbix){
-		unsigned es_tboff = TBOFF(g_esm.es_base->tbxo)*G_rows;
-		unsigned tb_offset = 
-			DG->bigbuf.tblocks.the_tblocks[es_tbix].offset;
-
-		dbg(1, "TBIX match %d let's do it, first was %d", 
-		    search_tbix, *first);
-
-		es_tboff = acq132_adjust_event(es_tboff);
-
-		*first = tb_offset + es_tboff;
-		/* we already removed the ES .. */
-		*ilast = tb_offset + es_tboff;
-
-		dbg(1, "*first %d tblock: %d off-in-block 0%06x",
-		    *first, TBLOCK_INDEX(*first), 
-		    TBLOCK_OFFSET(*first));
-		dbg(1, "*first %u *ilast %u", *first, *ilast);
-		return 1;
-	}else{
-		dbg(1, "HAVE ES but not my tblock: search:%d es:%d",
-		    search_tbix, es_tbix);
+	int es_tboff= TBOFF(g_esm.es_base->tbxo) * G_rows;
+	int event_adjust = acq132_get_event_adjust();
+	struct TblockListElement *tle_cur;	
+	struct TBLOCK *tb = getTblock(g_esm.es_base->tbxo);
+	int id;
+	
+	tle_cur = locateTblockInPhase(phase, es_tbix);
+	if (tle_cur == 0){
+		err("FAILED locateTblockInPhase cur %d", es_tbix);
 		return 0;
 	}
-}
+	
+	if (es_tboff + event_adjust < 0){
+		tle_cur = locatePrevTblockInPhase(phase, tle_cur);
+		if (tle_cur == 0){
+			err("FAILED locatePrevTblockInPhase cur %d", es_tbix);
+			return 0;
+		}
+		es_tboff = tle_cur->tblock->tb_length + es_tboff+event_adjust;
+		tb = tle_cur->tblock;
+		id = 0;
+	}else if (es_tboff + event_adjust > tb->tb_length){
+		tle_cur = locateNextTblockInPhase(phase, tle_cur);	
+		if (tle_cur == 0){
+			err("FAILED locateNextTblockInPhase cur %d", es_tbix);
+			return 0;
+		}
+		es_tboff = es_tboff + event_adjust - tb->tb_length;
+		tb = tle_cur->tblock;
+		id = 2;
+	}else{
+		es_tboff += event_adjust;
+		id = 1;
+	}
 
+	dbg(1, "Transition fixed in tblock: %d %s es_tboff %d", 
+		tle_cur->tblock->iblock, 
+		id==0? "prev": id==2? "next": "cur", 
+		es_tboff);
+
+	*first = tb->offset + es_tboff;
+	*ilast = *first;
+		
+	dbg(1, "setting first:0x%08x %d", *first, *first);
+
+	fix_event_stats[id]++;
+
+	return 1;
+}
 
 int acq132_find_event(
 	struct Phase *phase, unsigned *first, unsigned *ilast)

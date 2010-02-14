@@ -2876,6 +2876,7 @@ int search_for_epos_in_tblock(
 {
 	int dma_block;
 	unsigned ilast;
+	struct Phase *prev_phase = PREV_PHASE(phase);
 
 	for (dma_block = 0; dma_block != max_dma_blocks; ++dma_block){
 		if (FIND_EVENT(phase, &isearch, &ilast)){
@@ -2887,9 +2888,14 @@ int search_for_epos_in_tblock(
 
 			SET_PHASE_START_OFF(phase, ilast);
 			phase->flags |= PH_FIXED_AT_START;
-			if (PREV_PHASE(phase) != phase){
-				shuffle_up(PREV_PHASE(phase), isearch);
-				PREV_PHASE(phase)->flags |= PH_FIXED_AT_END;
+			if (prev_phase && prev_phase != phase){
+				shuffle_up(prev_phase, isearch);
+				prev_phase->flags |= PH_FIXED_AT_END;
+
+				dbg(1, "set PH_FIXED_AT_END %s 0x%08x",
+				    prev_phase->name, prev_phase->flags);
+			}else{
+				dbg(1, "no previous phase?");
 			}
 			DMC_WO->epos = isearch;
 			DMC_WO->epos_found = 1;
