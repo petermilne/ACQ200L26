@@ -60,7 +60,7 @@ int tblock_raw_extractor(
 	stride *= NCHAN;	
 	offset *= NCHAN;
 
-	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
+	for(cplen = 0; cplen < maxbuf && offset < this->tb_length; ++cplen){
 		COPY_TO_USER(ubuf+cplen, bblock_base + offset, sizeof(short));
 		offset += stride;
 	}
@@ -87,7 +87,7 @@ int tblock_raw_extractor32(
 
 	DBG(1, "channel %2d offset %08x maxbuf %x", channel, offset, maxbuf);
 
-	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
+	for(cplen = 0; cplen < maxbuf && offset < this->tb_length; ++cplen){
 		COPY_TO_USER(usbuf+cplen, bblock_base + offset, sizeof(u32));
 		offset += stride;
 	}
@@ -99,7 +99,7 @@ int tblock_raw_extractor32(
 
 int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset)
 {
-	int bblock_samples = tb->length/NCHAN/sizeof(short);
+	int bblock_samples = tb->tb_length/NCHAN/sizeof(short);
 	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
 				channel*bblock_samples*sizeof(short));
 
@@ -108,7 +108,7 @@ int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset)
 }
 int getChannelData32(struct TBLOCK* tb, void **base, int channel, int offset)
 {
-	int bblock_samples = tb->length/NCHAN/sizeof(u32);
+	int bblock_samples = tb->tb_length/NCHAN/sizeof(u32);
 	u32* bblock_base = (u32*)(va_buf(DG) + tb->offset + 
 				channel*bblock_samples*sizeof(u32));
 
@@ -138,7 +138,7 @@ int tblock_cooked_extractor(
 
 		DBG(1, "c:%d stride:%d", channel, stride);
 
-		for(cplen = 0; cplen < maxbuf && offset < this->length; 
+		for(cplen = 0; cplen < maxbuf && offset < this->tb_length; 
 		    ++cplen, bblock_base += stride){
 			COPY_TO_USER(ubuf+cplen, bblock_base, sizeof(short));
 		}		
@@ -169,7 +169,7 @@ int tblock_cooked_extractor32(
 
 		DBG(1, "c:%d stride:%d", channel, stride);
 
-		for(cplen = 0; cplen < maxbuf && offset < this->length; 
+		for(cplen = 0; cplen < maxbuf && offset < this->tb_length; 
 		    ++cplen, bblock_base += stride){
 			COPY_TO_USER(usbuf+cplen, bblock_base, sizeof(u32));
 		}		
@@ -192,7 +192,7 @@ int tblock_raw_filler(
 	stride *= NCHAN;	
 	offset *= NCHAN;
 
-	for(cplen = 0; cplen < maxbuf && offset < this->length; ++cplen){
+	for(cplen = 0; cplen < maxbuf && offset < this->tb_length; ++cplen){
 		COPY_FROM_USER(bblock_base+offset, ubuf+cplen, sizeof(short));
 		offset += stride;
 	}
@@ -205,7 +205,7 @@ int tblock_cooked_filler(
 	/* const */ short* ubuf, int maxbuf, 
 	int channel, int offset, int stride)
 {
-	int bblock_samples = this->length/NCHAN/sizeof(short);
+	int bblock_samples = this->tb_length/NCHAN/sizeof(short);
 	short* bblock_base = (short*)(
 		va_buf(DG) + this->offset + 
 		channel*bblock_samples*sizeof(short));
@@ -237,7 +237,9 @@ void acq200_init_tblock_list(void)
 
 	assert(tbl->the_tblocks);
 
-	tb_temp.length = tbl->blocklen;
+/* @@todo here's where TBLOCK gets its length. 
+ * A little meaningless, since no data yet.. */
+	tb_temp.tb_length = tbl->blocklen;
 	tb_temp.locked = 0;
 
 	if (BTYPE_IS_AI(DG->btype)){

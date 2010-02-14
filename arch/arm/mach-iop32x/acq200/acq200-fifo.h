@@ -397,7 +397,7 @@ typedef void* (*Memcpy)(void* to, const void* from, __kernel_size_t len);
 struct TBLOCK {
 	int iblock;          /* index of this block */
 	unsigned offset;     /* byte offset in bb */
-	unsigned length;     /* length in bytes   */
+	unsigned tb_length;     /* length in bytes   */
 	unsigned locked;     /* replace with sem  WORKTODO */
 	unsigned touched;    /* touched by transform iterator */
 	atomic_t in_phase;

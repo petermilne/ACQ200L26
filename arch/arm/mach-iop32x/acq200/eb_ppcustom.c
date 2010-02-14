@@ -553,7 +553,7 @@ static unsigned updateSampleInPhaseFromLastES(
 			list_entry(S_elp_current.prev, struct EventLocator, list);
 
 		if (tble != elp_last->tble){
-			doff += elp_last->tble->tblock->length; 
+			doff += elp_last->tble->tblock->tb_length; 
 		}
 
 		doff -= elp_last->offset_in_block;
@@ -634,7 +634,7 @@ static int comb(
 #define MYTB (tble->tblock)
 	short *ps = (short*)(VA_TBLOCK(MYTB) + *offinblock);
 	short *ps1 = ps;
-	short *pse = (short*)(VA_TBLOCK(MYTB) + MYTB->length - sample_size());
+	short *pse = (short*)(VA_TBLOCK(MYTB) + MYTB->tb_length-sample_size());
 
 	int tb_off_sam = *sample_in_phase;
 	int mss = S_search_limit * sample_size()/sizeof(short);
@@ -867,7 +867,7 @@ static void find_the_pulses(void *start)
 		unsigned offinblock = offinblock1;
 		unsigned limit = S_search_limit*sample_size();
 
-		limit = min(limit, MYTB->length);
+		limit = min(limit, MYTB->tb_length);
 
 		dbg(2, "eventDef bboffset 0x%08x offinblock1 0x%08x", 
 		    bboffset, offinblock1);

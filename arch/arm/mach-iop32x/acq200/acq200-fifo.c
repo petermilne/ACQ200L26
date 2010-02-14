@@ -2954,7 +2954,7 @@ void search_epos(struct Phase* phase, int search_metric)
 				if (search_for_epos_in_tblock(
 					    phase,
 					    tle->tblock->offset +
-					    tle->tblock->length - rem_blocks,
+					    tle->tblock->tb_length - rem_blocks,
 					    rem_blocks) == 0){
 					info("SUCCESS in tb[-1]");
 					return;
@@ -3765,7 +3765,7 @@ static ssize_t acq200_tblock_read (
 	int iblock = MINOR(file->f_dentry->d_inode->i_rdev);
 	struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[iblock];
 	int boffset = (int)(*offset);
-	int maxread = min(len, tblock->length - boffset);
+	int maxread = min(len, tblock->tb_length - boffset);
 	char *bs = va_buf(DG) + tblock->offset + *offset;
 
 	if (copy_to_user(buf, bs, maxread)){

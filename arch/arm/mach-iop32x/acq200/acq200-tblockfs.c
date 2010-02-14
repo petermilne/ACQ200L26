@@ -182,7 +182,7 @@ static ssize_t tblock_data_read(struct file *filp, char *buf,
 		size_t count, loff_t *offset)
 {
 	struct TBLOCK* tblock = (struct TBLOCK*)filp->private_data;
-	int len = tblock->length;
+	int len = tblock->tb_length;
 	void *tblock_va = tblock->offset + va_buf(DG);
 
 	if (*offset > len){
@@ -204,7 +204,7 @@ static ssize_t tblock_data_write(struct file *filp, const char *buf,
 {
 	struct TBLOCK* tblock = (struct TBLOCK*)filp->private_data;
 	void *tblock_va = tblock->offset + va_buf(DG);
-	size_t headroom = tblock->length - *offset;
+	size_t headroom = tblock->tb_length - *offset;
 
 	count = min(count, headroom);
 

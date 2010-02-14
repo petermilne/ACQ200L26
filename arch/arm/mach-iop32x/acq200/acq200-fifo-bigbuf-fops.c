@@ -341,7 +341,7 @@ void acq200_initBBRP_using_phase(
 	bbrp->my_samples_reqlen = min(my_samples_left, req_samples);
 	bbrp->block_off_sample = block_off_sample + tble->tblock_sample_start;
 	bbrp->samples_left_in_block = samples_left_in_block;
-	bbrp->tblock_samples = bbrp->tblock->length/sample_size()/stride;
+	bbrp->tblock_samples = bbrp->tblock->tb_length/sample_size()/stride;
 
 	bbrp->extract = DCI(file)->extract? 
 		DCI(file)->extract:
@@ -699,7 +699,7 @@ static ssize_t extractPages(
 /* is this valid? What if tblock not full. Doesn't matter, it's an offset! 
  * OK, but what about the maxbytes line?. surely not quite right?.
  */
-	int bblock_samples = this->length/NCHAN/ssize;
+	int bblock_samples = this->tb_length/NCHAN/ssize;
 	short* bblock_base = (short*)(va_buf(DG) + this->offset + 
 						channel*bblock_samples*ssize);
 	int maxbytes = min(maxsam, bblock_samples-offset) * ssize;
@@ -892,7 +892,7 @@ static int tblock_rawxx_extractor(
 	int offsam, 
 	int stride)
 {
-	int bblock_samples = this->length/sample_size()/stride;
+	int bblock_samples = this->tb_length/sample_size()/stride;
 	short* bblock_base = (short*)(va_buf(DG) + this->offset);
 	int cplen;
 	int maxwords;
@@ -927,7 +927,7 @@ static int tblock_rawxx_extractor32(
 	int offsam, 
 	int stride)
 {
-	int bblock_samples = this->length/sample_size()/stride;
+	int bblock_samples = this->tb_length/sample_size()/stride;
 	short* bblock_base = (short*)(va_buf(DG) + this->offset);
 	int cplen;
 	int maxwords;
@@ -970,7 +970,7 @@ static int dma_xx_extractor(
 	int offsam, 
 	int stride)
 {
-	int bblock_samples = this->length/NCHAN/SSZ;
+	int bblock_samples = this->tb_length/NCHAN/SSZ;
 	struct mu_rma mu_rma = {		
 		.magic = MU_MAGIC_BB|MU_HOSTBOUND,
 		.status = MU_STATUS_OK
@@ -1303,7 +1303,7 @@ static int dma_extractor(
 	int offsam, 
 	int stride)
 {
-	int bblock_samples = this->length/NCHAN/sizeof(short);
+	int bblock_samples = this->tb_length/NCHAN/sizeof(short);
 	u32 tblock_offset =  this->offset + channel*bblock_samples*SSZ;
 	struct mu_rma mu_rma = {		
 		.magic = MU_MAGIC_BB|MU_HOSTBOUND,
@@ -1422,9 +1422,9 @@ static ssize_t dma_tb_read (
 	int ncopy;
 
 	if (tbc->c.tle){
-		assert(tbc->c.tle->tblock->length >= tbc->c.cursor);
+		assert(tbc->c.tle->tblock->tb_length >= tbc->c.cursor);
 
-		headroom = tbc->c.tle->tblock->length - tbc->c.cursor;
+		headroom = tbc->c.tle->tblock->tb_length - tbc->c.cursor;
 
 		dbg(1, "file %p tbc->c.tle %p headroom %d %s", 
 		    file, 
@@ -1451,7 +1451,7 @@ static ssize_t dma_tb_read (
 			--tbc->backlog;
 		}
 		tbc->c.tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
-		headroom = tbc->c.tle->tblock->length;
+		headroom = tbc->c.tle->tblock->tb_length;
 		dbg(1, "file %p tbc->c.tle %p wait over headroom %d", 
 		    file, tbc->c.tle, headroom);
 	}
@@ -1498,7 +1498,7 @@ static ssize_t status_tb_read (
 			tle->tblock->iblock, 
 			tle->tblock->offset,
 			pa_buf(DG) + tle->tblock->offset,
-			tle->tblock->length,
+			tle->tblock->tb_length,
 			tle->sample_count
 			);
 	}
