@@ -788,10 +788,11 @@ extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
 /* What if tblock is slightly shorter - because we removed an ES?
  * tblock->length appears to be constant, not a reflection of #samples
  */
-static unsigned acq132_adjust_event(unsigned es_tboff)
+
+static int acq132_get_event_adjust(void)
 {
-	int event_offset_bytes;
 	int cold_adj_samples = 0;
+	int event_offset_bytes;
 
 	if (control_event_adjust){
 		int cold_sam = acq132_es_cold_samples[0];
@@ -821,6 +822,12 @@ static unsigned acq132_adjust_event(unsigned es_tboff)
 	event_offset_bytes = 
 		(event_offset_samples + cold_adj_samples) * sample_size();
 
+	return event_offset_bytes;
+}
+static unsigned acq132_adjust_event(unsigned es_tboff)
+{
+	int event_offset_bytes = acq132_get_event_adjust();
+
 	if (event_offset_bytes > 0){
 		if ((es_tboff += event_offset_bytes) > TBLOCK_LEN(DG)){
 			es_tboff = TBLOCK_LEN(DG);
@@ -835,13 +842,50 @@ static unsigned acq132_adjust_event(unsigned es_tboff)
 		}
 	}
 
-
 	return es_tboff;
 }
+
+
+
+int _acq132_fix_event_already_found(
+	struct Phase *phase, unsigned *first, unsigned *ilast)
+{
+	unsigned search_tbix = TBLOCK_INDEX(*first);
+	unsigned es_tbix = TBIX(g_esm.es_base->tbxo);
+
+	if (search_tbix == es_tbix){
+		unsigned es_tboff = TBOFF(g_esm.es_base->tbxo)*G_rows;
+		unsigned tb_offset = 
+			DG->bigbuf.tblocks.the_tblocks[es_tbix].offset;
+
+		dbg(1, "TBIX match %d let's do it, first was %d", 
+		    search_tbix, *first);
+
+		es_tboff = acq132_adjust_event(es_tboff);
+
+		*first = tb_offset + es_tboff;
+		/* we already removed the ES .. */
+		*ilast = tb_offset + es_tboff;
+
+		dbg(1, "*first %d tblock: %d off-in-block 0%06x",
+		    *first, TBLOCK_INDEX(*first), 
+		    TBLOCK_OFFSET(*first));
+		dbg(1, "*first %u *ilast %u", *first, *ilast);
+		return 1;
+	}else{
+		dbg(1, "HAVE ES but not my tblock: search:%d es:%d",
+		    search_tbix, es_tbix);
+		return 0;
+	}
+}
+
+
 int acq132_find_event(
 	struct Phase *phase, unsigned *first, unsigned *ilast)
 /* search next DMA_BLOCK_LEN of data for event word, 
  * return 1 and update iput if found 
+ * This is now all a bit bogus, 
+	since we already found the event during Transform
  */
 {
 	dbg(1, "*first %d tblock: %d off-in-block 0%06x",
@@ -851,33 +895,7 @@ int acq132_find_event(
 	if (stub_acq132_find_event == 0 && 
 		g_esm.es_cursor != 0 && g_esm.es_cursor - g_esm.es_base >= 1){
 
-		unsigned search_tbix = TBLOCK_INDEX(*first);
-		unsigned es_tbix = TBIX(g_esm.es_base->tbxo);
-
-		if (search_tbix == es_tbix){
-			unsigned es_tboff = TBOFF(g_esm.es_base->tbxo)*G_rows;
-			unsigned tb_offset = 
-				DG->bigbuf.tblocks.the_tblocks[es_tbix].offset;
-
-			dbg(1, "TBIX match %d let's do it, first was %d", 
-			    search_tbix, *first);
-
-			es_tboff = acq132_adjust_event(es_tboff);
-
-			*first = tb_offset + es_tboff;
-			/* we already removed the ES .. */
-			*ilast = tb_offset + es_tboff;
-
-			dbg(1, "*first %d tblock: %d off-in-block 0%06x",
-			    *first, TBLOCK_INDEX(*first), 
-					TBLOCK_OFFSET(*first));
-			dbg(1, "*first %u *ilast %u", *first, *ilast);
-			return 1;
-		}else{
-			dbg(1, "HAVE ES but not my tblock: search:%d es:%d",
-			    search_tbix, es_tbix);
-			return 0;
-		}
+		return _acq132_fix_event_already_found(phase, first, ilast);
 	}else{
 		return findEvent(phase, first, ilast);
 	}
