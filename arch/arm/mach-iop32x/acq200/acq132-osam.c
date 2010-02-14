@@ -100,8 +100,6 @@ void acq132_setAllDecimate(int dec)
 	if (dec < 1) dec = 1;
 	if (dec > 16) dec = 16;
 
-	_decim = dec;
-
 	dbg(1, "setting decimation to %d", dec);
 
 	for (block = 0; block <= 3; ++block){

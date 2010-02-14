@@ -90,9 +90,10 @@ module_param(timebase_encoding, int, 0644);
 int control_event_adjust = -1;
 module_param(control_event_adjust, int, 0644);
 
-/* 2 sample pipeline, could be more: eg with FIR */
-int es_cold_offset_samples = 2;
-module_param(es_cold_offset_samples, int, 0644);
+/* 2 sample pipeline, could be more: eg with FIR found empirically */
+/* [decim==1][decim!=1] */
+int es_cold_offset_samples[2] = { -4, 2 };
+module_param_array(es_cold_offset_samples, int, NULL, 0644);
 
 
 /* @TODO: make this variable 4byte, 8 byte 4byte = 4s worth of nsecs */
@@ -768,7 +769,8 @@ void acq132_register_transformers(void)
 
 extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
 
-#define ES_COLD_OFFSET_SAMPLES	es_cold_offset_samples	/* found empirically */
+#define ES_COLD_OFFSET_SAMPLES	\
+	es_cold_offset_samples[get_acq132_decim() != 1]	
 
 /* What if tblock is slightly shorter - because we removed an ES?
  * tblock->length appears to be constant, not a reflection of #samples

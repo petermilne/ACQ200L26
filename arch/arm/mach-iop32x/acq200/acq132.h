@@ -440,7 +440,8 @@ const char* acq132_getChannelSpeedMask(void);
 #define ACQ132_ES_DATA_MASK 0x07c0
 #define ACQ132_ES_COLD_SAMPLES(es) (((es)&ACQ132_ES_DATA_MASK)>>6)
 
-
+extern int get_acq132_decim(void);
+extern void acq132_setAllDecimate(int dec);
 
 
 #endif	/*  __ACQ132_H__ */

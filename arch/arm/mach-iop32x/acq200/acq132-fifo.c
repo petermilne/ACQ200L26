@@ -307,8 +307,7 @@ static void _setIntClkHz( int hz )
 		      hz);
 }
 
-extern int get_acq132_decim(void);
-extern void acq132_setAllDecimate(int dec);
+
 
 #define ICS_MIN	4000
 #define ICS_MAX 100000
