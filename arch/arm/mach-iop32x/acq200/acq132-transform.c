@@ -96,6 +96,9 @@ int fix_event_stats[3];
 /* pre, cur, next */
 module_param_array(fix_event_stats, int, NULL, 0644);
 
+int fix_event_share_tblock;
+module_param(fix_event_share_tblock, int, 0644);
+
 /* @TODO: make this variable 4byte, 8 byte 4byte = 4s worth of nsecs */
 
 extern int stub_event_adjust;
@@ -929,7 +932,32 @@ struct TblockListElement *locateNextTblockInPhase(struct Phase *phase,
 	return 0;
 }
 
+void shareTblockInPhase(struct Phase *phase, TBLE *tle_cur)
+{
+	struct TBLOCK* tb = tle_cur->tblock;
+	TBLE *cursor;
 
+	if (phase == 0){
+		err("null phase"); return;
+	}
+	if (strcmp(phase->name, "phase1") != 0){
+		err("expected phase1 got %s", phase->name);
+		return;
+	}
+
+	list_for_each_entry(cursor, &phase->tblocks, list){
+		if (cursor->tblock->iblock == tb->iblock){
+			dbg(1, "tblock %d already in phase %s", 
+					tb->iblock, phase->name);
+			return;
+		}
+	}	
+
+	share_tblock(phase, tle_cur, TBLE_SHARE_FROM_POOL);
+
+	++fix_event_share_tblock;
+	dbg(1,"shared phase %s tblock %d", phase->name, tb->iblock);
+}
 
 
 int _acq132_fix_event_already_found(
@@ -979,6 +1007,9 @@ int _acq132_fix_event_already_found(
 		id==0? "prev": id==2? "next": "cur", 
 		es_tboff);
 
+	if (TBLOCK_INDEX(*first) != tb->iblock){
+		shareTblockInPhase(PREV_PHASE(phase), tle_cur);
+	}
 	*first = tb->offset + es_tboff;
 	*ilast = *first;
 		

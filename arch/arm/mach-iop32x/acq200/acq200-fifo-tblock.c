@@ -494,12 +494,12 @@ static int gather_block(
 
 	tle->sample_count = 
 		min(phase_num_samples(phase)- tle->phase_sample_start,
-		    getTblockMaxSam() - tle->tblock_sample_start);
+		    getTblockMaxSam(tle->tblock) - tle->tblock_sample_start);
 
 	DBG(1, "97 sample_count %d = min( %d, %d )",
 	    tle->sample_count,
 	    phase_num_samples(phase)- tle->phase_sample_start,
-	    getTblockMaxSam() - tle->tblock_sample_start);
+	    getTblockMaxSam(tle->tblock) - tle->tblock_sample_start);
 
 	DBG(1, "99 \"%s\" p:%p nb:%2d %s", phase->name,		
 			phase, nblock, tle2string(tle));
@@ -660,7 +660,6 @@ static void phase_rollup_end_fixed(struct Phase* phase)
 	} state = PR_BEFORE;
 
 	int required_len = min(phase->required_len, phase->actual_len);
-	int tblock_max_len = get_tblock_max_sam() * sample_size();
 	unsigned tboff = TBLOCK_OFFSET(phase->end_off);
 	unsigned tbix  = TBLOCK_INDEX(phase->end_off);
 
@@ -672,8 +671,10 @@ static void phase_rollup_end_fixed(struct Phase* phase)
 
 	list_for_each_entry_reverse(tle, &phase->tblocks, list){
 
-		DBG(1, "stateB:%d iblock:%d len:%d",
+		dbg(1, "stateB:%d iblock:%d len:%d",
 		    state, tle->tblock->iblock, len);
+
+		int tb_length = tle->tblock->tb_length;
 
 		switch(state){
 		case PR_BEFORE:
@@ -692,31 +693,31 @@ static void phase_rollup_end_fixed(struct Phase* phase)
 
 				phase->actual_len = required_len;
 				state = PR_AFTER;
+				break;		
 			}else{
 				state = PR_DURING;
+				break;			/** @:todo fall thru? */
 			}
-			break;
 		case PR_DURING:
-			if ((len += tblock_max_len) >= required_len){
-				int full_len = nfull * tblock_max_len;
+			if ((len += tb_length) >= required_len){
+				int full_len = nfull * tb_length;
 				int start_len = required_len - 
 					(full_len + len0);
-				int start_off = tblock_max_len - start_len;
+				int start_off = tb_length - start_len;
 
-				SET_PHASE_START_OFF(
-					phase, 
+				SET_PHASE_START_OFF(phase, 
 					tle->tblock->offset + start_off);
 				phase->actual_len = required_len;
 				state = PR_AFTER;
-			 }else{
-				 nfull++;
-			 }
+			}else{
+				nfull++;
+			}
 			break;
 		case PR_AFTER:
 			break;
 		}
 
-		DBG(1, "stateA:%d iblock:%d len:%d",
+		dbg(1, "stateA:%d iblock:%d len:%d",
 		    state, tle->tblock->iblock, len);
 
 	}

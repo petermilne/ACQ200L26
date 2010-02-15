@@ -472,7 +472,7 @@ static int prep_gather_block(
 
 	tle->sample_count = 
 		min(phase_num_samples(phase) - tle->phase_sample_start,
-		    getTblockMaxSam() - tle->tblock_sample_start);
+		    getTblockMaxSam(tle->tblock) - tle->tblock_sample_start);
 
 	dbg(1, "entry [%2d] %s sample_count %d", 
 	    tle->tblock->iblock, tle2string(tle), tle->sample_count);

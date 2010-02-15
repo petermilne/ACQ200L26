@@ -669,32 +669,41 @@ static struct TblockListElement* dmc_phase_add_tblock(
 
 
 
-static void share_tblock(
-	struct Phase* np,
-	struct TblockListElement* src,
-	struct TblockListElement* dst )
+void share_tblock(struct Phase* np, TBLE* src, TBLE* dst )
 {
 	struct BIGBUF *bb = &DG->bigbuf;
 	struct list_head* pool_tblocks = &bb->pool_tblocks;
 	unsigned long flags;
 
+	spin_lock_irqsave(&bb->tb_list_lock, flags);
+
+	if (dst == TBLE_SHARE_FROM_POOL){
+		dst = TBLE_LIST_ENTRY(pool_tblocks->next);
+		if (unlikely(dst == 0)){
+			spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+			err("NO FREE TLE!!");		
+			return;
+		}
+	}
+
 	dst->tblock = src->tblock;
 	atomic_inc(&src->tblock->in_phase);
 
-	spin_lock_irqsave(&bb->tb_list_lock, flags);
 	list_move_tail(pool_tblocks->next, &np->tblocks);
 	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+
+	dbg(1, "src %p dst %p", src, dst);
 }
 
-static void share_last_tblock(struct Phase* np, struct Phase* op)
+void share_last_tblock(struct Phase* np, struct Phase* op)
 /*
  * take a TBLE wrapper from the pool, share last tblock from old Phase,
  * add to new phase, incrementing usage count
  */
 {
 	struct list_head* pool_tblocks = &DG->bigbuf.pool_tblocks;
-	struct TblockListElement* src;
-	struct TblockListElement* dst;
+	TBLE* src;
+	TBLE* dst;
 
 	dbg(1, "np %p %s op %p %s", np, np->name, op, op->name);
 	if (unlikely(list_empty(&op->tblocks))){
@@ -706,15 +715,12 @@ static void share_last_tblock(struct Phase* np, struct Phase* op)
 		return;
 	}
 
-	src = list_entry(op->tblocks.prev, struct TblockListElement, list);
-	dst = list_entry(pool_tblocks->next, struct TblockListElement, list);
+	src = TBLE_LIST_ENTRY(op->tblocks.prev);
 
-	dbg(1, "src %p dst %p", src, dst);
-	share_tblock(np, src, dst);
-
+	share_tblock(np, src, TBLE_SHARE_FROM_POOL);
 }
 #else
-static void share_tblock(
+void share_tblock(
 	struct Phase* np,
 	struct TblockListElement* src,
 		struct TblockListElement* dst ) {}

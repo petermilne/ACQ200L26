@@ -280,9 +280,9 @@ struct TblockListElement {
 };
 
 #define TBLE struct TblockListElement
-#define TBLE_LIST_ENTRY(ptr) (list_entry(ptr, struct TblockListElement, list))
+#define TBLE_LIST_ENTRY(ptr) (list_entry(ptr, TBLE, list))
 
-static inline unsigned tble_phase_end_sample(struct TblockListElement* tble)
+static inline unsigned tble_phase_end_sample(TBLE* tble)
 {
 	return tble->phase_sample_start + tble->sample_count;
 }
@@ -1041,9 +1041,9 @@ extern void acq200_pipe_fiq_end(void);
 
 #define ABS(a) ((a)<0? -(a): (a))
 
-static inline int getTblockMaxSam(void)
+static inline int getTblockMaxSam(struct TBLOCK *tblock)
 {
-	return DG->bigbuf.tblocks.blocklen/sample_size();
+	return tblock->tb_length/sample_size();
 }
 static inline char *tle2string(struct TblockListElement* tle)
 {
@@ -1253,5 +1253,11 @@ int getChannelData32(struct TBLOCK* tb, void **base, int channel, int offset);
 extern unsigned getChannelNumSamples(int lchan);
 
 extern u32 acq200_stateListenerMakeStatecode(enum STATE s);
+
+
+extern void share_tblock(struct Phase* np, TBLE* src, TBLE* dst );
+#define TBLE_SHARE_FROM_POOL (void*)'P'
+
+
 #define NOLOOK_FOR_PIT	-1
 #endif /* ACQ200_FIFO_H__ */
