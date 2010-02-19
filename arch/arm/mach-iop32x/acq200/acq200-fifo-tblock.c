@@ -99,7 +99,8 @@ int tblock_raw_extractor32(
 
 int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset)
 {
-	int bblock_samples = tb->tb_length/NCHAN/sizeof(short);
+/* DO NOT use tb_length : channels are spread over the whole block ! */
+	int bblock_samples = TBLOCK_LEN(DG)/NCHAN/sizeof(short);
 	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
 				channel*bblock_samples*sizeof(short));
 
@@ -108,7 +109,7 @@ int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset)
 }
 int getChannelData32(struct TBLOCK* tb, void **base, int channel, int offset)
 {
-	int bblock_samples = tb->tb_length/NCHAN/sizeof(u32);
+	int bblock_samples = TBLOCK_LEN(DG)/NCHAN/sizeof(u32);
 	u32* bblock_base = (u32*)(va_buf(DG) + tb->offset + 
 				channel*bblock_samples*sizeof(u32));
 
