@@ -3045,6 +3045,7 @@ static void cook_es(struct DataConsumerBuffer *dcb, u32 my_esig)
 	    err("data at esig is NOT ESIG!");
 	}
 
+	esig[ESIG_DIO]      = *ACQ200_DIOCON & 0x0ff;
 	esig[ESIG_ESIG]     = my_esig;
 	esig[ESIG_ESIG+1]   = my_esig;
 	esig[ESIG_JIFFIES] = (u32)jiffies;
