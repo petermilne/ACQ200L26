@@ -605,27 +605,27 @@ int acq132_transform_row_es(
 
 
 
-#define DQ_BLOCK_OFF(blk) (blk*TBLOCK_LEN(DG)/4)
+#define DQ_ROW_OFF(blk, rows) (blk*TBLOCK_LEN(DG)/rows)
 
 static void acq132_transform_unblocked(
 	short *to, short *from, int nwords, int stride)
 {
 /* keep a stash of NSCAN to vectors */
 	const int nsamples = nwords/stride;	
-	const int rows = stride/ROW_CHAN;
+	const int ROWS = stride/ROW_CHAN;
 #define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 	int row_off[MAX_ROWS];
-	int row;
+	int row = stride/ROW_CHAN;
 
-	if (rows > MAX_ROWS){
-		err("rows %d > MAX_ROWS", rows);
+	if (ROWS > MAX_ROWS){
+		err("rows %d > MAX_ROWS", ROWS);
 		return;
 	}
 
-	G_rows = rows;
+	G_rows = ROWS;
 
-	for (row = 0; row < rows; ++row){
-		row_off[row] = DQ_BLOCK_OFF(row)/sizeof(short);
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
 	}
 
 	TBG(1, "nsamples:%d", nsamples);
@@ -640,7 +640,7 @@ static void acq132_transform_unblocked(
 #endif
 
 
-	for (row = 0; row < rows; ++row){
+	for (row = 0; row < ROWS; ++row){
 		row_off[row] += acq132_transform_row_es(
 			to + row_off[row], 
 			from, 
@@ -656,36 +656,38 @@ static void acq132_transform_unblocked(
 static void* acq132_deblock(short * const from, int nwords, int stride)
 {
 	void* const to = BB_PTR(g_esm.es_deblock->tblock->offset);
+	const int ROWS = stride/ROW_CHAN;
 	void *frm = from;
 	int row_off[MAX_ROWS];
-	int block;
+	int row;
 
 	dbg(1, "00 block: %03d", TBLOCK_INDEX(frm-BB_PTR(0)));
+	dbg(1, "00 ROWS: %d", ROWS);
 
-	for (block = 0; block != 4; ++block){
-		row_off[block] = DQ_BLOCK_OFF(block);	
-		dbg(1+block, "01b:%d", row_off[block]);
+	for (row = 0; row != ROWS; ++row){
+		row_off[row] = DQ_ROW_OFF(row, ROWS);	
+		dbg(1+row, "01b:%d", row_off[row]);
 	}
 	
 	while(nwords > 0){
-		for (block = 0; block != 4; ++block){
+		for (row = 0; row != ROWS; ++row){
 
 			dbg(4, "b:%d memcpy(%p, %p, %d)",
-			    block, to+row_off[block], frm, ROW_SIZE);
+			    row, to+row_off[row], frm, ROW_SIZE);
 
-			memcpy(to+row_off[block], frm, ROW_SIZE);
-			row_off[block] += ROW_SIZE;
+			memcpy(to+row_off[row], frm, ROW_SIZE);
+			row_off[row] += ROW_SIZE;
 			frm += ROW_SIZE;
 			nwords -= ROW_SIZE/SWS;
 		}
 	}
 
-	/* ES detection needs to know TBLOCK info ... this copy
-	 * could be a DMA of course, or, deblock should be done at source
+	/* ES detection needs to know TROW info ... this copy
+	 * could be a DMA of course, or, derow should be done at source
          * then this function can disappear
 	 */
-	for (block = 0; block != 4; ++block){
-		dbg(1+block, "99b:%d", row_off[block]);
+	for (row = 0; row != ROWS; ++row){
+		dbg(1+row, "99b:%d", row_off[row]);
 	}
 	return to;
 
@@ -727,7 +729,7 @@ static TBLE *reserveFreeTblock(const char *id){
 		err("%s:failed to reserve TBLOCK", id);
 		return 0;
 	}else{
-		info("reserved %10s TBLOCK %d", id, tble->tblock->iblock);
+		dbg(1, "reserved %10s TBLOCK %d", id, tble->tblock->iblock);
 	}
 	atomic_inc(&tble->tblock->in_phase);
 	return tble;
