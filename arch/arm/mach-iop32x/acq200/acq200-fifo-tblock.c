@@ -43,6 +43,9 @@
 static int acq200_tblock_debug = 0;
 module_param(acq200_tblock_debug, int, 0664);
 
+int fix_event_share_tblock;
+module_param(fix_event_share_tblock, int, 0644);
+
 #define DBG if (acq200_tblock_debug) dbg
 
 
@@ -672,10 +675,10 @@ static void phase_rollup_end_fixed(struct Phase* phase)
 
 	list_for_each_entry_reverse(tle, &phase->tblocks, list){
 
+		int tb_length = tle->tblock->tb_length;
+
 		dbg(1, "stateB:%d iblock:%d len:%d",
 		    state, tle->tblock->iblock, len);
-
-		int tb_length = tle->tblock->tb_length;
 
 		switch(state){
 		case PR_BEFORE:
@@ -792,6 +795,136 @@ void acq200_replaceFreeTblock(TBLE* tble)
 	spin_lock_irqsave(&bb->tb_list_lock, flags);
 	list_add_tail(&tble->list, &bb->free_tblocks);
 	spin_unlock_irqrestore(&bb->tb_list_lock, flags);
+}
+
+struct TblockListElement *_locateTblockInPhase(struct Phase *phase, int tbix)
+{
+	struct TblockListElement* tble;
+
+	list_for_each_entry(tble, &phase->tblocks, list){
+		if (tble->tblock->iblock == tbix){
+			dbg(1, "tblock %d found in phase %s", 
+						tbix, phase->name);
+			return tble;
+		}
+	}
+
+	return 0;
+}
+
+struct TblockListElement *locateTblockInPhase(struct Phase *phase, int tbix)
+{
+	struct TblockListElement* tble;
+	struct Phase *found_in_phase;
+
+
+	tble = _locateTblockInPhase(found_in_phase = phase, tbix);
+
+	if (tble == 0){
+		struct Phase *nphase = NEXT_PHASE(phase);
+		if ((found_in_phase = nphase) != 0){
+			tble = _locateTblockInPhase(nphase, tbix);
+		}
+	}
+	if (tble == 0){
+		struct Phase *pphase = PREV_PHASE(phase);
+		if ((found_in_phase = pphase) != 0){
+			tble = _locateTblockInPhase(pphase, tbix);
+		}
+	}
+
+	dbg(1, "tbix:%d %s %s", tbix, tble? "FOUND": "", found_in_phase->name);
+
+	return tble;
+}
+
+
+struct TblockListElement *locatePrevTblockInPhase(struct Phase *phase, 
+       struct TblockListElement *tble)
+{
+	struct TblockListElement* new_tble;
+
+	if (tble->list.prev != &tble->list){
+		new_tble = TBLE_LIST_ENTRY(tble->list.prev);
+
+		dbg(1, "TBLOCK %d found in current phase %s",
+		    new_tble->tblock->iblock, phase->name);
+		return new_tble;
+
+	}else{		 
+		struct Phase *prev_phase = PREV_PHASE(phase);
+		if (prev_phase){
+			list_for_each_entry_reverse(
+				new_tble, &prev_phase->tblocks, list){
+				if (new_tble->tblock != tble->tblock){
+					dbg(1, "TBlock %d found in %s",
+					    new_tble->tblock->iblock, 
+					    prev_phase->name);
+					return new_tble;
+				}
+			}
+		}
+	}
+	
+	return 0;
+}
+
+struct TblockListElement *locateNextTblockInPhase(struct Phase *phase, 
+       struct TblockListElement *tble)
+{
+	struct TblockListElement* new_tble;
+
+	if (tble->list.next != &tble->list){
+		new_tble = TBLE_LIST_ENTRY(tble->list.next);
+
+		dbg(1, "TBLOCK %d found in current phase %s",
+		    new_tble->tblock->iblock, phase->name);
+		return new_tble;
+
+	}else{
+		struct Phase *next_phase = NEXT_PHASE(phase);
+
+		if (next_phase){
+			list_for_each_entry(
+				new_tble, &next_phase->tblocks, list){
+				if (new_tble->tblock != tble->tblock){
+					dbg(1, "TBlock %d found in %s",
+					    new_tble->tblock->iblock,
+					    next_phase->name);
+					return new_tble;
+				}
+			}
+		}
+	}
+	
+	return 0;
+}
+
+void shareTblockInPhase(struct Phase *phase, TBLE *tle_cur)
+{
+	struct TBLOCK* tb = tle_cur->tblock;
+	TBLE *cursor;
+
+	if (phase == 0){
+		err("null phase"); return;
+	}
+	if (strcmp(phase->name, "phase1") != 0){
+		err("expected phase1 got %s", phase->name);
+		return;
+	}
+
+	list_for_each_entry(cursor, &phase->tblocks, list){
+		if (cursor->tblock->iblock == tb->iblock){
+			dbg(1, "tblock %d already in phase %s", 
+					tb->iblock, phase->name);
+			return;
+		}
+	}	
+
+	share_tblock(phase, tle_cur, TBLE_SHARE_FROM_POOL);
+
+	++fix_event_share_tblock;
+	dbg(1,"shared phase %s tblock %d", phase->name, tb->iblock);
 }
 
 

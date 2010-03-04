@@ -61,7 +61,7 @@
 int int_clk_calcmode;
 module_param(int_clk_calcmode, int, 0664);
 
-int stub_event_adjust = -1;
+int stub_event_adjust = 0;
 module_param(stub_event_adjust, int, 0600);
 
 
@@ -78,6 +78,9 @@ module_param(rgm_with_es, int, 0600);
 
 int acq164_trigger_debug = 0;
 module_param(acq164_trigger_debug, int, 0600);
+
+int ads1278_group_delay = 38;
+module_param(ads1278_group_delay, int, 0600);
 
 #ifdef PGMCOMOUT
 /* acq132-gated.c */
@@ -113,6 +116,18 @@ static void acq164_mach_on_set_mode(struct CAPDEF* capdef);
 
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
+static void acq164_event_adjust(
+	struct Phase *phase, unsigned isearch, 
+	unsigned* first, unsigned* last);
+
+
+
+#undef DTACQ_MACH_EVENT_ADJUST
+#define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last) \
+	if (!stub_event_adjust){ \
+		dbg(1, "DTACQ_MACH_EVENT_ADJUST: isearch 0x%08x", isearch); \
+	        acq164_event_adjust(phase, isearch, first, last); \
+	}
 
 
 
@@ -1154,6 +1169,29 @@ void acq164_set_obclock(int FDW, int RDW, int R, int Sx)
 	acq200_clk_hz = ob_clock_def.actual * 1000;
 }
 
+
+static void acq164_event_adjust(
+	struct Phase *phase, unsigned isearch, 
+	unsigned* first, unsigned* last)
+{
+	int doff = ads1278_group_delay * sample_size();
+	int tboff = TBLOCK_OFFSET(*first);
+	int tbresidue = TBLOCK_LEN(DG) - TBLOCK_OFFSET(*last);
+	int tbix = TBLOCK_INDEX(*first);
+
+	if (likely(tboff+doff < TBLOCK_LEN(DG))){
+		/* remove the ES and compensate */
+		memcpy(va_buf(DG)+*first, va_buf(DG)+*last, tbresidue);
+
+		*first += doff;
+		*last = *first;
+		/* @@todo and adjust tblock length */
+		DG->bigbuf.tblocks.the_tblocks[tbix].tb_length -= 
+								sample_size();
+	}else{
+		info("Warning shift forwards out of tblock");
+	}
+}
 
 
 

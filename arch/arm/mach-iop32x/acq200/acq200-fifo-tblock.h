@@ -46,3 +46,10 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle);
 int acq200_phase_tblocks_diag(struct Phase* phase, char *buf);
 void acq200_phase_gather_tblocks(struct Phase* phase);
 void acq200_phase_rollup_excess(struct Phase* phase);
+
+struct TblockListElement *locateTblockInPhase(struct Phase *phase, int tbix);
+struct TblockListElement *locatePrevTblockInPhase(
+	struct Phase *phase, struct TblockListElement *tble);
+struct TblockListElement *locateNextTblockInPhase(
+	struct Phase *phase, struct TblockListElement *tble);
+void shareTblockInPhase(struct Phase *phase, TBLE *tle_cur);
