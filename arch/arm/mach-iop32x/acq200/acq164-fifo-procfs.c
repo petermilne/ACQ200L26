@@ -51,6 +51,10 @@ static void acq164_create_proc_entries(struct proc_dir_entry* root);
 #define DEVICE_CREATE_PROC_ENTRIES(root) acq164_create_proc_entries(root)
 
 
+extern int ads1278_group_delay;
+
+#define GROUP_DELAY	ads1278_group_delay	
+
 
 #include "acq200-fifo-procfs.c"
 

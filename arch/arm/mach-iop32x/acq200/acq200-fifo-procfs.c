@@ -37,6 +37,9 @@
 
 #include <asm-arm/arch-iop32x/acq200.h>
 
+#ifndef GROUP_DELAY
+#define GROUP_DELAY 0
+#endif
 
 int histo_clear_on_read = 0;		     /* reading histogram clears it */
 module_param(histo_clear_on_read, int, 0600);
@@ -1999,6 +2002,8 @@ static ssize_t store_finalize_phases(
 {
 	unsigned start_sample = 0;
 	struct Phase* phase;
+	int phase_num = 0;
+
 
 	dbg(1, "list1");
 	list_for_each_entry(phase, &DMC_WO->phases, list){
@@ -2007,11 +2012,16 @@ static ssize_t store_finalize_phases(
 
 	dbg(1, "list2");
 	list_for_each_entry(phase, &DMC_WO->phases, list){
-
+		
 		dbg(1, "phase \"%s\" %p start %d len %d",
 		    phase->name, phase, phase->start_sample, phase_len(phase));
 
 		if (phase_len(phase)){
+			/* only comp GROUP_DELAY is NO EVENT */
+			if (++phase_num == 1 && DMC_WO->pit_count == 0){
+				phase->start_sample += GROUP_DELAY;
+			}
+
 			acq200_phase_gather_tblocks(phase);
 			phase->start_sample = start_sample;
 			start_sample += phase->actual_samples;
