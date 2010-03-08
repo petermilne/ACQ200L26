@@ -166,7 +166,55 @@ static DEVICE_ATTR(
 	slow_clock, S_IRUGO|S_IWUGO, show_slow_clock, store_slow_clock);
 
 
+static char role_text[32];
 
+#define ROLE_SOLO	"SOLO"
+#define ROLE_MASTER	"MASTER"
+#define ROLE_SLAVE	"SLAVE"
+
+#define SLEN(str)	strlen(str)
+
+#define CLKCON_
+static ssize_t show_clock_role(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char *buf)
+{	
+	return sprintf(buf, "%s\n", role_text);
+}
+
+static ssize_t store_clock_role(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	u32 set = 0;
+	int len = 0;
+	if (strncmp(buf, ROLE_SOLO, (len = SLEN(ROLE_SOLO))) == 0){
+		set = 0;
+	}else if (strncmp(buf, ROLE_MASTER, (len = SLEN(ROLE_MASTER))) == 0){
+		set =	(ACQ164_CLKCON_D1 << ACQ164_CLKCON_OCS_SHIFT)|
+			(ACQ164_CLKCON_D2 << ACQ164_CLKCON_IND_SHIFT)|
+			(ACQ164_CLKCON_D2 << ACQ164_CLKCON_OIND_SHIFT);
+	}else if (strncmp(buf, ROLE_SLAVE, (len = SLEN(ROLE_SLAVE))) == 0){
+		set =	(ACQ164_CLKCON_D1 << ACQ164_CLKCON_CS_SHIFT)|
+			(ACQ164_CLKCON_D2 << ACQ164_CLKCON_IND_SHIFT);
+	}else{
+		return -1;
+	}
+
+	acq164_clkcon_clr(ACQ164_CLKCON_ALL);
+	acq164_clkcon_set(set);
+
+	strncpy(role_text, buf, len);
+	role_text[len] = '\0';
+	dbg(1, "role %s CLKCON set %08x", role_text, set);
+
+	return count;
+}
+
+static DEVICE_ATTR(clock_role, S_IRUGO|S_IWUGO, 
+			show_clock_role, store_clock_role);
 
 DEFINE_EVENT_ATTR(1);
 
@@ -366,6 +414,7 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
 	DEVICE_CREATE_FILE(dev, &dev_attr_slow_clock);
+	DEVICE_CREATE_FILE(dev, &dev_attr_clock_role);
 	DEVICE_CREATE_FILE(dev, &dev_attr_event1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mapping_bin);

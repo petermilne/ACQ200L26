@@ -159,6 +159,9 @@
 /* not used				0x00000004 */
 #define ACQ164_CLKCON_CS_MASK		0x00000003
 
+#define ACQ164_CLKCON_ALL \
+	(ACQ164_CLKCON_CS_MASK|ACQ164_CLKCON_OCS_MASK|\
+	 ACQ164_CLKCON_IND_MASK|ACQ164_CLKCON_OIND_MASK)
 
 #define ACQ164_CLKCON_OIND_SHIFT	12
 #define ACQ164_CLKCON_IND_SHIFT		8
@@ -187,6 +190,13 @@ static inline u32 acq164_syscon_set(u32 flags) {
 
 static inline u32 acq164_syscon_clr(u32 flags){
 	return *ACQ164_SYSCON &= ~flags;
+}
+
+static inline u32 acq164_clkcon_set(u32 flags) {
+	return *ACQ164_CLKCON |= flags;
+}
+static inline u32 acq164_clkcon_clr(u32 flags) {
+	return *ACQ164_CLKCON &= ~flags;
 }
 
 static inline u32 acq164_fifcon_set(u32 flags){
