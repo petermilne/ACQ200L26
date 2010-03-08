@@ -2019,7 +2019,8 @@ static ssize_t store_finalize_phases(
 		if (phase_len(phase)){
 			/* only comp GROUP_DELAY is NO EVENT */
 			if (++phase_num == 1 && DMC_WO->pit_count == 0){
-				phase->start_sample += GROUP_DELAY;
+				dbg(1, "add GROUP_DELAY %d", GROUP_DELAY);
+				phase->start_off += GROUP_DELAY*sample_size();
 			}
 
 			acq200_phase_gather_tblocks(phase);

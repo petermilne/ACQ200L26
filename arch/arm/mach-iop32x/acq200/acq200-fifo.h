@@ -319,6 +319,7 @@ struct DMC_WORK_ORDER {
 	} onTrigger;
 	char* error;
 
+/* pit : recorded event where _did_ this name come from ? */
 	int pit_stop;     /* stop after this number of pits */
 	int pit_count;
 	int looking_for_pit;  /* look for pit */
