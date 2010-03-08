@@ -1260,4 +1260,16 @@ extern void share_tblock(struct Phase* np, TBLE* src, TBLE* dst );
 
 
 #define NOLOOK_FOR_PIT	-1
+
+static inline int field_shift(u32 field) 
+{
+	int lsh;
+	if (field == 0){
+		return 0;
+	}
+	for (lsh = 0; (field&1) == 0; field >>= 1, lsh++){
+		;
+	}
+	return lsh;
+}
 #endif /* ACQ200_FIFO_H__ */
