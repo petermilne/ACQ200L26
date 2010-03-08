@@ -794,6 +794,13 @@ static int acq196_commitIntClkSrc(struct Signal* signal)
 	clkcon &= ~(ACQ196_CLKCON_CS_MASK);
 
 	if (signal->is_active){
+		/* EC_RISING bit gets re-used */
+		if (signal->rising){	       
+			acq196_syscon_set_all(ACQ196_SYSCON_EC_RISING);
+		}else{
+			acq196_syscon_clr_all(ACQ196_SYSCON_EC_RISING);
+		}
+
 		clkcon |= ACQ196_CLKCON_CS_DIx(signal->DIx);
 	}
 	*ACQ196_CLKCON = clkcon;
@@ -804,6 +811,7 @@ static int acq196_commitSyncTrigSrc(struct Signal* signal)
 {
 	u32 clkcon = *ACQ196_CLKCON;
 	
+
 	clkcon &= ~(ACQ196_CLKCON_TR_MASK);
 
 	if (signal->is_active){
