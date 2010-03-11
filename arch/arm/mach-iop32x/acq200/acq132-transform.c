@@ -69,6 +69,12 @@ module_param(time_stamp_adj, int, 0644);
 int stub_acq132_find_event = 0;
 module_param(stub_acq132_find_event, int, 0644);
 
+int stash_first_event_only = 1;
+module_param(stash_first_event_only, int, 0644);
+
+int number_es_detected = 0;
+module_param(number_es_detected, int, 0644);
+
 /*
 int xxs_readsam[NCB];
 module_param_array(xxs_readsam, int, NULL, 0644);
@@ -479,14 +485,16 @@ int remove_es(int sam, unsigned short* ch, void *before)
 			es_descr.spare = 0;
 			*g_esm.es_cursor++ = es_descr;
 			id = "remove";
+			++number_es_detected;
 
 			dbg(2, "TBIX: %d TBOFF :%d before:%p",
 			    TBIX(es_descr.tbxo), TBOFF(es_descr.tbxo), before);
 
-			copyDiags((unsigned *)ch, 0);
-			initPhaseDiagBufFound(1, 1, 0, 0, 0, 0, 0, 0);
-			stash_es_cold_samples(ch);
-
+			if (number_es_detected == 1 || !stash_first_event_only){
+				copyDiags((unsigned *)ch, 0);
+				initPhaseDiagBufFound(1, 1, 0, 0, 0, 0, 0, 0);
+				stash_es_cold_samples(ch);
+			}
 			if (rc == 1){	
 				struct TBLOCK* tb = 
 					getTblock(G_current_transform_tbxo);
@@ -758,6 +766,7 @@ static void transformer_es_onStart(void *unused)
 		memset(g_esm.es_cursor, 0, TBLOCK_LEN(DG));
 		memset(acq132_es_cold_samples, 0, 
 		       sizeof(acq132_es_cold_samples));
+		number_es_detected = 0;
 	}
 }
 
