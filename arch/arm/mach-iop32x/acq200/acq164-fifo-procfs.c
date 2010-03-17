@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------- */
-/* acq132-fifo-procfs.c                                                      */
+/* acq164-fifo-procfs.c                                                      */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
