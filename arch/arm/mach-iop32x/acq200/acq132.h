@@ -462,6 +462,8 @@ extern void acq132_setAllDecimate(int dec);
 extern int acq132_set_DR(int enable, int nacc, int shift);
 extern int acq132_get_DR(int *nacc, int *shift);
 
+static inline int acq132_is_DR(void) { return acq132_get_DR(0,0); }
+
 
 #endif	/*  __ACQ132_H__ */
 

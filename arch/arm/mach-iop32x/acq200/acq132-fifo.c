@@ -480,9 +480,15 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);	
 		break;
 	default:	
-		dbg(1, "mode %d %s", capdef->mode, acq132_getRGM()?"RGM":"");
+		dbg(1, "mode %d %s", capdef->mode, 
+			acq132_getRGM()?"RGM":	acq132_is_DR()?"DR": "");
 
-		deactivateSignal(capdef->ev[0]);
+		if (acq132_is_DR()){
+			activateSignal(capdef->ev[0]);
+		}else{
+			deactivateSignal(capdef->ev[0]);
+		}
+
 		if (acq132_getRGM()){
 			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
 			activateSignal(capdef->gate_src);
