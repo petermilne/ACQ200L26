@@ -703,7 +703,7 @@ void share_last_tblock(struct Phase* np, struct Phase* op)
 {
 	struct list_head* pool_tblocks = &DG->bigbuf.pool_tblocks;
 	TBLE* src;
-	TBLE* dst;
+//	TBLE* dst;
 
 	dbg(1, "np %p %s op %p %s", np, np->name, op, op->name);
 	if (unlikely(list_empty(&op->tblocks))){
