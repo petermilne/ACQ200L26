@@ -484,10 +484,14 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 			acq132_getRGM()?"RGM":	acq132_is_DR()?"DR": "");
 
 		if (acq132_is_DR()){
+			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
 			activateSignal(capdef->ev[0]);
-		}else{
-			deactivateSignal(capdef->ev[0]);
+			acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
+						ACQ132_ADC_CTRL_PREPOST);
+			break;
 		}
+
+		deactivateSignal(capdef->ev[0]);
 
 		if (acq132_getRGM()){
 			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
@@ -499,13 +503,13 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 				acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET,
 					ACQ132_ADC_CTRL_SIGEN);	
 			}
+			break;
 		}else{
 			deactivateSignal(capdef->gate_src);
 			acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET,
 				ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);
-
+			break;
 		}
-		break;
 	}
 }
 
