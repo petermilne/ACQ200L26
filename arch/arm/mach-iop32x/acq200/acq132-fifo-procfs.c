@@ -1155,6 +1155,7 @@ static ssize_t set_daq_enable(
 	REGS_LUT_ENTRY(ACQ132_ADC_CTRL(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_RANGE(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_OSAM(dev)),   \
+	REGS_LUT_ENTRY(ACQ132_ADC_DR(dev)),     \
 	REGS_LUT_ENTRY(ACQ132_ADC_TESTM(dev)),\
 	SPACER_ENTRY
 
@@ -1204,6 +1205,7 @@ int acq200_dumpregs_diag(char* buf, int len)
 	APPEND(ACQ132_ADC_CTRL(dev));		\
 	APPEND(ACQ132_ADC_RANGE(dev));		\
 	APPEND(ACQ132_ADC_OSAM(dev));		\
+	APPEND(ACQ132_ADC_DR(dev));		\
 	APPEND(ACQ132_ADC_TESTM(dev))		\
 
 	APPEND(ACQ132_BDR);
