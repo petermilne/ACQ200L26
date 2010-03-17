@@ -1674,6 +1674,88 @@ u32 acq132_get_adc_range(void)
 }
 
 
+int nacc2bits(int nacc)
+{
+	switch(nacc){
+	default:
+	case 1:		return 0;
+	case 2:		return 1;
+	case 4:		return 2;
+	case 8:		return 3;
+	case 16:	return 4;
+	case 32:	return 5;
+	case 64:	return 6;
+	case 128:	return 7;
+	}
+}
+
+int bits2nacc(unsigned bits)
+{
+	return 1 << (bits & ACQ132_ADC_NACC_MASK);
+}
+
+int shift2bits(int shift)
+{
+	switch(shift){
+	case -1:	return 0xf;
+	default:
+	case -2:	return 0xe;
+	case 0:		return 0;
+	case 1:		return 1;
+	case 2:		return 2;
+	case 3:		return 3;
+	case 4:		return 4;
+	case 5:		return 5;
+	}
+}
+
+int bits2shift(unsigned bits)
+{
+	switch(bits & ACQ132_ADC_SHIFT_MASK){
+	case 0xf:	return -1;
+	case 0xe:	return -2;
+	default:
+		return bits <= 5 ? bits: -2;
+	}
+}
+
+
+int acq132_set_DR(int enable, int nacc, int shift)
+{
+	if (enable){
+		u32 dr_bits = 
+			(nacc2bits(nacc)   <<	ACQ132_ADC_DR_L_NACC)	|
+			(shift2bits(shift) <<	ACQ132_ADC_DR_L_SHIFT)	|
+			(nacc2bits(nacc)   <<	ACQ132_ADC_DR_R_NACC)	|
+			(shift2bits(shift) <<   ACQ132_ADC_DR_R_SHIFT);
+			
+		acq132_adc_clr_all(ACQ132_ADC_DR_OFFSET, ~0);
+		acq132_adc_set_all(ACQ132_ADC_DR_OFFSET, dr_bits);
+
+		acq132_adc_set_all(ACQ132_ADC_OSAM_OFFSET, ACQ132_ADC_OSAM_DR);
+	}else{
+		acq132_adc_clr_all(ACQ132_ADC_OSAM_OFFSET, ACQ132_ADC_OSAM_DR);
+	}
+	return 0;
+}
+
+int acq132_get_DR(int *nacc, int *shift)
+{
+	u32 osam = *ACQ132_ADC_OSAM(0);
+	int enable = (osam&ACQ132_ADC_OSAM_DR) != 0;
+
+	if (enable){
+		u32 dr = *ACQ132_ADC_DR(0);
+
+		if (nacc){
+			*nacc = bits2nacc(dr>>ACQ132_ADC_DR_L_NACC);
+		}
+		if (shift){
+			*shift = bits2shift(dr>>ACQ132_ADC_DR_L_SHIFT);
+		}
+	}
+	return enable;
+}
 
 
 module_init(acq132_fifo_init);

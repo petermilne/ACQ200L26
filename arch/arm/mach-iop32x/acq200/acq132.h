@@ -51,13 +51,17 @@
 #define ACQ132_ADC_REG(dev, reg)	FPGA_REG((dev+1)*0x100 + (reg))
 
 #define ACQ132_ADC_CTRL_OFFSET	0x04
+#define ACQ132_ADC_OSAM_OFFSET	0x0c
+#define ACQ132_ADC_DR_OFFSET	0x14
 
 #define ACQ132_ADC_VERID(dev)	ACQ132_ADC_REG(dev, 0x00)
 #define ACQ132_ADC_CTRL(dev)	ACQ132_ADC_REG(dev, ACQ132_ADC_CTRL_OFFSET)
 #define ACQ132_ADC_RANGE(dev)	ACQ132_ADC_REG(dev, 0x08)
-#define ACQ132_ADC_OSAM(dev)	ACQ132_ADC_REG(dev, 0x0c)
+#define ACQ132_ADC_OSAM(dev)	ACQ132_ADC_REG(dev, ACQ132_ADC_OSAM_OFFSET)
 #define ACQ132_ADC_FIFSTA(dev)	ACQ132_ADC_REG(dev, 0x10)
-#define ACQ132_ADC_TESTM(dev) ACQ132_ADC_REG(dev, 0x14)
+/* DR == Dual Rate */
+#define ACQ132_ADC_DR(dev)	ACQ132_ADC_REG(dev, ACQ132_ADC_DR_OFFSET)
+#define ACQ132_ADC_TESTM(dev)	ACQ132_ADC_REG(dev, 0x18)
 
 
 #define BANK_A	0
@@ -169,6 +173,8 @@
 #define ACQ132_ADC_RANGE_R2	0x00000002
 #define ACQ132_ADC_RANGE_R1	0x00000001
 
+#define ACQ132_ADC_OSAM_DR	0x00020002
+
 #define ACQ132_ADC_OSAM_L_NACC		28
 #define ACQ132_ADC_OSAM_L_SHIFT		24
 #define ACQ132_ADC_OSAM_L_ACCEN		16
@@ -205,6 +211,16 @@
 #define INTCLK_ICS	(ACQ132_CLKDAT_INTCLK_OE|ACQ132_CLKDAT_ICS1_OE)
 #define INTCLK_NOICS	(ACQ132_CLKDAT_INTCLK_OE|\
 			ACQ132_CLKDAT_CLKSEL|ACQ132_CLKDAT_DDS_CLKOUT_OE)
+
+
+
+#define ACQ132_ADC_DR_L_NACC	28
+#define ACQ132_ADC_DR_L_SHIFT	24
+#define ACQ132_ADC_DR_R_NACC	12
+#define ACQ132_ADC_DR_R_SHIFT	 8
+
+#define ACQ132_ADC_NACC_MASK	0x07
+#define ACQ132_ADC_SHIFT_MASK	0x0f
 
 static inline void acq132_initClkDatFields(unsigned bits)
 {
@@ -442,6 +458,9 @@ const char* acq132_getChannelSpeedMask(void);
 
 extern int get_acq132_decim(void);
 extern void acq132_setAllDecimate(int dec);
+
+extern int acq132_set_DR(int enable, int nacc, int shift);
+extern int acq132_get_DR(int *nacc, int *shift);
 
 
 #endif	/*  __ACQ132_H__ */

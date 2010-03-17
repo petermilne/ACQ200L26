@@ -961,6 +961,37 @@ static ssize_t store_best_decimation(
 static DEVICE_ATTR(best_decimation, S_IRUGO|S_IWUGO, 
 		   show_best_decimation, store_best_decimation);
 
+
+static ssize_t show_DR(
+	struct device *dev,
+	struct device_attribute *attr,
+	char* buf)
+{
+	int nacc, shift;
+	int enable = acq132_get_DR(&nacc, &shift);
+	if (enable){
+		return sprintf(buf, "1 %d %d\n", nacc, shift);
+	}else{
+		return sprintf(buf, "0\n");
+	}
+}
+
+static ssize_t store_DR(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	int enable, nacc = 8, shift = -2;
+
+	if (sscanf(buf, "%d %d %d", &enable, &nacc, &shift) > 0){
+		acq132_set_DR(enable, nacc, shift);
+	}
+	return count;
+}
+
+static DEVICE_ATTR(DualRate, S_IRUGO|S_IWUGO, show_DR, store_DR);
+
+
 static void acq132_mk_dev_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_coding);
@@ -990,6 +1021,7 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
 	DEVICE_CREATE_FILE(dev, &dev_attr_best_decimation);
 	DEVICE_CREATE_FILE(dev, &dev_attr_clksel);
+	DEVICE_CREATE_FILE(dev, &dev_attr_DualRate);
 }
 
 
