@@ -31,6 +31,7 @@
 
 #define MTTR2	0x80
 
+#include <linux/delay.h>
 #include <linux/platform_device.h>
 
 #include "acq200-signal2.h"
@@ -468,7 +469,26 @@ static void dmc_handle_empties_acq164(struct DMC_WORK_ORDER *wo)
 	}
 }
 
+static int clock_check(void)
+{
+	u32 clkcon = *ACQ164_CLKCON;
+	u32 clkcon2;
 
+	if ((clkcon&ACQ164_CLKCON_SCLK_LOCK) == 0){
+		*ACQ164_CLKCON = clkcon | ACQ164_CLKCON_SCLK_RESET;
+		msleep(2);
+		*ACQ164_CLKCON = clkcon & ~ACQ164_CLKCON_SCLK_RESET;
+		clkcon2 = *ACQ164_CLKCON;
+		
+		err("NO CLOCK LOCK, we gave it a reset was:%08x now:%08x %s",
+		    clkcon, clkcon2,
+		    (clkcon2&ACQ164_CLKCON_SCLK_LOCK) != 0? 
+					"OK": "still no lock");
+		return 1;
+	}
+
+	return 0;
+}
 
 
 int acq200_custom_fpga_open (struct inode *inode, struct file *file)
@@ -506,6 +526,8 @@ static void enable_acq164_start(void)
 	DBGSF("TEMPORARY: blip enable");
 	disable_acq();
 
+	clock_check();
+	
 	if (acq164_trigger_detect()){
 		err("WOAAH - triggered already, and not yet enabled not good\n"
 		    "FIFCON: 0x%08x\n"
@@ -899,7 +921,7 @@ static struct Signal *createSignalAdcMode(void)
 		ACQ164_ADC_MODE_CHOICES, 0, 0, 0, 
 		acq164_commitAdcModeChoice);
 
-	sig->px[0].masks = &ACQ164_ADC_MODE_MASKS;
+	sig->px[0].masks = ACQ164_ADC_MODE_MASKS;
 	return sig;
 }
 
@@ -933,7 +955,9 @@ static struct CAPDEF* acq164_createCapdef(void)
 		"sync_trig_mas", ACQ164_DO345_MENU,0, 0,0,
 		acq164_commitSyncTrig);
 	/* @todo - ext clk is int_clk_src ? */
-	capdef->ext_clk = 
+	capdef->ext_clk = createSignal(
+		"ext_clk", ACQ164_CLKDI3_MENU, 0, SIG(EDG), 0,
+		acq164_commitIntClkSrc);
 	capdef->int_clk_src = createSignal(
 		"int_clk_src", ACQ164_CLKDI3_MENU, 0, SIG(EDG), 0,
 		acq164_commitIntClkSrc);
