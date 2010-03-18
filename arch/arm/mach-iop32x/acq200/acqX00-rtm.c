@@ -162,6 +162,8 @@ static DEVICE_ATTR(dio32, S_IRUGO|S_IWUGO, show_dio, store_dio);
 
 #define MAXDIOBIT 32
 
+static char last_store[32];
+
 static ssize_t store_dio_bit(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -205,7 +207,17 @@ static ssize_t store_dio_bit(
         return strlen(buf);
 }
 
-static DEVICE_ATTR(dio32_bit, S_IRUGO|S_IWUGO, 0, store_dio_bit);
+static ssize_t show_dio_bit(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	strcpy(buf, last_store);
+	return strlen(last_store);
+}
+
+
+static DEVICE_ATTR(dio32_bit, S_IRUGO|S_IWUGO, show_dio_bit, store_dio_bit);
 
 
 static ssize_t show_dio_raw(
