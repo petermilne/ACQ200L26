@@ -1059,6 +1059,8 @@ unsigned acq200_getDIO6(void)
 {
 	return *ACQ200_DIOCON;
 }
+
+
 static ssize_t show_dio(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -1082,6 +1084,33 @@ static ssize_t show_dio(
 }
 
 static DEVICE_ATTR(dio, S_IRUGO|S_IWUGO, show_dio, store_dio);
+
+static ssize_t show_dio_space(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	int ibit;
+	int ib = 0;
+	unsigned control = acq200_getDIO6();
+
+	for (ibit = 0; ibit != MAXDIOBIT; ++ibit){
+		if (DIO_IS_OUTPUT(control, ibit)){
+			buf[ib++] = DIO_IS_OUTPUT1(control, ibit)?
+				DIO_MASK_OUTPUT1: DIO_MASK_OUTPUT0;
+		}else{
+			buf[ib++] = DIO_IS_INPUTH(control, ibit)?
+				DIO_MASK_INPUT1: DIO_MASK_INPUT0;
+		} 
+		buf[ib++] = ' ';
+	}
+	buf[ib++] = '\n';
+	buf[ib] = '\0';
+	return strlen(buf);
+}
+
+static DEVICE_ATTR(dio_space, S_IRUGO, show_dio_space, 0);
+
 
 
 static ssize_t show_dio_raw(
@@ -1430,6 +1459,7 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_measured_sample_rate);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mode);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_space);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio_raw);
 	DEVICE_CREATE_FILE(dev, &dev_attr_poll_dio);
