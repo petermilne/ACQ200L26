@@ -1273,4 +1273,10 @@ static inline int field_shift(u32 field)
 	}
 	return lsh;
 }
+
+#define ES_FOUND	1
+
+extern int search_for_epos_in_tblock(
+	struct Phase* phase, unsigned isearch, int max_dma_blocks);
+
 #endif /* ACQ200_FIFO_H__ */

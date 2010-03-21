@@ -2671,9 +2671,9 @@ int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast)
 /*
  * identify event start, and fast forward to it
  */
-	for (isL = istart; isL < max_search; isL += ES_LONGS){
+	for (isL = istart; isL < max_search; isL += ES_LONGS_STRIDE){
 
-		dbg((INTERESTING? 1: 4),
+		dbg((INTERESTING? 3: 4),
 		    "%4d:off %08x max %08x d:%08x %s",
 		    iter, isL*4, max_search*4, searchp[isL], 
 		    IS_EVENT_MAGIC(searchp[isL])? "MAGIC": "");
@@ -2884,6 +2884,8 @@ int search_for_epos_in_tblock(
 	unsigned ilast;
 	struct Phase *prev_phase = PREV_PHASE(phase);
 
+	dbg(1, "isearch:%08x maxblocks:%d", isearch, max_dma_blocks);
+
 	for (dma_block = 0; dma_block != max_dma_blocks; ++dma_block){
 		if (FIND_EVENT(phase, &isearch, &ilast)){
 
@@ -2915,7 +2917,9 @@ int search_for_epos_in_tblock(
 #define MAX_SEARCH (8)
 #define FIRST_TBLE(p) TBLE_LIST_ENTRY(&(p)->tblocks)
 
-void search_epos(struct Phase* phase, int search_metric)
+int search_epos(
+	struct Phase* phase, int search_metric, int quicksearch)
+#define FOUND 1
 {
 	unsigned isearch = phase->start_off;
 	unsigned max_block = abs(search_metric)*MAX_SEARCH;
@@ -2938,8 +2942,11 @@ void search_epos(struct Phase* phase, int search_metric)
 
 	if (search_for_epos_in_tblock(phase, isearch, MAX_BLOCKS) == 0){
 		dbg(1, "SUCCESS in initial tblock");
-		return;
+		return FOUND;
 	}else if (rem_blocks == 0){
+		if (quicksearch){
+			return !FOUND;
+		}
 		err("FAILED to find epos in tblock 0, over %d bytes consider "
 		    "increasing epos search bounds", MAX_BLOCKS*DMA_BLOCK_LEN);
 	}else if (isearch > 0){
@@ -2950,7 +2957,7 @@ void search_epos(struct Phase* phase, int search_metric)
 			if (search_for_epos_in_tblock(
 				    phase, isearch, rem_blocks) == 0){
 				info("SUCCESS in tb[1]");
-				return;
+				return FOUND;
 			}else{
 				err("EPOS search Failed in tb[1]");
 			}
@@ -2969,7 +2976,7 @@ void search_epos(struct Phase* phase, int search_metric)
 					    tle->tblock->tb_length - rem_blocks,
 					    rem_blocks) == 0){
 					info("SUCCESS in tb[-1]");
-					return;
+					return FOUND;
 				}else{
 					err("EPOS search failed in tb[-1]");
 				}
@@ -2984,7 +2991,7 @@ void search_epos(struct Phase* phase, int search_metric)
 	err("event not found in %d bytes", DMA_BLOCK_LEN*MAX_SEARCH);
 	
 	dbg(1, "99");
-
+	return !FOUND;
 #undef MAX_BLOCKS
 }
 

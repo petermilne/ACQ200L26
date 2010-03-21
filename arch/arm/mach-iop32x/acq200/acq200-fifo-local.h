@@ -152,6 +152,13 @@ static inline int acq164_event_magic_exempt(int ipair)
 #define ES_LONGS	(ES_SIZE/sizeof(unsigned))
 #define SAMPLE_LONGS	(sample_size()/sizeof(unsigned))
 
+#ifdef ACQ164
+/* ACQ164 ES has hole in it ..*/
+#define ES_LONGS_STRIDE		(ES_LONGS/4)
+#else
+#define ES_LONGS_STRIDE		ES_LONGS
+#endif
+
 #define IS_EVENT_MAGIC(x) (((x)&~EVENT_MAGIC_MASK) == EVENT_MAGIC)
 
 int acq200_rounding(int khz, int precision);
