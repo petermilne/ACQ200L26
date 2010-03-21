@@ -124,6 +124,12 @@ int disable_acq_debug = 0;         /* set 1 */
 module_param(disable_acq_debug, int, 0664);
 
 
+int ESTOP_DIx = 5;
+module_param(ESTOP_DIx, int, 0644);
+
+int ESTOP_DIx_HIGH = 0;
+module_param(ESTOP_DIx_HIGH, int, 0644);
+
 #define CHANNEL_MASK (CAPDEF->channel_mask)
 
 #define Descriptor struct iop321_dma_desc
@@ -166,6 +172,10 @@ struct Globs {
 	u32 fifo_th;
 	u32 trig_mask;
 	u32 trig_quit;
+
+	u32 estop_mask;
+	u32 estop_quit;
+
 	int yield;
 	unsigned long max_cycles;      /** stop here if non zero */
 	unsigned soft_trigger;         /** soft trigger if set */
@@ -178,6 +188,7 @@ static struct Stats {
 	int data_pollcat;
 	int dma_arms;
 	int dma_pollcat;
+	const char* stop_reason;
 } ds;
 
 
@@ -550,11 +561,8 @@ static NZE arm(void)
 	*ACQ200_ICR = 0;              /* polling only */
 	disable_fifo();
 	reset_fifo();
-	enable_fifo(CHANNEL_MASK);
-	acq196_syscon_set_all(ACQ196_SYSCON_LOWLAT);
-/** @@todo should not be necessary, but worth a shot */
-	*ACQ196_CLKCON |= ACQ196_CLKCON_LLSYNC;      
 	set_fifo_ne_mask(CHANNEL_MASK);
+	enable_fifo(CHANNEL_MASK);
 
 	dg.imask |= ALL_DMACSTA_INTS;
 	llc_intsDisable();
@@ -562,6 +570,12 @@ static NZE arm(void)
 	dg.trig_mask = 1<<CAPDEF->trig->DIx;
 	dg.trig_quit = CAPDEF->trig->rising? 0: dg.trig_mask;
 
+	if (ESTOP_DIx){
+		dg.estop_mask = 1<<ESTOP_DIx;
+		dg.estop_quit = ESTOP_DIx_HIGH? dg.estop_mask: 0;
+	}else{
+		dg.estop_mask = 0;
+	}
 	activateSignal(CAPDEF->trig);
 	enable_acq();
 
@@ -576,6 +590,12 @@ static inline NZE waitForTrigger(void)
 /** wait for trigger. */
 {
 	while(YIELDER){
+		u32 dix = *ACQ200_DIOCON;
+		if ((dix&dg.estop_mask) == dg.estop_quit){
+		        ds.stop_reason = "ESTOP before trigger";
+			dbg(1, "estop");
+			return 1;
+		}		
 		if ((*ACQ196_SYSCON_ADC&ACQ196_SYSCON_TRIGGERED) != 0){
 			return 0;
 		}else if (dg.please_stop){
@@ -589,13 +609,20 @@ static inline NZE shouldStop(void)
 {
 	u32 dix = *ACQ200_DIOCON;
 
-	if ((dix&dg.trig_mask) == dg.trig_quit){
+	if ((dix&dg.estop_mask) == dg.estop_quit){
+		ds.stop_reason = "ESTOP";
+		dbg(1, "estop");
+		return 1;
+	}else if ((dix&dg.trig_mask) == dg.trig_quit){
+		ds.stop_reason = "TRIG_QUIT";
 		dbg(1, "trig_quit");
 		return 1;
 	}else if (dg.please_stop){
+		ds.stop_reason = "please_stop";
 		dbg(1, "please_stop");
 		return 1;
 	}else if (dg.max_cycles != 0 && ds.cycle >= dg.max_cycles){
+		ds.stop_reason = "reached cycle count";
 		dbg(1, "reached cycle count");
 		return 1;
 	}else{
@@ -899,6 +926,9 @@ static ssize_t show_stats(
 	if (ds.dma_arms){
 		len += sprintf(buf + len, "%20s : %d\n", "dma_polls/arm", 
 		       ds.dma_pollcat/ds.dma_arms);
+	}
+	if (ds.stop_reason){
+		len += GLPRINT(stop_reason, "%s");
 	}
 	
         return len;
