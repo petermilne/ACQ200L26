@@ -47,6 +47,9 @@ module_param(histo_clear_on_read, int, 0600);
 int histo_log2_scaling = 0;
 module_param(histo_log2_scaling, int, 0644);
 
+int exhaustive_event_search = 0;
+module_param(exhaustive_event_search, int, 0644);
+
 #define GTSR_COUNT_US  50
 #define GTSR_TCOUNT_US ((0x1000000/GTSR_COUNT_US)*0x100)
 
@@ -1934,8 +1937,7 @@ static DRIVER_ATTR(transformer_bs,S_IRUGO | S_IWUGO,
 #if !defined(WAV232)
 
 
-extern void search_epos(
-	struct Phase* phase, int search_metric);
+extern int search_epos(struct Phase* phase, int search_metric, int quicksearch);
 
 
 
@@ -1954,7 +1956,28 @@ static void make_phase_backup(struct Phase* phase)
 }
 
 
-static void find_epos(int search_metric)
+static int makeFullSearch(struct Phase* phase)
+/* just rip through all the tblocks, all the samples. FIND the ES! */
+{
+	struct TblockListElement* tle;
+	int tbnum = 0;
+	list_for_each_entry(tle, &phase->tblocks, list){
+		struct TBLOCK* tblock = tle->tblock;
+
+		int isearch = tblock->offset;
+		int max_blocks = tblock->tb_length/DMA_BLOCK_LEN;
+
+		tbnum += 1;
+
+		if (search_for_epos_in_tblock(phase, isearch, max_blocks) == 0){
+			dbg(1, "SUCCESS in tblock #%d", tbnum);
+			return ES_FOUND;			
+		}
+	}
+}
+
+
+static void find_epos(int  slen /* search_metric */)
 {
 /* ident old phase (only works for ONE WORKTODO) */
 
@@ -1966,7 +1989,15 @@ static void find_epos(int search_metric)
 
 			if (PREV_PHASE(phase) != phase){
 				make_phase_backup(PREV_PHASE(phase));
-				search_epos(phase, search_metric);
+				if (!exhaustive_event_search){
+					search_epos(phase,  slen, 0);
+				}else{
+					if (search_epos(phase, slen, 1)){
+						return;
+					}else{			
+						makeFullSearch(phase);
+					}
+				}
 			}
 		}
 	}
@@ -3823,11 +3854,26 @@ static int acq200_proc_dumpES(
 	}
 }
 
+static int acq200_proc_dumpCAPDEF(
+	char *buf, char **start, off_t offset, int len,
+                int* eof, void* data )
+{
+	*eof = 1;
+
+	if (offset == 0 && len >= sizeof(struct CAPDEF)){
+		memcpy(buf, CAPDEF, sizeof(struct CAPDEF));
+		return sizeof(struct CAPDEF);
+	}else{
+		return 0;
+	}
+}
+
 void create_proc_entries(void)
 {
 #define CPRE( name, func ) \
         create_proc_read_entry( name, 0, proc_acq200, func, 0 )
 	CPRE("dump_ES",    acq200_proc_dumpES);
+	CPRE("dump_CAPDEF", acq200_proc_dumpCAPDEF);
 #ifndef ACQ132
 	CPRE("dump_regs",  acq200_proc_dumpregs);
 #endif
