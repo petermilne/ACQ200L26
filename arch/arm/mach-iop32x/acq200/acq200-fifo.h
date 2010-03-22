@@ -670,6 +670,8 @@ struct DevGlobs {
 #define PA_TBLOCK(tblock) (pa_buf(DG) + (tblock)->offset)
 #define MAX_TBLOCK (DG->bigbuf.tblocks.nblocks)
 
+#define GET_TBLOCK(iblock)	(&DG->bigbuf.tblocks.the_tblocks[iblock])
+
 struct CAPDEF_PRIVATE;  /* opaque store used by subclass */
 
 #define ACQ196_AO_HISTO cold_fifo_histo

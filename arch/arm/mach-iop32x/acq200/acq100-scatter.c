@@ -54,6 +54,11 @@
  * Build chains by writing to build_list
  * Then run the shot by writing to run.
  * The shot starts on activation of trigger, and ends on deactivation.
+
+ * in ACCUMULATE mode:
+ * store 
+ * dest1 - accumulator
+ * dest2 ... regular remote destinations
  */
 
 
@@ -130,6 +135,9 @@ module_param(ESTOP_DIx, int, 0644);
 int ESTOP_DIx_HIGH = 0;
 module_param(ESTOP_DIx_HIGH, int, 0644);
 
+int ACCUMULATE = 0;
+module_param(ACCUMULATE, int, 0644);
+
 #define CHANNEL_MASK (CAPDEF->channel_mask)
 
 #define Descriptor struct iop321_dma_desc
@@ -179,6 +187,9 @@ struct Globs {
 	int yield;
 	unsigned long max_cycles;      /** stop here if non zero */
 	unsigned soft_trigger;         /** soft trigger if set */
+
+	struct pci_mapping fifo_incoming;
+	struct pci_mapping accumulator;
 };
 
 static struct Stats {
@@ -203,7 +214,30 @@ static struct Globs dg;
 
 #define GET_BBPA(idx) (pa_buf(DG) + (idx)*SAMPLE_SIZE)
 
+#define FULL_LEN	(96*sizeof(int))
 
+void accumulate(void)
+/* here is the "math". This could be extended .. */
+/* output data will be valid for 32 bit data only, but on 16 bit
+ * it will show timing
+ */
+{
+	int ic;
+	int* acc = (int*)dg.accumulator.va;
+	int* data = (int*)dg.fifo_incoming.va;
+
+	dma_sync_single_for_cpu(
+		DG->dev, dg.fifo_incoming.pa, FULL_LEN, DMA_FROM_DEVICE);
+
+	dbg(1, "acc %p += data %p", acc, data);
+
+	for (ic = 0; ic < 96; ++ic){
+		acc[ic] += data[ic];
+	}
+
+	dma_sync_single_for_device(DG->dev, 
+			dg.accumulator.pa, FULL_LEN, DMA_TO_DEVICE);
+}
 int llc_intsDisable(void)
 {
 	MASK_ITERATOR_INIT(it, dg.imask);
@@ -280,7 +314,13 @@ static Descriptor* buildDescriptorMem2Pci(struct Destination* this, int idx)
 			desc->NDA = 0;
 			desc->PDA = this->base_pa + remote_offset;
 			desc->PUAD = 0;
-			desc->LAD = GET_BBPA(idx - blockoff);
+			if (ACCUMULATE){
+				dbg(1, "ACCUMULATE desc->LAD %08x",
+				    dg.accumulator.pa);
+				desc->LAD = dg.accumulator.pa;
+			}else{
+				desc->LAD = GET_BBPA(idx - blockoff);
+			}
 			desc->BC = this->block_len * SAMPLE_SIZE;
 			desc->DC = DMA_DCR_PCI_MW;
 			desc->NDA = 0;
@@ -303,7 +343,13 @@ static Descriptor* buildDescriptorPbi2Mem(struct Destination* this, int idx)
 			desc->NDA = 0;
 			desc->PDA = this->base_pa;
 			desc->PUAD = 0;
-			desc->LAD = GET_BBPA(idx - (this->block_len-1));
+			if (ACCUMULATE){
+				desc->LAD = dg.fifo_incoming.pa;
+				dbg(1, "ACCUMULATE LAD %08x", 
+						dg.fifo_incoming.pa);
+			}else{
+				desc->LAD = GET_BBPA(idx - (this->block_len-1));
+			}
 			desc->BC = this->block_len * SAMPLE_SIZE;
 			desc->DC = DMA_DCR_MEM2MEM|IOP321_DCR_IE;
 		}else{
@@ -416,6 +462,27 @@ static void allocElementsTable(int epc){
 	}
 }
 
+void init_accumulate_globals(void)
+{
+	dbg(1, "10");	
+	if (dg.accumulator.va == 0){
+		dg.fifo_incoming.va = VA_TBLOCK(GET_TBLOCK(0));
+		dg.fifo_incoming.pa = dma_map_single(
+			DG->dev, dg.fifo_incoming.va,FULL_LEN,DMA_FROM_DEVICE);
+		dg.fifo_incoming.len = FULL_LEN;
+
+		dg.accumulator.va = VA_TBLOCK(GET_TBLOCK(1));		
+		dg.accumulator.pa = dma_map_single(
+			DG->dev, dg.accumulator.va, FULL_LEN, DMA_TO_DEVICE);
+		dg.accumulator.len = FULL_LEN;
+
+
+		dbg(1, "acc %p 0x%08x  fifo_incoming %p %08x",
+			dg.accumulator.va, dg.accumulator.pa,
+			dg.fifo_incoming.va, dg.fifo_incoming.pa);
+	}
+}
+
 static void freeElementsTable(void)
 {
 	kfree(dg.elements);
@@ -476,6 +543,25 @@ static void make_chain(struct list_head* head)
 			cursor->descriptor->NDA = next->descriptor->pa;
 		}
 	}
+
+	if (ACCUMULATE){
+		/* break the chain. SW will start twice */
+		struct DescriptorListElement *head2;
+		Descriptor *desc = 
+			list_entry(head->next, struct DescriptorListElement, 
+							    list)->descriptor;
+		desc->NDA = 0;
+		desc->DC |= IOP321_DCR_IE;
+
+		head2 = list_entry(head->next->next, 
+				   struct DescriptorListElement, list);
+
+		if (!head2){
+			err("no second descriptor");
+		}else{
+			head2->descriptor->DC |= IOP321_DCR_IE;
+		}
+	}
 }
 
 static void build_lists(void)
@@ -485,6 +571,9 @@ static void build_lists(void)
 	int idest;
 	struct Destination* source = &dg.destinations[0];
 
+	if (ACCUMULATE){
+		init_accumulate_globals();
+	}
 	for (entry = 0; entry != dg.entries_per_cycle; ++entry){
 		struct list_head* head = &dg.elements[entry];
 		struct DescriptorListElement* first = poolAlloc();
@@ -533,7 +622,6 @@ static inline NZE dmaTee(struct DmaChannel* channel, struct list_head* head)
 		return 0;
 	}
 }
-
 
 
 #define AIFIFO_NOT_EMPTY(fifstat)     (((fifstat)&ACQ196_FIFSTAT_HOT_NE) != 0)
@@ -647,8 +735,7 @@ static inline NZE waitForData(void)
 			return -1;
 		}else if (AIFIFO_NOT_EMPTY(fifstat) && AIFIFO_OVERTH(fifstat)){
 			return 0;
-		}else if (dg.please_stop){
-			dbg(1, "please_stop");
+		}else if (shouldStop()){
 			return 1;
 		}		
 	}
@@ -668,6 +755,8 @@ static inline NZE waitForEOT(struct DmaChannel* channel)
 		++ds.dma_pollcat;
 		if (dma_stat&IOP321_CSR_ERR){
 			return -1;
+		}else if (shouldStop()){
+			return 1;
 		}
 	} while((dma_stat&DMA_EOT) == 0);
 
@@ -740,6 +829,101 @@ static void run_shot(void)
 			if (waitForEOT(active_channel)){
 				EXIT_LOOP(5);
 			}
+
+			DG->stats.hot_fifo_histo2[*ACQ196_FIFSTAT&0x0f]++;
+		}
+	}
+	
+	loop_done:
+	stop();
+	SET_STATE(-rc);
+}
+
+
+
+static int init_accumulate(void)
+{
+	if (dg.accumulator.va != 0){
+		memset(dg.accumulator.va, 0, FULL_LEN);
+		return 0;
+	}else{
+		return 1;
+	}
+}
+
+static void run_shot_accumulate(void)
+/** runs the capture.
+ */
+{
+	int rc = 0;
+#define EXIT_LOOP(n)  do {rc = n; goto loop_done; } while(0)
+	DEFINE_DMA_CHANNEL(c0, 0);
+	DEFINE_DMA_CHANNEL(c1, 1);
+
+	struct DmaChannel* channels[] = { &c0, &c1 };
+	int entry;
+	int triggered = 0;
+	struct DmaChannel* active_channel;
+
+	memset(&ds, 0, sizeof(ds));
+	memset(&DG->stats, 0, sizeof(DG->stats));
+
+	if (init_accumulate()){
+		EXIT_LOOP(100);
+	}
+
+	for (ds.cycle = 0; ; ds.cycle++){
+		for (entry = 0; entry < dg.entries_per_cycle; ++entry){
+			ds.entry = entry;
+			active_channel = channels[entry&1];
+			if (dmaTee(active_channel, &dg.elements[entry])){
+				EXIT_LOOP(1);
+			}
+
+			if (!triggered){
+				arm();
+				SET_STATE(ST_ARM);
+				if (waitForTrigger()){
+					EXIT_LOOP(2);
+				}else{
+					SET_STATE(ST_RUN);
+					triggered = 1;
+				}
+			}else{
+				if (shouldStop()){
+					EXIT_LOOP(ST_IDLE);
+				}
+			}
+			if (waitForData()){
+				EXIT_LOOP(4);
+			}
+
+			DG->stats.hot_fifo_histo[*ACQ196_FIFSTAT&0x0f]++;
+
+			if (DMA_STA(*active_channel)&DMA_EOT){
+				err("DMA_STA not clear 0x%08x", 
+				    DMA_STA(*active_channel));
+			}
+			++ds.dma_arms;
+			DMA_FIRE(*active_channel);
+
+			if (waitForEOT(active_channel)){
+				EXIT_LOOP(5);
+			}
+
+			accumulate();
+
+			if (dmaTee(active_channel, dg.elements[entry].next)){
+				EXIT_LOOP(6);
+			}
+
+			++ds.dma_arms;
+			DMA_FIRE(*active_channel);
+
+			if (waitForEOT(active_channel)){
+				EXIT_LOOP(7);
+			}
+
 
 			DG->stats.hot_fifo_histo2[*ACQ196_FIFSTAT&0x0f]++;
 		}
@@ -952,7 +1136,11 @@ static ssize_t store_run(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	run_shot();
+	if (ACCUMULATE){
+		run_shot_accumulate();
+	}else{
+		run_shot();
+	}
 	return strlen(buf);
 }
 static DEVICE_ATTR(run, S_IRUGO|S_IWUGO,  show_run, store_run);
@@ -1034,8 +1222,6 @@ static ssize_t store_fifo_th(
 	return strlen(buf);
 }
 static DEVICE_ATTR(fifo_th, S_IRUGO|S_IWUGO,  show_fifo_th, store_fifo_th);
-
-
 
 
 static ssize_t set_scatter_mask(
