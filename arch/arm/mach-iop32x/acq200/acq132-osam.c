@@ -78,6 +78,9 @@ void acq132_set_osam_nacc(
 {
 	u32 osam = *ACQ132_ADC_OSAM(dev);				
 	u32 osam1 = osam;						
+
+	nacc = max(1, nacc); nacc = min(nacc, 16);
+
 	osam = acq132_adc_set_osam(osam, ACQ132_ADC_OSAM_R_NACC+lr, nacc);
 	osam = acq132_adc_set_shift(osam, ACQ132_ADC_OSAM_R_SHIFT+lr, shift);
 	if (decimate){
