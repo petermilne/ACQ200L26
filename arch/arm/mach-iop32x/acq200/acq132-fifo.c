@@ -330,7 +330,7 @@ int acq132_set_best_decimation(int khz, int *khz_clock, int *decim)
 		(khz <= 1000)? 8 :      /* SCLK < 1M * 8 < 10MHz Good! */
 		(khz <= 2000)? 4 :	/* SCLK < 2M * 4 < 10MHz Good! */
 		(khz <= 3000)? 3 :	/* SCLK < 3M * 3 < 10MHz Good! */
-		(khz <= 4000)? 2 :	/* SCLK < 4M * 2 < 10MHz Good! */
+		(khz <  4000)? 2 :	/* SCLK < 4M * 2 < 10MHz Good! */
 		1;			/* SCLK = kHZ		       */
 
 	acq132_setAllDecimate(_decim);		
