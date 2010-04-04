@@ -887,10 +887,10 @@ static struct CAPDEF* acq196_createCapdef(void)
 	capdef->mas_clk->is_output = 1;
 
 	capdef->sync_trig_src = createSignal(
-		"sync_trig_src", 3, 5, 3, 0, 0, acq196_commitSyncTrigSrc);
+		"sync_trig_src", 0, 5, 3, 0, 0, acq196_commitSyncTrigSrc);
 
 	capdef->sync_trig_mas = createSignal(
-		"sync_trig_mas", 3, 5, 3, 0, 0, acq196_commitMasSyncTrig);
+		"sync_trig_mas", 0, 5, 3, 0, 0, acq196_commitMasSyncTrig);
 	capdef->sync_trig_mas->is_output = 1;
 
 	capdef->counter_src = createSignal("counter_src", 0, 6, 6,0, 1, 
