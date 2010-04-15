@@ -555,7 +555,7 @@ static void enable_acq164_start(void)
 
 
 	DBGSF("FINAL:next enable FIFCON");
-	enable_fifo();
+	enable_fifo(CAPDEF->channel_mask);
 
 	preEnable();
 

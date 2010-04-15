@@ -217,9 +217,12 @@ static inline u32 acq164_syscon_dac_clr(u32 flags){
 	return *ACQ100_SYSCON_DAC &= ~flags;
 }
 
-static inline void enable_fifo(void)
+static inline void enable_fifo(unsigned mask)
 {
-	acq164_fifcon_set(ACQ164_FIFCON_ADCX_ENABLE);	
+	unsigned ebits = 
+		((mask&0x1)? ACQ164_FIFCON_ADC1_ENABLE: 0)|
+		((mask&0x2)? ACQ164_FIFCON_ADC2_ENABLE: 0);
+	acq164_fifcon_set(ebits);	
 }
 static inline void disable_fifo(void)
 {
