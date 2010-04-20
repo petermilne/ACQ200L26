@@ -65,8 +65,7 @@
 
 
 #define ACQ164_FIFCON_ADCX_ENABLE \
-	(ACQ164_FIFCON_ADC2_ENABLE|ACQ164_FIFCON_ADC1_ENABLE|\
-	ACQ164_FIFCON_HOT_IE|ACQ164_FIFCON_HOT_ENABLE)
+	(ACQ164_FIFCON_HOT_IE|ACQ164_FIFCON_HOT_ENABLE)
 #define ACQ164_FIFCON_ADCX_RESET \
 	(ACQ164_FIFCON_ADC2_RESET|ACQ164_FIFCON_ADC1_RESET|\
 	ACQ164_FIFCON_HOT_RESET)
@@ -219,10 +218,10 @@ static inline u32 acq164_syscon_dac_clr(u32 flags){
 
 static inline void enable_fifo(unsigned mask)
 {
-	unsigned ebits = 
+	unsigned mask_bits = 
 		((mask&0x1)? ACQ164_FIFCON_ADC1_ENABLE: 0)|
 		((mask&0x2)? ACQ164_FIFCON_ADC2_ENABLE: 0);
-	acq164_fifcon_set(ebits);	
+	acq164_fifcon_set(ACQ164_FIFCON_ADCX_ENABLE|mask_bits);	
 }
 static inline void disable_fifo(void)
 {
