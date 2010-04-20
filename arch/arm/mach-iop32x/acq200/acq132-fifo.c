@@ -475,7 +475,9 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 		dbg(1, "M_TRIGGERED_CONTINUOUS");
 
 		deactivateSignal(capdef->gate_src);
-		activateSignal(capdef->ev[0]);
+		if (DG->activate_event_on_arm){
+			activateSignal(capdef->ev[0]);
+		}
 		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
 			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);	
 		break;
