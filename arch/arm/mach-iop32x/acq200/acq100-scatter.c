@@ -235,8 +235,11 @@ void accumulate(void)
 		acc[ic] += data[ic];
 	}
 
+/** copy raw data append to end of cooked data */
+	memcpy(&acc[ic], data, 96*2);
+
 	dma_sync_single_for_device(DG->dev, 
-			dg.accumulator.pa, FULL_LEN, DMA_TO_DEVICE);
+			dg.accumulator.pa, FULL_LEN*2, DMA_TO_DEVICE);
 }
 int llc_intsDisable(void)
 {
@@ -284,6 +287,9 @@ static char* descriptor_to_string(Descriptor* d, char buf[])
 
 static int shouldBuild(struct Destination* this, int idx)
 {
+	if (ACCUMULATE){
+		return 1;
+	}
 	if (this->block_len == 1){
 		if (this->interval == 1){
 			return 1;
