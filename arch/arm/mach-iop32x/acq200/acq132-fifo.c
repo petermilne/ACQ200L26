@@ -487,9 +487,10 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 
 		if (acq132_is_DR()){
 			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
-			activateSignal(capdef->ev[0]);
+			activateSignal(capdef->gate_src);
 			acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
-						ACQ132_ADC_CTRL_PREPOST);
+						ACQ132_ADC_CTRL_PREPOST|
+						ACQ132_ADC_CTRL_SIGEN);
 			break;
 		}
 
