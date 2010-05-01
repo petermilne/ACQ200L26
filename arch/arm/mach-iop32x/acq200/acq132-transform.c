@@ -430,13 +430,14 @@ static int already_known(unsigned ts)
 	we're assuming that timestamps are always increasing ...
 */
 {
+#ifdef PGMCOMOUT  /* makes no sense for DR ES */
 	if (g_esm.es_cursor != g_esm.es_base){
 		unsigned tsm1 = g_esm.es_cursor[-1].ts;
 		dbg(3, "ts:%10u tsm1:%10u %s", ts, tsm1,
 		    ts <= tsm1? "YES": "NO - this is new");
 		return ts <= tsm1;
 	}
-
+#endif
 	return 0;
 }
 
