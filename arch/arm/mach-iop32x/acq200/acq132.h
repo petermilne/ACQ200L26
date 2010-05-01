@@ -159,7 +159,7 @@
 #define ACQ132_ADC_CTRL_CMASK	0x00f000f0
 
 #define ACQ132_ADC_CTRL_FIFORES 0x00080008
-#define ACQ132_ADC_CTRL_PREPOST 0x00040004
+#define ACQ132_ADC_CTRL_PREPOST 0x00040004    /* PREPOST:"continuous capture" */
 #define ACQ132_ADC_CTRL_SIGEN	0x00020002    /* EventSig (Timestamp) Enable) */
 #define ACQ132_ADC_CTRL_ACQEN	0x00010001
 
@@ -453,7 +453,7 @@ const char* acq132_getChannelSpeedMask(void);
  * GATE_MAGIC is  0xaa55aa55aa55aa55
  */
 
-#define ACQ132_ES_DATA_MASK 0x07c0
+#define ACQ132_ES_DATA_MASK 0x0fc0
 #define ACQ132_ES_COLD_SAMPLES(es) (((es)&ACQ132_ES_DATA_MASK)>>6)
 
 extern int get_acq132_decim(void);
