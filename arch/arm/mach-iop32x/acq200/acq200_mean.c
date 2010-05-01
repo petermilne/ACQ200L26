@@ -55,10 +55,12 @@
  * cskip = 20000 / 10 / 16 = 125
  */
 
+#define LOG2_MEAN_DEF	4
+
 int acq200_mean_debug;
 module_param(acq200_mean_debug, int, 0664);
 
-int log2_mean = 4;
+int log2_mean = LOG2_MEAN_DEF;
 module_param(log2_mean, int, 0664);
 
 #define nmean (1<<log2_mean)
@@ -85,8 +87,19 @@ module_param(xxs_waiting, int, 0644);
 int xxs_nowaiting;
 module_param(xxs_nowaiting, int, 0644);
 
+int acq164_shr = 8;
+module_param(acq164_shr, int, 0444);
+/**< shift right (shr) for ACQ164 data - module_param makes it visible. */
+
+int out_shr = LOG2_MEAN_DEF;
+module_param(out_shr, int, 0444);
+/*** shift right (shr) for computing output value - nominal log2_mean */
+
+#define B24_IDEAL_SHR	8
+#define B24_MAX_SHR	16
+
 #define TD_SZ (sizeof(struct tree_descr))
-#define MY_FILES_SZ(numchan) ((1+(numchan)+1+3+1)*TD_SZ)
+#define MY_FILES_SZ(numchan) ((1+(numchan)+1+5+1)*TD_SZ)
 
 #define MEANFS_MAGIC 0xbea02005
 #define TMPSIZE 20
@@ -190,7 +203,7 @@ static void sum_up_acq164(void *data)
 	dma_map_single(DG->dev, data, app_state.sample_size, DMA_FROM_DEVICE);
 
 	for (ic = 0; ic != app_state.nchannels; ++ic){
-		work_state.the_sums[ic] += channels[ic] >> 8;
+		work_state.the_sums[ic] += channels[ic] >> acq164_shr;
 	}	
 }
 
@@ -294,10 +307,20 @@ static void start_work(void)
 {
 	dbg(1, "01");
 	work_state.iskip = work_state.imean = 0;
+
+	out_shr = log2_mean;
+
 	if (DG->btype == BTYPE_ACQ164){
 		sum_up = sum_up_acq164;
-		if (log2_mean > 7){
-			log2_mean = 7;	/* prevent overflow */
+		/** prevent overflow by limiting log2_mean, and discarding
+		 * LSB's. Do not discard too many LSB's ! 
+		 */
+		if (log2_mean > B24_IDEAL_SHR){
+			acq164_shr = min(log2_mean, B24_MAX_SHR);
+			log2_mean = acq164_shr;
+			out_shr = log2_mean - (acq164_shr - B24_IDEAL_SHR);
+		}else{
+			acq164_shr = B24_IDEAL_SHR;
 		}
 	}else{
 		sum_up = sum_up_s16;
@@ -320,7 +343,7 @@ static int getMean(int lchan)
 	int mean;
 
 	spin_lock(&app_state.lock);
-	mean = app_state.the_sums[pchan] >> log2_mean;
+	mean = app_state.the_sums[pchan] >> out_shr;
 	spin_unlock(&app_state.lock);
 	return mean;
 }
@@ -648,6 +671,71 @@ static ssize_t enable_write(
 
 
 
+
+static ssize_t parameter_mean_read(
+	struct file *filp, char *buf, size_t count, loff_t *offset,
+	int pram)
+{
+	if (*offset != 0){
+		return 0;
+	}else{
+		char str[16];
+		int nchars = snprintf(str, sizeof(str)-1, "%d\n", pram);
+		COPY_TO_USER(buf, str, nchars);
+		*offset	+= nchars;
+		return nchars;
+	}
+}
+
+static ssize_t parameter_mean_write(
+	struct file *filp, const char *buf, size_t count, loff_t *offset,
+	int* pram, int pmin, int pmax)
+{
+	char lbuf[16];
+	int _pram;
+	
+	COPY_FROM_USER(lbuf, buf, min(count, sizeof(lbuf)));
+	if (sscanf(lbuf, "%d", &_pram) == 1 && _pram >= pmin && _pram < pmax){
+		if (enable){
+			stop_work();
+		}
+		*pram = _pram;
+		if (enable){
+			start_work();
+		}
+	}
+	return count;
+}
+
+
+static ssize_t log2_mean_read(
+	struct file *filp, char *buf, size_t count, loff_t *offset)
+{
+	return parameter_mean_read(filp, buf, count, offset, log2_mean);
+}
+static ssize_t log2_mean_write(
+	struct file *filp, const char *buf, size_t count, loff_t *offset)
+{
+	return parameter_mean_write(filp, buf, count, offset, 
+				    &log2_mean, 0, 15);
+}
+
+static ssize_t skip_mean_read(
+	struct file *filp, char *buf, size_t count, loff_t *offset)
+{
+	return parameter_mean_read(filp, buf, count, offset, skip);
+}
+
+static ssize_t skip_mean_write(
+	struct file *filp, const char *buf, size_t count, loff_t *offset)
+{
+	return parameter_mean_write(filp, buf, count, offset, 
+				    &skip, 0, 32000);
+}
+
+
+
+
 static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	static struct file_operations chops = {
@@ -668,6 +756,14 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 	static struct file_operations enops = {
 		.write = enable_write,
 		.read = enable_read
+	};
+	static struct file_operations log2_mean_ops = {
+		.write = log2_mean_write,
+		.read = log2_mean_read
+	};	
+	static struct file_operations skip_ops = {
+		.write = skip_mean_write,
+		.read = skip_mean_read
 	};
 	static struct tree_descr front = {
 		NULL, NULL, 0
@@ -697,6 +793,8 @@ static int meanfs_fill_super(struct super_block *sb, void *data, int silent)
 	ADDFILE("XX",		&xxops,		S_IRUGO);
 	ADDFILE("XXS",		&stream_ops,	S_IRUGO);
 	ADDFILE("enable",	&enops,		S_IRUGO|S_IWUGO);
+	ADDFILE("log2_mean",    &log2_mean_ops, S_IRUGO|S_IWUGO);
+	ADDFILE("skip",		&skip_ops,      S_IRUGO|S_IWUGO);
 
 	memcpy(&my_files[fn], &backstop, TD_SZ);
 
