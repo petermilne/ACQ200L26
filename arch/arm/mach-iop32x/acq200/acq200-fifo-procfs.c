@@ -360,7 +360,11 @@ static ssize_t store_sample_read_ssl(
 
 		if (sscanf(buf, "%u %u %u", &start, &stride, &length) == 3){
 			DG->sample_read_start = start;
-			DG->sample_read_stride = stride;
+			if (stride > 0){
+				DG->sample_read_stride = stride;
+			}else{
+				DG->sample_read_stride = 1;
+			}
 			DG->sample_read_length = length;
 		}
 	}
@@ -561,7 +565,7 @@ static ssize_t store_sample_read_stride(
 {
 	sscanf(buf, "%u", &DG->sample_read_stride);
 	if (DG->sample_read_stride < 1){
-		DG->sample_read_stride = DG->sample_read_stride;
+		DG->sample_read_stride = 1;
 	}
 	return strlen(buf);
 }
