@@ -73,6 +73,9 @@ module_param(rgm_with_es, int, 0600);
 int use_lo_ics = 1;
 module_param(use_lo_ics, int, 0600);
 
+int DR_with_ES = 0;
+module_param(DR_with_ES, int, 0644);
+
 /* acq132-transform.c */
 extern void acq132_register_transformers(void);
 extern struct file_operations acq132_timebase_ops;
@@ -489,8 +492,8 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
 			activateSignal(capdef->gate_src);
 			acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
-						ACQ132_ADC_CTRL_PREPOST|
-						ACQ132_ADC_CTRL_SIGEN);
+				ACQ132_ADC_CTRL_PREPOST|
+				(DR_with_ES? ACQ132_ADC_CTRL_SIGEN: 0));
 			break;
 		}
 
