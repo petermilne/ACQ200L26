@@ -3596,6 +3596,38 @@ static int acq200_proc_phase_tblocks(
 }
 
 
+static int acq200_proc_phase_tblock_ids(
+	char *buf, char **start, off_t offset, int len,
+                int* eof, void* data )
+{
+#define PRINTF(fmt, args...) len += sprintf(buf+len, fmt, ## args)
+	struct Phase *phase;
+
+	int *touched = kzalloc(MAX_TBLOCK*sizeof(int), GFP_KERNEL);
+
+	len = 0;
+       
+	list_for_each_entry(phase, &DMC_WO->phases, list){
+		if (phase == 0){
+			break;
+		}else{
+			struct TblockListElement* tble;
+			list_for_each_entry(tble, &phase->tblocks, list){
+				int iblock = tble->tblock->iblock;
+
+				if (touched[iblock] == 0){
+					PRINTF("%03d\n", iblock);
+					touched[iblock] = 1;
+				}
+			}
+		}
+	}	
+
+	kfree(touched);
+	return len;
+#undef PRINTF
+}
+
 
 static const char* getStatus(void)
 {
@@ -3905,6 +3937,7 @@ void create_proc_entries(void)
 	CPRE("capdef", acq200_proc_capdef);
 	CPRE("phases", acq200_proc_phases);
 	CPRE("phase_tblocks", acq200_proc_phase_tblocks);
+	CPRE("tblocks_full", acq200_proc_phase_tblock_ids);
 	CPRE("stream_buf", acq200_proc_streambuf);
 	CPRE("dcb", acq200_proc_dcb);
 
@@ -3941,6 +3974,7 @@ void delete_proc_entries(void)
 	RMP("capdef");
 	RMP("phases");
 	RMP("phase_tblocks");
+	RMP("tblocks_full");
 	RMP("dcb");
 	RMP("bda");
 #undef RMP
