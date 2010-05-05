@@ -55,6 +55,7 @@
 #include <linux/swap.h>      /* mark_page_accessed() */
 #endif
 
+#define ID_CHANXX	0
 
 void acq200_initDCI(struct file *file, int lchannel)
 {
@@ -62,7 +63,7 @@ void acq200_initDCI(struct file *file, int lchannel)
 	memset(file->private_data, 0, DCI_SZ);
 
 	DCI(file)->lchan = lchannel;
-	if (lchannel != 0){
+	if (lchannel != ID_CHANXX){
 		DCI(file)->pchan = acq200_lookup_pchan(lchannel);
 		DCI(file)->ssize = CSIZE;
 	}else{
@@ -699,7 +700,8 @@ static ssize_t extractPages(
 /* is this valid? What if tblock not full. Doesn't matter, it's an offset! 
  * OK, but what about the maxbytes line?. surely not quite right?.
  */
-	int bblock_samples = this->tb_length/NCHAN/ssize;
+	int chan_div = channel==ID_CHANXX? 1: NCHAN;
+	int bblock_samples = this->tb_length/chan_div/ssize;
 	short* bblock_base = (short*)(va_buf(DG) + this->offset + 
 						channel*bblock_samples*ssize);
 	int maxbytes = min(maxsam, bblock_samples-offset) * ssize;
@@ -769,7 +771,7 @@ static ssize_t acq200_fifo_bigbuf_mapping_read (
 		return 0;
 	}
 
-	dbg(2, "call initBBRP");
+	dbg(2, "channel:%d ssize:%d stride:%d", channel, ssize, stride);
 	initBBRP(file, desc->count, offset, &bbrp);
 	dbg(2, "return initBBRP");
 /*
@@ -1066,7 +1068,7 @@ static ssize_t fifo_bigbuf_xxX_read (
 int acq200_fifo_bigbuf_xx_open (
 	struct inode *inode, struct file *file)
 {
-	acq200_initDCI(file, 0);
+	acq200_initDCI(file, ID_CHANXX);
 	if (capdef_get_word_size() == sizeof(u32)){
 		DCI(file)->extract = tblock_rawxx_extractor32;
 	}else{
@@ -1263,7 +1265,8 @@ static struct file_operations fifo_bigbuf_xxp_fops = {
 	.read = acq200_fifo_bigbuf_xxp_read,
 	.release = acq200_fifo_bigbuf_xx_release,
 	.mmap		= bigbuf_linear_data_mmap,
-	.sendfile	= bigbuf_linear_data_sendfile
+//	.sendfile	= bigbuf_linear_data_sendfile
+	.sendfile	= fifo_AIfs_file_sendfile
 };
 static struct file_operations fifo_bigbuf_xxl_fops = {
 	.open = acq200_fifo_bigbuf_xxl_open,
@@ -1339,7 +1342,7 @@ static int dma_ch_open (
 static int dma_xx_open (
 	struct inode *inode, struct file *file)
 {
-	acq200_initDCI(file, 0);
+	acq200_initDCI(file, ID_CHANXX);
 	DCI(file)->extract = dma_xx_extractor;
 	return 0;
 }
@@ -1377,7 +1380,7 @@ static ssize_t dma_xxp_read (
 static int dma_tb_open (
 	struct inode *inode, struct file *file)
 {
-	acq200_initDCI(file, 0);
+	acq200_initDCI(file, ID_CHANXX);
 	DCI_TBC(file) = newTBC(DG->bigbuf.tblocks.nblocks - 10);
 	DCI(file)->extract = dma_xx_extractor;
 	return 0;
