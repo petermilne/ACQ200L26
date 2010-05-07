@@ -841,6 +841,7 @@ static void poll_dma_done(void);
 
 #define IS_MFA(p) (((unsigned)p & 0xff000000) == 0)
 
+#define CLV_LEN	(BLOCK_MOD*DMA_BLOCK_LEN)
 
 static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 {
@@ -902,11 +903,7 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 
 		if (wo->dmc_dma_buf_modulus == 0){
 			if (clv != 0){
-				spin_lock(&DG->refillClient.lock);
-				if (DG->refillClient.client != 0){
-					DG->refillClient.client(clv);
-				}
-				spin_unlock(&DG->refillClient.lock);
+				acq200_runRefillClient(clv, CLV_LEN);
 			}
 			clv = BB_PTR(offset);
 		}

@@ -257,37 +257,48 @@ static void run_consumers(u32 *sums, int sumslen)
 
 	spin_unlock(&mc_list.lock);
 }
-static void mean_work(void *data) 
+
+
+static void _mean_work(void *data)
 {
-	if (++work_state.iskip >= skip){
-		sum_up(data);
-		if (++work_state.imean >= nmean){
+	sum_up(data);
+	if (++work_state.imean >= nmean){
 
-			dbg(1, "summing up iter:%d ch01:0x%04x sum:0x%08x",
-				iter, *(short*)data,
-				work_state.the_sums[0]);
+		dbg(1, "summing up iter:%d ch01:0x%04x sum:0x%08x",
+		    iter, *(short*)data,
+		    work_state.the_sums[0]);
+	
+		spin_lock(&app_state.lock);
+		memcpy(app_state.the_sums, work_state.the_sums,SUMSLEN);
+		spin_unlock(&app_state.lock);
 
-			spin_lock(&app_state.lock);
-			memcpy(app_state.the_sums, work_state.the_sums,SUMSLEN);
-			spin_unlock(&app_state.lock);
-			memset(work_state.the_sums, 0, SUMSLEN);
-			work_state.imean = 0;
-			iter++;
-			calculate_interval();
-			run_consumers(app_state.the_sums, SUMSLEN);	
-		}
-		work_state.iskip = 0;
+		memset(work_state.the_sums, 0, SUMSLEN);
+		work_state.imean = 0;
+		iter++;
+		calculate_interval();
+		run_consumers(app_state.the_sums, SUMSLEN);	
 	}
 }
 
+
+
+static void mean_work(void *data, int nbytes) 
+{
+	int ssize = sample_size();
+	int nsamples = nbytes / sample_size();
+
+	while(nsamples--){
+		if (++work_state.iskip >= skip){
+			_mean_work(data);
+			data += ssize;
+			work_state.iskip = 0;
+		}
+	}
+}
+
+
 static struct task_struct *the_worker;
 
-void acq200_setRefillClient(void (*client)(void *pbuf))
-{
-	spin_lock(&DG->refillClient.lock);
-	DG->refillClient.client = mean_work;
-	spin_unlock(&DG->refillClient.lock);
-}
 
 void add_mc(struct MC *mc)
 {
@@ -325,7 +336,7 @@ static void start_work(void)
 	}else{
 		sum_up = sum_up_s16;
 	}
-	acq200_setRefillClient(mean_work);
+	acq200_addRefillClient(mean_work);
 	on_arm();
 
 	dbg(1, "99 the worker %p", the_worker);
@@ -333,7 +344,7 @@ static void start_work(void)
 static void stop_work(void)
 {
 	dbg(1, "01");
-	acq200_setRefillClient(0);
+	acq200_delRefillClient(mean_work);
 	dbg(1, "99");            
 }
 

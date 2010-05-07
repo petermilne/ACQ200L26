@@ -474,6 +474,9 @@ struct ArgBlock {
 	int argc;
 };
 
+
+typedef void (* RefillClient)(void *data, int nbytes);
+
 struct DevGlobs {
 	int btype;
 	int major;
@@ -657,13 +660,15 @@ struct DevGlobs {
 		struct list_head clients;
 	} tbc;
 
-	struct RefillClient {
+	struct RefillClientStruct {
 		spinlock_t lock;
-		void (* client)(void *data);
+		RefillClient client;
 	} refillClient;
 
 	unsigned (*getChannelNumSamples)(int pchan);
 };
+
+
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)
 #define VA_TBLOCK(tblock) (va_buf(DG) + (tblock)->offset)
@@ -1280,5 +1285,9 @@ static inline int field_shift(u32 field)
 
 extern int search_for_epos_in_tblock(
 	struct Phase* phase, unsigned isearch, int max_dma_blocks);
+
+void acq200_addRefillClient(RefillClient client);
+void acq200_delRefillClient(RefillClient client);
+void acq200_runRefillClient(void *data, int nbytes);
 
 #endif /* ACQ200_FIFO_H__ */

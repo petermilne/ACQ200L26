@@ -63,6 +63,7 @@ obj-y			:= \
 	acq200-dmac.o 
 
 
+
 obj-m			:=
 obj-n			:=
 obj-			:=
@@ -129,7 +130,6 @@ obj-$(CONFIG_ARCH_DTACQ_PREP) += acq200-prep.o
 
 obj-$(CONFIG_ARCH_DTACQ_TBLOCKFS) += acq200-tblockfs.o
 
-obj-$(CONFIG_ARCH_DTACQ_MEAN) += acq200_mean.o
 
 obj-$(CONFIG_ARCH_DTACQ_THRESHOLD) += acq200_threshold.o
 
@@ -161,6 +161,7 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ132_LFP) += acq132_lfp.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ100_SPIFLASH) += acq100_spiflash.o
 
+obj-$(CONFIG_ARCH_DTACQ_MEAN) += acq200_mean.o
 
 ACQ2XX_FIFO_COMMONA=\
 	acq200-fifo-tblock.o \
@@ -168,7 +169,8 @@ ACQ2XX_FIFO_COMMONA=\
 	acq200-rb.o \
 	acq200-fifo-bigbuf-fops.o \
 	acq200-hook.o \
-	acq200-cdog.o
+	acq200-cdog.o \
+	refill-client.o 
 
 ACQ2XX_FIFO_COMMON=\
 	$(ACQ2XX_FIFO_COMMONA) \
@@ -219,6 +221,8 @@ acq132-objs := acq132-fifo.o acq132-fiq.o \
 wav232-objs := wav232-fifo.o wav232-fiq.o \
 	wav232-fifo-procfs.o acq2xx-fifo.o \
 	$(ACQ2XX_FIFO_COMMON)
+
+acq200_mean-objs := acq200_mean.o refill-client.o
 
 obj-$(CONFIG_MODULES)	+= acq200syms.o
 
