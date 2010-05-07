@@ -18,19 +18,9 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
-#include <linux/moduleparam.h>
-#include <linux/proc_fs.h>
 
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#include <linux/module.h>
-#endif
-
-#include <linux/fs.h>     	/* This is where libfs stuff is declared */
-#include <asm/uaccess.h>	/* copy_to_user */
 
 #include "acqX00-port.h"
 /* keep debug local to this module */

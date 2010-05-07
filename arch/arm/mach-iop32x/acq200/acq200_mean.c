@@ -61,12 +61,12 @@ int acq200_mean_debug;
 module_param(acq200_mean_debug, int, 0664);
 
 int log2_mean = LOG2_MEAN_DEF;
-module_param(log2_mean, int, 0664);
+module_param(log2_mean, int, 0444);
 
 #define nmean (1<<log2_mean)
 
 int skip = 125;
-module_param(skip, int, 0664);
+module_param(skip, int, 0444);
 
 int iter = 0;
 module_param(iter, int, 0444);
