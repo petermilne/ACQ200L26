@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------- */
-/* acq200_mean.c - rolling mean values for acq200                            */
+/* acq200-mean.c - rolling mean values for acq200                            */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2003 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>

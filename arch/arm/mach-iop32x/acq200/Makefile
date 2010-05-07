@@ -222,7 +222,7 @@ wav232-objs := wav232-fifo.o wav232-fiq.o \
 	wav232-fifo-procfs.o acq2xx-fifo.o \
 	$(ACQ2XX_FIFO_COMMON)
 
-acq200_mean-objs := acq200_mean.o refill-client.o
+acq200_mean-objs := acq200-mean.o refill-client.o
 
 obj-$(CONFIG_MODULES)	+= acq200syms.o
 
