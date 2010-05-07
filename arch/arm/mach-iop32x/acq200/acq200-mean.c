@@ -182,10 +182,9 @@ static struct MEAN_CONSUMERS {
 
 static void sum_up_s16(void *data)
 {
-	int ic;
 	short *channels = (short*)data;
+	int ic;
 
-	dma_map_single(DG->dev, data, app_state.sample_size, DMA_FROM_DEVICE);
 
 	for (ic = 0; ic != app_state.nchannels; ++ic){
 		work_state.the_sums[ic] += channels[ic];
@@ -197,13 +196,12 @@ static void sum_up_acq164(void *data)
  * eliminate effect of overflow (for NACC < 256)
  */
 {
-	int ic;
 	int *channels = (int *)data;
-
-	dma_map_single(DG->dev, data, app_state.sample_size, DMA_FROM_DEVICE);
+	int ic;
+	int shr = acq164_shr;
 
 	for (ic = 0; ic != app_state.nchannels; ++ic){
-		work_state.the_sums[ic] += channels[ic] >> acq164_shr;
+		work_state.the_sums[ic] += channels[ic] >> shr;
 	}	
 }
 
@@ -284,13 +282,14 @@ static void _mean_work(void *data)
 
 static void mean_work(void *data, int nbytes) 
 {
-	int ssize = sample_size();
-	int nsamples = nbytes / sample_size();
+	int nsamples = nbytes / app_state.sample_size;
+
+	dma_map_single(DG->dev, data, nbytes, DMA_FROM_DEVICE);
 
 	while(nsamples--){
 		if (++work_state.iskip >= skip){
 			_mean_work(data);
-			data += ssize;
+			data += app_state.sample_size;
 			work_state.iskip = 0;
 		}
 	}
