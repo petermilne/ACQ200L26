@@ -1179,6 +1179,7 @@ static int acq132_commitClkCounterSrc(struct Signal* signal)
 	if (signal->DIx >=0 && signal->DIx <= 7){
 	       clk_counter |= signal->DIx << ACQ100_CLK_COUNTER_SRCSHL;
 	       clk_counter |= ACQ100_CLK_COUNTER_SRC_DIO;
+	       acq200_start_clkCounterMonitor();
 	}
 
 	*ACQ132_CLK_COUNTER = clk_counter;

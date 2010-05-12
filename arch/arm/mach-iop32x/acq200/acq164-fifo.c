@@ -864,6 +864,7 @@ static int acq164_commitClkCounterSrc(struct Signal* signal)
 	if (linecode >=0 && linecode <= 7){
 	       clk_counter |= linecode << ACQ100_CLK_COUNTER_SRCSHL;
 	       clk_counter |= ACQ100_CLK_COUNTER_SRC_DIO;
+	       acq200_start_clkCounterMonitor();		
 	}
 
 	*ACQ164_CLK_COUNTER = clk_counter;

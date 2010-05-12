@@ -59,7 +59,7 @@ static unsigned iop32x_getGTSR(void)
 int clk_dj = 1;
 module_param(clk_dj, int, 0444);
 
-int clk_dj_max = 4;
+int clk_dj_max = 100;
 module_param(clk_dj_max, int, 0644);
 
 
@@ -129,7 +129,10 @@ static void monitorClkCounter(unsigned long arg)
 
 	if (!clkcounter_please_stop){
 		if (delta < 4000 && clk_dj < clk_dj_max){
-			++clk_dj;
+			/* try keep it relatively fast for case 0 */
+			if (delta > 0 || clk_dj < clk_dj_max/4){
+				++clk_dj;
+			}
 		}else if (delta > 40000 && clk_dj > 1){
 			--clk_dj;
 		}
@@ -156,6 +159,8 @@ void acq200_init_clkCounterMonitor(struct CLKCOUNTER_DESCR* descr)
 }
 void acq200_start_clkCounterMonitor(void)
 {
+	del_timer_sync(&clkcounter_timeout);
+	clk_dj = 1;	/* could be a restart - make it fast */
 	clkcounter_timeout.expires = jiffies + clk_dj;
 	clkcounter_please_stop = 0;
 	add_timer(&clkcounter_timeout);
