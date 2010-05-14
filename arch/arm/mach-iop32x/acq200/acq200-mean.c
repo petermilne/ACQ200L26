@@ -180,6 +180,12 @@ static struct MEAN_CONSUMERS {
 	spinlock_t lock;
 } mc_list;
 
+
+static int maybe_es16(u16 data1)
+{
+	return data1 == 0xaa55;
+}
+
 static void sum_up_s16(void *data)
 {
 	short *channels = (short*)data;
@@ -187,13 +193,26 @@ static void sum_up_s16(void *data)
 
 
 	for (ic = 0; ic != app_state.nchannels; ++ic){
+		if (maybe_es16((u16)channels[ic])){
+			break;
+		}
 		work_state.the_sums[ic] += channels[ic];
 	}
+}
+
+
+static int maybe_es32(u32 data2) 
+{
+	u16 lh = data2 >> 16;
+	u16 rh = data2 & 0x0000ffff;
+
+	return lh == 0xaa55 || rh == 0xaa55;
 }
 
 static void sum_up_acq164(void *data)
 /* acq164 data is 24 bit wide in a 32 bit field. right shift to 
  * eliminate effect of overflow (for NACC < 256)
+ * eliminate ES - even if it's not ES, no harm to leave it out .. 
  */
 {
 	int *channels = (int *)data;
@@ -201,6 +220,9 @@ static void sum_up_acq164(void *data)
 	int shr = acq164_shr;
 
 	for (ic = 0; ic != app_state.nchannels; ++ic){
+		if (maybe_es32((u32)channels[ic])){
+			break;
+		}		
 		work_state.the_sums[ic] += channels[ic] >> shr;
 	}	
 }
@@ -313,8 +335,12 @@ void del_mc(struct MC *mc)
 	spin_unlock(&mc_list.lock);
 }
 
-static void start_work(void) 
+static void start_work(void *clidata) 
 {
+	int _enable = *(int*)clidata;
+
+	if (!_enable) return;
+
 	dbg(1, "01");
 	work_state.iskip = work_state.imean = 0;
 
@@ -671,7 +697,7 @@ static ssize_t enable_write(
 	COPY_FROM_USER(lbuf, buf, 1);
 	if (lbuf[0] == '1'){
 		enable = 1;
-		start_work();
+		start_work((void*)&enable);
 	}else if (lbuf[0] == '0'){
 		enable = 0;
 		stop_work();
@@ -711,7 +737,7 @@ static ssize_t parameter_mean_write(
 		}
 		*pram = _pram;
 		if (enable){
-			start_work();
+			start_work((void*)&enable);
 		}
 	}
 	return count;
@@ -862,6 +888,10 @@ static struct file_system_type meanfs_type = {
 	.kill_sb	= kill_litter_super,
 };
 
+static struct Hookup start_action = {
+	.the_hook = start_work,
+	.clidata = &enable
+};
 static int __init acq200_mean_init( void )
 {
 	acq200_debug = acq200_mean_debug;
@@ -872,7 +902,8 @@ static int __init acq200_mean_init( void )
 
 	init_buffers();	
 	enable = 1;
-	start_work();
+	start_work((void*)&enable);
+	acq200_add_start_of_shot_hook(&start_action);
 	return register_filesystem(&meanfs_type);
 }
 
