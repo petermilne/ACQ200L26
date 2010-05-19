@@ -95,6 +95,15 @@ int out_shr = LOG2_MEAN_DEF;
 module_param(out_shr, int, 0444);
 /*** shift right (shr) for computing output value - nominal log2_mean */
 
+int start_holdoff=200;
+module_param(start_holdoff, int, 0644);
+MODULE_PARM_DESC(start_holdoff, "number updates to skip at start");
+
+int stop_on_event=1;
+module_param(stop_on_event, int, 0644);
+MODULE_PARM_DESC(stop_on_event, "force processing stop on first event");
+
+
 #define B24_IDEAL_SHR	8
 #define B24_MAX_SHR	16
 
@@ -138,6 +147,7 @@ static struct MeanDataStore {
 #define SUMSLEN (app_state.nchannels * sizeof(int))
 
 static struct MEAN_WORK_STATE {
+	int start_holdoff;
 	int iskip;
 	int imean;
 	int *the_sums;
@@ -181,12 +191,14 @@ static struct MEAN_CONSUMERS {
 } mc_list;
 
 
+static void stop_work(void);
+
 static int maybe_es16(u16 data1)
 {
 	return data1 == 0xaa55;
 }
 
-static void sum_up_s16(void *data)
+static int sum_up_s16(void *data)
 {
 	short *channels = (short*)data;
 	int ic;
@@ -198,6 +210,7 @@ static void sum_up_s16(void *data)
 		}
 		work_state.the_sums[ic] += channels[ic];
 	}
+	return 0;
 }
 
 
@@ -209,7 +222,7 @@ static int maybe_es32(u32 data2)
 	return lh == 0xaa55 || rh == 0xaa55;
 }
 
-static void sum_up_acq164(void *data)
+static int sum_up_acq164(void *data)
 /* acq164 data is 24 bit wide in a 32 bit field. right shift to 
  * eliminate effect of overflow (for NACC < 256)
  * eliminate ES - even if it's not ES, no harm to leave it out .. 
@@ -221,13 +234,22 @@ static void sum_up_acq164(void *data)
 
 	for (ic = 0; ic != app_state.nchannels; ++ic){
 		if (maybe_es32((u32)channels[ic])){
+			if (stop_on_event &&
+                            maybe_es32((u32)channels[ic+1]) &&
+			    maybe_es32((u32)channels[ic+2])    ){
+				dbg(1, "ES detected, STOP");
+				stop_work();
+				return -1;
+			}
 			break;
-		}		
-		work_state.the_sums[ic] += channels[ic] >> shr;
+		}else{
+			work_state.the_sums[ic] += channels[ic] >> shr;
+		}
 	}	
+	return 0;
 }
 
-static void (*sum_up)(void *data) = sum_up_s16;
+static int (*sum_up)(void *data) = sum_up_s16;
 
 
 #define LHIST 3
@@ -279,9 +301,11 @@ static void run_consumers(u32 *sums, int sumslen)
 }
 
 
-static void _mean_work(void *data)
+static int _mean_work(void *data)
 {
-	sum_up(data);
+	if (sum_up(data)){
+		return -1;
+	}
 	if (++work_state.imean >= nmean){
 
 		dbg(1, "summing up iter:%d ch01:0x%04x sum:0x%08x",
@@ -289,7 +313,7 @@ static void _mean_work(void *data)
 		    work_state.the_sums[0]);
 	
 		spin_lock(&app_state.lock);
-		memcpy(app_state.the_sums, work_state.the_sums,SUMSLEN);
+		memcpy(app_state.the_sums, work_state.the_sums, SUMSLEN);
 		spin_unlock(&app_state.lock);
 
 		memset(work_state.the_sums, 0, SUMSLEN);
@@ -298,6 +322,8 @@ static void _mean_work(void *data)
 		calculate_interval();
 		run_consumers(app_state.the_sums, SUMSLEN);	
 	}
+
+	return 0;
 }
 
 
@@ -306,13 +332,21 @@ static void mean_work(void *data, int nbytes)
 {
 	int nsamples = nbytes / app_state.sample_size;
 
+	dbg(1, "02: %d start_holdoff %d", nsamples, work_state.start_holdoff);
 	dma_map_single(DG->dev, data, nbytes, DMA_FROM_DEVICE);
 
 	while(nsamples--){
-		if (++work_state.iskip >= skip){
-			_mean_work(data);
-			data += app_state.sample_size;
+		if (work_state.start_holdoff == 0 && 
+				++work_state.iskip >= skip){
+			if (_mean_work(data)){
+				dbg(1, "stop work %d", nsamples);
+				break;
+			}
 			work_state.iskip = 0;
+		}
+		data += app_state.sample_size;
+		if (work_state.start_holdoff != 0){
+			--work_state.start_holdoff;
 		}
 	}
 }
@@ -343,7 +377,7 @@ static void start_work(void *clidata)
 
 	dbg(1, "01");
 	work_state.iskip = work_state.imean = 0;
-
+	work_state.start_holdoff = start_holdoff;
 	out_shr = log2_mean;
 
 	if (DG->btype == BTYPE_ACQ164){
@@ -371,6 +405,11 @@ static void stop_work(void)
 	dbg(1, "01");
 	acq200_delRefillClient(mean_work);
 	dbg(1, "99");            
+}
+
+static void stop_work_hook(void* unused)
+{
+	stop_work();
 }
 
 static int getMean(int lchan) 
@@ -854,7 +893,8 @@ static void on_arm(void)
 	dbg(1, "on_arm 01");
 	app_state.sample_size = sample_size();
 	app_state.nchannels = CAPDEF_get_nchan();
-	memset(app_state.the_sums, 0, SUMSLEN);
+	memset(app_state.the_sums, 0, SUMSLEN);	
+	memset(work_state.the_sums, 0, SUMSLEN);
 
 	dbg(1, "on_arm 99");
 }
@@ -892,6 +932,9 @@ static struct Hookup start_action = {
 	.the_hook = start_work,
 	.clidata = &enable
 };
+static struct Hookup stop_action = {
+	.the_hook = stop_work_hook
+};
 static int __init acq200_mean_init( void )
 {
 	acq200_debug = acq200_mean_debug;
@@ -904,6 +947,7 @@ static int __init acq200_mean_init( void )
 	enable = 1;
 	start_work((void*)&enable);
 	acq200_add_start_of_shot_hook(&start_action);
+	acq200_add_end_of_shot_hook(&stop_action);
 	return register_filesystem(&meanfs_type);
 }
 
