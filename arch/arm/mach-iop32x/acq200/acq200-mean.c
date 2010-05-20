@@ -56,6 +56,8 @@
  */
 
 #define LOG2_MEAN_DEF	4
+#define LOG2_MEAN_MIN	0
+#define LOG2_MEAN_MAX	15		/* limit before numeric probs */
 
 int acq200_mean_debug;
 module_param(acq200_mean_debug, int, 0664);
@@ -103,6 +105,8 @@ int stop_on_event=1;
 module_param(stop_on_event, int, 0644);
 MODULE_PARM_DESC(stop_on_event, "force processing stop on first event");
 
+int acq164_enable_residues=1;
+module_param(acq164_enable_residues, int, 0644);
 
 #define B24_IDEAL_SHR	8
 #define B24_MAX_SHR	16
@@ -151,6 +155,7 @@ static struct MEAN_WORK_STATE {
 	int iskip;
 	int imean;
 	int *the_sums;
+	int *residues;
 } work_state;
 
 /** MC - Mean Consumer - task context data consumer */
@@ -230,9 +235,11 @@ static int sum_up_acq164(void *data)
 {
 	int *channels = (int *)data;
 	int ic;
+	int nc = app_state.nchannels;
 	int shr = acq164_shr;
+	int resm = (1<<acq164_shr)-1;
 
-	for (ic = 0; ic != app_state.nchannels; ++ic){
+	for (ic = 0; nc--; ++ic){
 		if (maybe_es32((u32)channels[ic])){
 			if (stop_on_event &&
                             maybe_es32((u32)channels[ic+1]) &&
@@ -244,13 +251,27 @@ static int sum_up_acq164(void *data)
 			break;
 		}else{
 			work_state.the_sums[ic] += channels[ic] >> shr;
+			work_state.residues[ic] += channels[ic]&resm;
 		}
 	}	
 	return 0;
 }
 
-static int (*sum_up)(void *data) = sum_up_s16;
+static void acq164_process_residues(void) {
+	int ic;
+	int nc = app_state.nchannels;
+	int shr = acq164_shr;
 
+	for (ic = 0; nc--; ++ic){
+		work_state.the_sums[ic] += work_state.residues[ic] >> shr;
+	}
+}
+
+static void null_process_residues(void) {
+	return;
+}	
+static int (*sum_up)(void *data) = sum_up_s16;
+static void (*process_residues)(void) = null_process_residues;
 
 #define LHIST 3
 #define NHIST (1<<LHIST)
@@ -311,12 +332,15 @@ static int _mean_work(void *data)
 		dbg(1, "summing up iter:%d ch01:0x%04x sum:0x%08x",
 		    iter, *(short*)data,
 		    work_state.the_sums[0]);
-	
+		
+		process_residues();
+
 		spin_lock(&app_state.lock);
 		memcpy(app_state.the_sums, work_state.the_sums, SUMSLEN);
 		spin_unlock(&app_state.lock);
 
 		memset(work_state.the_sums, 0, SUMSLEN);
+		memset(work_state.residues, 0, SUMSLEN);
 		work_state.imean = 0;
 		iter++;
 		calculate_interval();
@@ -382,6 +406,11 @@ static void start_work(void *clidata)
 
 	if (DG->btype == BTYPE_ACQ164){
 		sum_up = sum_up_acq164;
+		if (acq164_enable_residues){
+			process_residues = acq164_process_residues;
+		}else{
+			process_residues = null_process_residues;
+		}
 		/** prevent overflow by limiting log2_mean, and discarding
 		 * LSB's. Do not discard too many LSB's ! 
 		 */
@@ -770,7 +799,7 @@ static ssize_t parameter_mean_write(
 	int _pram;
 	
 	COPY_FROM_USER(lbuf, buf, min(count, sizeof(lbuf)));
-	if (sscanf(lbuf, "%d", &_pram) == 1 && _pram >= pmin && _pram < pmax){
+	if (sscanf(lbuf, "%d", &_pram) == 1 && _pram >= pmin && _pram <= pmax){
 		if (enable){
 			stop_work();
 		}
@@ -792,7 +821,7 @@ static ssize_t log2_mean_write(
 	struct file *filp, const char *buf, size_t count, loff_t *offset)
 {
 	return parameter_mean_write(filp, buf, count, offset, 
-				    &log2_mean, 0, 15);
+				    &log2_mean, LOG2_MEAN_MIN, LOG2_MEAN_MAX);
 }
 
 static ssize_t skip_mean_read(
@@ -895,6 +924,7 @@ static void on_arm(void)
 	app_state.nchannels = CAPDEF_get_nchan();
 	memset(app_state.the_sums, 0, SUMSLEN);	
 	memset(work_state.the_sums, 0, SUMSLEN);
+	memset(work_state.residues, 0, SUMSLEN);
 
 	dbg(1, "on_arm 99");
 }
@@ -908,6 +938,7 @@ static void init_buffers(void)
 	app_state.nchannels = CAPDEF_get_nchan();
 	app_state.the_sums = kmalloc(SUMSLEN, GFP_KERNEL);
 	work_state.the_sums = kmalloc(SUMSLEN, GFP_KERNEL);
+	work_state.residues = kmalloc(SUMSLEN, GFP_KERNEL);
 
 	INIT_LIST_HEAD(&mc_list.clients);
 	spin_lock_init(&mc_list.lock);
@@ -919,6 +950,7 @@ static void release_buffers(void)
 	if (my_names) kfree(my_names);
 	if (app_state.the_sums) kfree(app_state.the_sums);
 	if (work_state.the_sums) kfree(work_state.the_sums);
+	if (work_state.residues) kfree(work_state.residues);
 }
 
 static struct file_system_type meanfs_type = {
