@@ -143,6 +143,10 @@ int acq100_llc_sync2V = 0;
 #define ACQ100_LLC_SYNC2V_DIDO    3
 #define ACQ100_LLC_SYNC2V_DIDOSTA 4
 
+#define MAXSAMPLES_CYCLE	5
+int sync2v_samples_per_cycle = 1;
+module_param(sync2v_samples_per_cycle, int, 0644);
+
 /* SYNC2V SCRATCHPAD */
 #define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
 #define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+1]
@@ -1002,12 +1006,17 @@ static void llPreamble2V(void)
 		
 	}else if (dg.settings.AI_target || TRADITIONAL){
 		struct iop321_dma_desc *ai_dmad = acq200_dmad_alloc();
+
+		if (sync2v_samples_per_cycle > MAXSAMPLES_CYCLE){
+			sync2v_samples_per_cycle = MAXSAMPLES_CYCLE;
+		}
 		ai_dmad->NDA = 0;
         /** may also be set dynamically using traditional LLC_CSR_M_SETADDR */
 		ai_dmad->PDA = dg.settings.AI_target;  
 		ai_dmad->PUAD = dg.settings.PUAD;
 		ai_dmad->LAD = DG->fpga.fifo.pa;
-		ai_dmad->BC = dg.sample_size + SCRATCHPAD_SIZE;
+		ai_dmad->BC = sync2v_samples_per_cycle * 
+			(dg.sample_size + SCRATCHPAD_SIZE);
 		ai_dmad->DC = DMA_DCR_PCI_MW;
 
 		dg.ai_dma_index = ai_dma.nchain;
@@ -1192,7 +1201,26 @@ static u32 service_tlatch(u32 tl)
 #define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE)
 #define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
 #endif
-#define AISAMPLE_CLOCKED(fifstat)     (((fifstat)&FIFO_CLOCKED) != 0)
+
+
+static int aisample_clocked(u32 fifstat) {
+	u32 sps = sync2v_samples_per_cycle;
+	if (sps == 1){
+		return (fifstat & FIFO_CLOCKED) != 0;
+	}else{
+/* tide mark is in 64 byte units. Convert sps to same units
+ * if 1 block of 3 is present, start the transfer (fill faster than empty)
+ */
+		unsigned hitide = fifstat&ACQ196_FIFSTAT_HOTPOINT;
+
+		if (sps*3 < hitide+2){
+			return 1;
+		}else{
+			return 0;
+		}
+	}
+}
+#define AISAMPLE_CLOCKED(fifstat)     aisample_clocked(fifstat)
 #define AIFIFO_NOT_EMPTY(fifstat)     (((fifstat)&FIFO_NE) != 0)
 #define COLDFIFO_EMPTY(fifstat)       (((fifstat)&dg.coldfifo_ne_mask)==0)
 
