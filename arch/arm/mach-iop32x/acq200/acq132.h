@@ -453,8 +453,12 @@ const char* acq132_getChannelSpeedMask(void);
  * GATE_MAGIC is  0xaa55aa55aa55aa55
  */
 
-#define ACQ132_ES_DATA_MASK 0x0fc0
-#define ACQ132_ES_COLD_SAMPLES(es) (((es)&ACQ132_ES_DATA_MASK)>>6)
+/* Event data fields from rev 307+ */
+#define ACQ132_ES_DEC_CNT_MASK 0xff00
+#define ACQ132_ES_LAT_MASK	0x00fc
+
+#define ACQ132_ES_DEC_CNT(es)	(((es)&ACQ132_ES_DEC_CNT_MASK)>>8)
+#define ACQ132_ES_LAT_CNT(es)	(((es)&ACQ132_ES_LAT_MASK)>>2)
 
 extern int get_acq132_decim(void);
 extern void acq132_setAllDecimate(int dec);

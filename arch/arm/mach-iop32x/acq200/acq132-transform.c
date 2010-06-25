@@ -51,6 +51,12 @@
 int stub_transform;
 module_param(stub_transform, int, 0664);
 
+int dec_cnt_adjust = 0;
+module_param(dec_cnt_adjust, int, 0664);
+
+int use_es_cold_offset_samples = 1;
+module_param(use_es_cold_offset_samples, int, 0664);
+
 int acq132_transform_debug = 0;
 module_param(acq132_transform_debug, int, 0664);
 
@@ -79,13 +85,22 @@ module_param(number_es_detected, int, 0644);
 int xxs_readsam[NCB];
 module_param_array(xxs_readsam, int, NULL, 0644);
 */
-int acq132_es_cold_samples[8];
-module_param_array(acq132_es_cold_samples, int, NULL, 0444);
+
+#define MAX_ES_TEST 4
+int acq132_es_lat_cnt[MAX_ES_TEST];
+module_param_array(acq132_es_lat_cnt, int, NULL, 0444);
+
+int acq132_es_dec_cnt[MAX_ES_TEST];
+module_param_array(acq132_es_dec_cnt, int, NULL, 0444);
+
+int acq132_es[MAX_ES_TEST];
+module_param_array(acq132_es, int, NULL, 0444);
 
 #define TIMEBASE_ENCODE_GATE_PULSE_INDEX_MOD256 0
 #define TIMEBASE_ENCODE_GATE_PULSE		1
 
 
+#define MEMCLR(xx)	memset(xx, 0, sizeof(xx))
 
 int timebase_encoding = 0;
 module_param(timebase_encoding, int, 0644);
@@ -442,13 +457,18 @@ static int already_known(unsigned ts)
 }
 
 
-static void stash_es_cold_samples(unsigned short *ch)
+static void stash_es_counts(unsigned short *ch)
 {
-	acq132_es_cold_samples[0] = ACQ132_ES_COLD_SAMPLES(ch[2]);
-	acq132_es_cold_samples[1] = ACQ132_ES_COLD_SAMPLES(ch[3]);
-			
-	acq132_es_cold_samples[2] = ACQ132_ES_COLD_SAMPLES(ch[6]);
-	acq132_es_cold_samples[3] = ACQ132_ES_COLD_SAMPLES(ch[7]);
+	int ii;
+	static const int esl[MAX_ES_TEST] = {
+		2, 3, 6, 7
+	};
+
+	for (ii = 0; ii < MAX_ES_TEST; ++ii){
+		acq132_es[ii] = ((unsigned*)ch)[ii];
+		acq132_es_lat_cnt[ii] = ACQ132_ES_LAT_CNT(ch[esl[ii]]);
+		acq132_es_dec_cnt[ii] = ACQ132_ES_DEC_CNT(ch[esl[ii]]);
+	}
 }		
 
 extern void copyDiags(unsigned* searchp, unsigned ileft);
@@ -498,7 +518,7 @@ int remove_es(int sam, unsigned short* ch, void *before)
 			if (number_es_detected == 1 || !stash_first_event_only){
 				copyDiags((unsigned *)ch, 0);
 				initPhaseDiagBufFound(1, 1, 0, 0, 0, 0, 0, 0);
-				stash_es_cold_samples(ch);
+				stash_es_counts(ch);
 			}
 			if (rc == 1){	
 				struct TBLOCK* tb = 
@@ -508,9 +528,11 @@ int remove_es(int sam, unsigned short* ch, void *before)
 		}
 
 		dbg(1, 
-		    "sam:%6d ts:%8u "
+		    "sam:%6d dec:%d ESC:%d ts:%8u "
 		    "%04x %04x %04x %04x %04x %04x %04x %04x %s ret:%d",
 		    sam, ts, 
+		    ACQ132_ES_DEC_CNT(ch[2]),
+		    ACQ132_ES_LAT_CNT(ch[2]),
 		    ch[0], ch[1], ch[2], ch[3], ch[4], ch[5], ch[6], ch[7],
 		    id,	rc);
 	}else{
@@ -769,8 +791,9 @@ static void transformer_es_onStart(void *unused)
 				BB_PTR(g_esm.es_tble->tblock->offset);
 		dbg(1, "g_esm.es_cursor reset %p", g_esm.es_base);
 		memset(g_esm.es_cursor, 0, TBLOCK_LEN(DG));
-		memset(acq132_es_cold_samples, 0, 
-		       sizeof(acq132_es_cold_samples));
+		MEMCLR(acq132_es_lat_cnt);
+		MEMCLR(acq132_es_dec_cnt);
+		MEMCLR(acq132_es);
 		number_es_detected = 0;
 	}
 }
@@ -801,7 +824,8 @@ void acq132_register_transformers(void)
 extern int findEvent(struct Phase *phase, unsigned *first, unsigned *ilast);
 
 #define ES_COLD_OFFSET_SAMPLES	\
-	es_cold_offset_samples[get_acq132_decim()-1]
+	(use_es_cold_offset_samples? \
+	 es_cold_offset_samples[get_acq132_decim()-1]: 0)
 
 /* What if tblock is slightly shorter - because we removed an ES?
  * tblock->length appears to be constant, not a reflection of #samples
@@ -813,28 +837,37 @@ static int acq132_get_event_adjust(void)
 	int event_offset_bytes;
 
 	if (control_event_adjust){
-		int cold_sam = acq132_es_cold_samples[0];
+		int lat_cnt = acq132_es_lat_cnt[0];
 		int ii;
 		int mismatch = 0;
-		int total = cold_sam;
+		int total = lat_cnt;
 
 		for (ii = 1; ii <= 3; ++ii){
-			if (cold_sam != acq132_es_cold_samples[ii]){
+			if (lat_cnt != acq132_es_lat_cnt[ii]){
 				err("cold samples mismatch");
 				mismatch = 1;
 			}
-			total += acq132_es_cold_samples[ii];
+			total += acq132_es_lat_cnt[ii];
 		}
-		cold_sam = total/4 + ES_COLD_OFFSET_SAMPLES;
+		if (ES_COLD_OFFSET_SAMPLES){
+			dbg(1, "add ES_COLD_OFFSET_SAMPLES: %d", 
+				ES_COLD_OFFSET_SAMPLES);
+		}
+		lat_cnt = total/4 + ES_COLD_OFFSET_SAMPLES;
 
 		dbg(1-mismatch, "%2d %2d %2d %2d, mean %2d",
-		    acq132_es_cold_samples[0],	
-		    acq132_es_cold_samples[1],	
-		    acq132_es_cold_samples[2],	
-		    acq132_es_cold_samples[3],	
-		    cold_sam);
+		    acq132_es_lat_cnt[0],	
+		    acq132_es_lat_cnt[1],	
+		    acq132_es_lat_cnt[2],	
+		    acq132_es_lat_cnt[3],	
+		    lat_cnt);
 			
-		cold_adj_samples = cold_sam * control_event_adjust;
+		cold_adj_samples = lat_cnt * control_event_adjust;
+
+		if (acq132_es_dec_cnt[0] >= get_acq132_decim()-1){
+			dbg(1, "add dec_cnt adj %d", dec_cnt_adjust);
+			cold_adj_samples += dec_cnt_adjust;
+		}
 	}
 
 	event_offset_bytes = cold_adj_samples * sample_size();
