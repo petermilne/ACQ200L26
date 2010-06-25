@@ -573,6 +573,9 @@ static struct DevGlobs acq132_dg = {
    #3 After load is complete check that DONE has gone high
    #4 clear Programming Mode.
 
+  In practise, INIT goes hi at some late stage in the process as
+  INIT gets redefines as a user IO. So, we record the point at which it
+  goes hi, then work out if that was a problem on close.
 */
 
 #define TIMEOUT_RET(sta)						\
@@ -586,15 +589,37 @@ static struct DevGlobs acq132_dg = {
 	}
 
 
+struct FPGA_TRACKER {
+	unsigned long last_init_hi;
+	unsigned long last_byte;
+};
+
+#define TRACKER(file) ((struct FPGA_TRACKER*)file->private_data)
+
+#define SET_LAST_INIT_HI(file, count)	(TRACKER(file)->last_init_hi = (count))
+#define GET_LAST_INIT_HI(file)		(TRACKER(file)->last_init_hi)
+
+#define SET_LAST_BYTE(file, count)	(TRACKER(file)->last_byte = (count))
+#define GET_LAST_BYTE(file)		(TRACKER(file)->last_byte)
+
+#define LAST_INIT_HI_OK_LIMIT	32	
+/* 30 bytes from the end found empirically */
+
 static int acq132_sfpga_load_open (struct inode *inode, struct file *file)
 {
 	int timeout;
+
+	file->private_data = kzalloc(sizeof(struct FPGA_TRACKER), GFP_KERNEL);
 
 	/* #1 */
 	sfpga_conf_clr_all();
 	sfpga_conf_set_prog();
 	schedule();
 	TIMEOUT_RET(!sfpga_conf_init_is_hi());
+
+	if (sfpga_conf_done()){
+		err("INIT HI but DONE still active");
+	}
 	return 0;
 }
 
@@ -618,20 +643,15 @@ static ssize_t acq132_sfpga_load_write (
 
 		TIMEOUT_RET(sfpga_conf_get_busy());
 
-		if (!sfpga_conf_init_is_hi()){
-			err("INIT down before send %lu", startoff + isend);
-			return -EFAULT;
+		if (likely(sfpga_conf_init_is_hi())){
+			SET_LAST_INIT_HI(file, startoff+isend);
 		}
 		
 		sfpga_conf_send_data(data);
-
-		if (!sfpga_conf_init_is_hi()){
-			err("INIT down after send %lu", startoff + isend);
-			return -EFAULT;
-		}
 	}
 
-	*offset += isend;
+	SET_LAST_BYTE(file, startoff+isend);
+	*offset = startoff+isend;
 	return isend;
 }
 
@@ -645,7 +665,16 @@ static int acq132_sfpga_load_release (struct inode *inode, struct file *file)
 		err("Quitting bad done status");
 		return -EFAULT;
 	}
+
 	sfpga_conf_clr_prog();
+
+	if (GET_LAST_INIT_HI(file) < GET_LAST_BYTE(file)-LAST_INIT_HI_OK_LIMIT){
+		err("INIT LOW during program at %lu out of safe limit %lu",
+			GET_LAST_INIT_HI(file), 
+		    GET_LAST_BYTE(file)-LAST_INIT_HI_OK_LIMIT);
+		return -EFAULT;
+	}
+	kfree(file->private_data);
 	info("ADC_FPGA load complete");
 	return 0;
 }
