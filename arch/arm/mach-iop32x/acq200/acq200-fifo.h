@@ -116,7 +116,7 @@ struct TblockConsumer {
 
 /* typedef void (* RefillClient)(void *data, int nbytes); */
 
-struct _RefillClient {
+struct RefillClient {
 	void (*action)(void *data, int nbytes);
 	struct list_head list;
 };
@@ -1299,8 +1299,8 @@ static inline int field_shift(u32 field)
 extern int search_for_epos_in_tblock(
 	struct Phase* phase, unsigned isearch, int max_dma_blocks);
 
-void acq200_addRefillClient(struct _RefillClient *client);
-void acq200_delRefillClient(struct _RefillClient *client);
+void acq200_addRefillClient(struct RefillClient *client);
+void acq200_delRefillClient(struct RefillClient *client);
 void acq200_runRefillClient(void *data, int nbytes);
 
 #endif /* ACQ200_FIFO_H__ */

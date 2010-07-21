@@ -32,14 +32,14 @@
 #include "acq32busprot.h"
 
 
-void acq200_addRefillClient(struct _RefillClient *client)
+void acq200_addRefillClient(struct RefillClient *client)
 {
 	spin_lock(&DG->refillClients.lock);
 	list_add_tail(&client->list, &DG->refillClients.clients);
 	spin_unlock(&DG->refillClients.lock);
 }
 
-void acq200_delRefillClient(struct _RefillClient *client)
+void acq200_delRefillClient(struct RefillClient *client)
 {
 	spin_lock(&DG->refillClients.lock);
 	list_del(&client->list);
@@ -50,7 +50,7 @@ void acq200_delRefillClient(struct _RefillClient *client)
 
 void acq200_runRefillClient(void *data, int nbytes)
 {
-	struct _RefillClient *client;
+	struct RefillClient *client;
 
 	spin_lock(&DG->refillClients.lock);
 	list_for_each_entry(client, &DG->refillClients.clients, list){

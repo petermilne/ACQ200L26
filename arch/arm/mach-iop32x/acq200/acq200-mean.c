@@ -376,7 +376,7 @@ static void mean_work(void *data, int nbytes)
 	}
 }
 
-static struct _RefillClient mean_work_client = {
+static struct RefillClient mean_work_client = {
 	.action = mean_work
 };
 
