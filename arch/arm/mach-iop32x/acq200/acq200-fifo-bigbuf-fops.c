@@ -96,7 +96,7 @@ static struct TblockConsumer *newTBC(unsigned backlog_limit)
         INIT_LIST_HEAD(&tbc->tle_q);
 
 	spin_lock(&DG->tbc.lock);
-	list_add_tail(&tbc->list, &DG->tbc.clients);
+	list_add_tail(&tbc->list, &DG->tbc.list);
 	spin_unlock(&DG->tbc.lock);
 	
 	return tbc;
@@ -1985,16 +1985,16 @@ int acq200_fifo_destroy_AIfs(void)
 
 int acq200_addDataConsumer(struct DataConsumerBuffer *dcb)
 {
-	spin_lock(&DG->dcb.lock);
-	list_add_tail(&dcb->list, &DG->dcb.clients);
-	spin_unlock(&DG->dcb.lock);
+	spin_lock(&DG->dcb.clients.lock);
+	list_add_tail(&dcb->list, &DG->dcb.clients.list);
+	spin_unlock(&DG->dcb.clients.lock);
 	return 0;
 }
 int acq200_removeDataConsumer(struct DataConsumerBuffer *dcb)
 {
-	spin_lock(&DG->dcb.lock);
+	spin_lock(&DG->dcb.clients.lock);
 	list_del(&dcb->list);
-	spin_unlock(&DG->dcb.lock);
+	spin_unlock(&DG->dcb.clients.lock);
 	return 0;
 }
 

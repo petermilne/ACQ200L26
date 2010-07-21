@@ -591,7 +591,7 @@ static int woOnRefill(
 
 static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 {
-	struct list_head* clients = &DG->tbc.clients;
+	struct list_head* clients = &DG->tbc.list;
 	struct list_head* pool = &DG->bigbuf.pool_tblocks;
 	spin_lock(&DG->tbc.lock);
 
@@ -766,9 +766,9 @@ static void _dmc_handle_dcb(
 	struct iop321_dma_desc *pbuf, u32 offset
 	)
 {
-	struct list_head* clients = &DG->dcb.clients;
+	struct list_head* clients = &DG->dcb.clients.list;
 
-	spin_lock(&DG->dcb.lock);
+	spin_lock(&DG->dcb.clients.lock);
 
 	if (!list_empty(clients)){
 		struct DataConsumerBuffer *dcb;
@@ -784,7 +784,7 @@ static void _dmc_handle_dcb(
 	}
 	pbuf->DD_FIFSTAT = 0;
 
-	spin_unlock(&DG->dcb.lock);
+	spin_unlock(&DG->dcb.clients.lock);
 }
 
 
@@ -3958,14 +3958,11 @@ static void init_dg(void)
 	memcpy(DG, MYDG, sizeof(struct DevGlobs));
 	DG->ipc = IPC;
 	DG->wo = DMC_WO;
-	DG->dcb.lock = SPIN_LOCK_UNLOCKED;
 
 	acq200_transform_init();
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 
 	DG->cdog_max_jiffies = CDOG_MAX_JIFFIES;
-	INIT_LIST_HEAD(&DG->dcb.clients);
-	spin_lock_init(&DG->dcb.lock);
 
 	DMC_WO->getNextEmpty = GET_NEXT_EMPTY;
 	DMC_WO->handleEmpties = dmc_handle_empties_default;
@@ -3973,8 +3970,9 @@ static void init_dg(void)
 	INIT_LIST_HEAD(&DG->start_of_shot_hooks);
 	INIT_LIST_HEAD(&DG->end_of_shot_hooks);
 
-	INIT_LIST_HEAD(&DG->tbc.clients);
-	spin_lock_init(&DG->tbc.lock);
+	initRefillClient(&DG->dcb.clients);
+	initRefillClient(&DG->tbc);
+	initRefillClient(&DG->refillClients);
 
 	INIT_WORK(&onEnable_work, onEnableAction);
 

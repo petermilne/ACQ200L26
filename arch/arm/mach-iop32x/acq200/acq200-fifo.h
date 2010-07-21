@@ -121,6 +121,11 @@ struct RefillClient {
 	struct list_head list;
 };
 
+struct LockedList {
+	spinlock_t lock;
+	struct list_head list;
+};
+
 struct DataConsumerBuffer {
 	wait_queue_head_t waitq;
 	struct list_head list;
@@ -369,10 +374,7 @@ struct DMC_WORK_ORDER {
 		int iodd;           
 	} control_target;
 
-	struct {
-		struct list_head list;
-		spinlock_t lock;
-	} stateListeners;
+	struct LockedList stateListeners;
 };
 
 
@@ -480,7 +482,6 @@ struct ArgBlock {
 	char** argv;
 	int argc;
 };
-
 
 
 struct DevGlobs {
@@ -622,8 +623,7 @@ struct DevGlobs {
 	struct DCB {
 		int dcb_max;
 		int dcb_max_backlog;
-		spinlock_t lock;
-		struct list_head clients;
+		struct LockedList clients;
 	} dcb;
 
 	struct BurstDef burst;
@@ -661,27 +661,17 @@ struct DevGlobs {
 	struct ArgBlock post_arm_hook;
 	struct ArgBlock post_shot_hook;	
 
-	struct TblockClients {
-		spinlock_t lock;
-		struct list_head clients;
-	} tbc;
-
-	/*
-	struct RefillClientStruct {
-		spinlock_t lock;
-		RefillClient client;
-	} refillClient;
-	*/
-
-	struct ClientList {
-		spinlock_t lock;
-		struct list_head clients;
-	} refillClients;
+	struct LockedList tbc;
+	struct LockedList refillClients;
 
 	unsigned (*getChannelNumSamples)(int pchan);
 };
 
-
+static inline void initRefillClient(struct LockedList *rc)
+{
+	INIT_LIST_HEAD(&rc->list);
+	spin_lock_init(&rc->lock);
+}
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)
 #define VA_TBLOCK(tblock) (va_buf(DG) + (tblock)->offset)
