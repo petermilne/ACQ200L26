@@ -109,7 +109,7 @@ static void _deleteTBC(struct LockedList * lockedList, struct TblockConsumer *tb
 	int tblock_backlog = 0;
 
 	spin_lock(&lockedList->lock);
-	list_del(&lockedList->list);
+	list_del(&tbc->list);
 	spin_unlock(&lockedList->lock);
 
 	/* flush and free any waiting tblocks. 
@@ -1527,6 +1527,7 @@ static ssize_t status_tb_read (
 	}
 
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+	list_del(&tle->list);
 
 	if (len < 8){
 		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
@@ -1545,6 +1546,7 @@ static ssize_t status_tb_read (
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
+
 
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
@@ -1568,18 +1570,14 @@ static ssize_t status_tb_evread (
 	}
 
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+	list_del(&tle->list);
 
 	if (len < 8){
 		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
 	}else{
 		rc = snprintf(lbuf, min(sizeof(lbuf), len),
-			"tblock %3d off 0x%08x phys:0x%08x len %d scount %d\n",
-			tle->tblock->iblock,
-			tle->tblock->offset,
-			pa_buf(DG) + tle->tblock->offset,
-			tle->tblock->tb_length,
-			tle->sample_count
-			);
+			"tblock %3d esoff 0x%08x\n",
+				tle->tblock->iblock, tle->event_offset);
 	}
 	tbc->c.tle = tle;
 
