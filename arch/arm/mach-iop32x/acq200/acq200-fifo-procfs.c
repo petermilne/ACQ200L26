@@ -3030,7 +3030,7 @@ static int acq200_proc_streambuf(
 /*
  * Warning - needs lock prot 
  */	
-	struct list_head* clients = &DG->dcb.clients;
+	struct list_head* clients = &DG->dcb.clients.list;
 
 	len = 0;
 
