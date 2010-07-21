@@ -352,6 +352,7 @@ static int _mean_work(void *data)
 
 
 
+
 static void mean_work(void *data, int nbytes) 
 {
 	int nsamples = nbytes / app_state.sample_size;
@@ -375,6 +376,9 @@ static void mean_work(void *data, int nbytes)
 	}
 }
 
+static struct _RefillClient mean_work_client = {
+	.action = mean_work
+};
 
 static struct task_struct *the_worker;
 
@@ -424,7 +428,7 @@ static void start_work(void *clidata)
 	}else{
 		sum_up = sum_up_s16;
 	}
-	acq200_addRefillClient(mean_work);
+	acq200_addRefillClient(&mean_work_client);
 	on_arm();
 
 	dbg(1, "99 the worker %p", the_worker);
@@ -432,7 +436,7 @@ static void start_work(void *clidata)
 static void stop_work(void)
 {
 	dbg(1, "01");
-	acq200_delRefillClient(mean_work);
+	acq200_delRefillClient(&mean_work_client);
 	dbg(1, "99");            
 }
 

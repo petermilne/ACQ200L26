@@ -114,6 +114,13 @@ struct TblockConsumer {
 	unsigned backlog_limit;
 };
 
+/* typedef void (* RefillClient)(void *data, int nbytes); */
+
+struct _RefillClient {
+	void (*action)(void *data, int nbytes);
+	struct list_head list;
+};
+
 struct DataConsumerBuffer {
 	wait_queue_head_t waitq;
 	struct list_head list;
@@ -475,7 +482,6 @@ struct ArgBlock {
 };
 
 
-typedef void (* RefillClient)(void *data, int nbytes);
 
 struct DevGlobs {
 	int btype;
@@ -660,10 +666,17 @@ struct DevGlobs {
 		struct list_head clients;
 	} tbc;
 
+	/*
 	struct RefillClientStruct {
 		spinlock_t lock;
 		RefillClient client;
 	} refillClient;
+	*/
+
+	struct ClientList {
+		spinlock_t lock;
+		struct list_head clients;
+	} refillClients;
 
 	unsigned (*getChannelNumSamples)(int pchan);
 };
@@ -953,7 +966,7 @@ static inline void nsleep(int nsecs)
 	u32 maxgtsr = nsecs/NSECS_PER_GTSR;
 	u32 gtsr;
 
-	for(nsecs /= 10; nsecs; nsecs--){   /* extra delay if GTSR stopped */
+	for (nsecs /= 10; nsecs; nsecs--){   /* extra delay if GTSR stopped */
 		gtsr = *IOP321_GTSR;
 		
 		if (gtsr - startgtsr > maxgtsr){  /* normal case */
@@ -1286,8 +1299,8 @@ static inline int field_shift(u32 field)
 extern int search_for_epos_in_tblock(
 	struct Phase* phase, unsigned isearch, int max_dma_blocks);
 
-void acq200_addRefillClient(RefillClient client);
-void acq200_delRefillClient(RefillClient client);
+void acq200_addRefillClient(struct _RefillClient *client);
+void acq200_delRefillClient(struct _RefillClient *client);
 void acq200_runRefillClient(void *data, int nbytes);
 
 #endif /* ACQ200_FIFO_H__ */

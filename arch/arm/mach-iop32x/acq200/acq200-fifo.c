@@ -1660,6 +1660,7 @@ static void init_phase(struct Phase *phase, int len, int oneshot)
 static struct Phase* onPIT_repeater(
 	struct Phase *phase, u32 status, u32* offset)
 {
+	/* send PIT to any PIT clients ... */
 	/* WORKTODO - should locate trigger and export ... */
 	return phase;
 }
