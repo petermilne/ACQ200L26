@@ -289,6 +289,7 @@ struct TblockListElement {
 	unsigned tblock_sample_start;/* sample offset of first sample in tb */
 	unsigned sample_count;       /* number of samples in tb             */
 	struct list_head list;
+	unsigned event_offset;		/* optional event locator */
 };
 
 #define TBLE struct TblockListElement
@@ -662,12 +663,13 @@ struct DevGlobs {
 	struct ArgBlock post_shot_hook;	
 
 	struct LockedList tbc;
+	struct LockedList tbc_event;
 	struct LockedList refillClients;
 
 	unsigned (*getChannelNumSamples)(int pchan);
 };
 
-static inline void initRefillClient(struct LockedList *rc)
+static inline void initLockedList(struct LockedList *rc)
 {
 	INIT_LIST_HEAD(&rc->list);
 	spin_lock_init(&rc->lock);

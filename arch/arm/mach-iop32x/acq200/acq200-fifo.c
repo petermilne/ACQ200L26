@@ -1389,7 +1389,7 @@ static void run_dmc_early_action(u32 fifstat)
  * also, that the early_actions() can be called from interrupt state.
  */
 {
-	struct list_head* clients = &DG->dcb.clients;
+	struct list_head* clients = &DG->dcb.clients.list;
 
 	if (!list_empty(clients)){
 		struct DataConsumerBuffer *dcb;
@@ -1660,10 +1660,39 @@ static void init_phase(struct Phase *phase, int len, int oneshot)
 static struct Phase* onPIT_repeater(
 	struct Phase *phase, u32 status, u32* offset)
 {
+	struct list_head *clients = &DG->tbc_event.list;
+	struct list_head* pool = &DG->bigbuf.pool_tblocks;
+	int tbix = getTblockFromOffset(*offset);
 	/** @@todo send PIT to any PIT clients ... */
 	/* WORKTODO - should locate trigger and export ... */
-	dbg(1, "phase %s offset %u TBLOCK %u",
-			phase->name, *offset, getTblockFromOffset(*offset));
+	dbg(1, "phase %s offset %u TBLOCK %u", phase->name, *offset, tbix);
+
+
+	spin_lock(&DG->tbc_event.lock);
+
+	if (!list_empty(clients)){
+		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
+		unsigned tboff = TBLOCK_OFFSET(*offset);
+		struct TblockConsumer *tbc;
+
+		list_for_each_entry(tbc, clients, list){
+			if (tbc->backlog_limit == 0 ||
+			    tbc->backlog_limit > tbc->backlog){
+
+				TBLE* tle = TBLE_LIST_ENTRY(pool->next);
+				tle->event_offset = tboff;
+				++tbc->backlog;
+				atomic_inc(&tblock->in_phase);
+				tle->tblock = tblock;
+
+				list_move_tail(pool->next, &tbc->tle_q);
+				wake_up_interruptible(&tbc->waitq);
+			}else{
+				tbc_discards++;
+			}
+		}
+	}
+	spin_unlock(&DG->tbc_event.lock);
 	return phase;
 }
 
@@ -1671,6 +1700,7 @@ static struct Phase * onPIT_clear(
 	struct Phase *phase, u32 status, u32* offset)
 {
 	struct Phase* next = NEXT_PHASE(phase);
+
 	/* @@todo common def 196 216 needed */
 	/* @@todo WHY NOT eve[1] ?? */
 	deactivateSignal(CAPDEF->ev[0]);
@@ -3972,9 +4002,10 @@ static void init_dg(void)
 	INIT_LIST_HEAD(&DG->start_of_shot_hooks);
 	INIT_LIST_HEAD(&DG->end_of_shot_hooks);
 
-	initRefillClient(&DG->dcb.clients);
-	initRefillClient(&DG->tbc);
-	initRefillClient(&DG->refillClients);
+	initLockedList(&DG->dcb.clients);
+	initLockedList(&DG->tbc);
+	initLockedList(&DG->tbc_event);
+	initLockedList(&DG->refillClients);
 
 	INIT_WORK(&onEnable_work, onEnableAction);
 

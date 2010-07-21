@@ -86,7 +86,8 @@ void acq200_releaseDCI(struct file *file)
 	kfree(file->private_data);
 }
 
-static struct TblockConsumer *newTBC(unsigned backlog_limit)
+
+static struct TblockConsumer *_newTBC(struct LockedList * lockedList, unsigned backlog_limit)
 {
 	struct TblockConsumer *tbc = 
 		kzalloc(sizeof(struct TblockConsumer), GFP_KERNEL);
@@ -95,20 +96,21 @@ static struct TblockConsumer *newTBC(unsigned backlog_limit)
 	init_waitqueue_head(&tbc->waitq);
         INIT_LIST_HEAD(&tbc->tle_q);
 
-	spin_lock(&DG->tbc.lock);
-	list_add_tail(&tbc->list, &DG->tbc.list);
-	spin_unlock(&DG->tbc.lock);
+	spin_lock(&lockedList->lock);
+	list_add_tail(&tbc->list, &lockedList->list);
+	spin_unlock(&lockedList->lock);
 	
 	return tbc;
 }
-static void deleteTBC(struct TblockConsumer *tbc)
+
+static void _deleteTBC(struct LockedList * lockedList, struct TblockConsumer *tbc)
 {
 	struct TblockListElement *cursor, *tmp;
 	int tblock_backlog = 0;
 
-	spin_lock(&DG->tbc.lock);
-	list_del(&tbc->list);
-	spin_unlock(&DG->tbc.lock);
+	spin_lock(&lockedList->lock);
+	list_del(&lockedList->list);
+	spin_unlock(&lockedList->lock);
 
 	/* flush and free any waiting tblocks. 
 	 * list disconnected, no need to lock */
@@ -125,7 +127,24 @@ static void deleteTBC(struct TblockConsumer *tbc)
 	}
 }
 
+static struct TblockConsumer *newTBC(unsigned backlog_limit)
+{
+	return _newTBC(&DG->tbc, backlog_limit);
+}
+static void deleteTBC(struct TblockConsumer *tbc)
+{
+	return _deleteTBC(&DG->tbc, tbc);
+}
 
+static struct TblockConsumer *newEventTBC(unsigned backlog_limit)
+{
+	return _newTBC(&DG->tbc_event, backlog_limit);
+}
+
+static void deleteEventTBC(struct TblockConsumer *tbc)
+{
+	return _deleteTBC(&DG->tbc_event, tbc);
+}
 #define NOSAMPLES 0xffffffff
 
 
@@ -1386,6 +1405,15 @@ static int dma_tb_open (
 	return 0;
 }
 
+static int dma_tb_evopen (
+	struct inode *inode, struct file *file)
+{
+	acq200_initDCI(file, ID_CHANXX);
+	DCI_TBC(file) = newEventTBC(DG->bigbuf.tblocks.nblocks - 10);
+	DCI(file)->extract = dma_xx_extractor;
+	return 0;
+}
+
 static int dma_tb_release (
 	struct inode *inode, struct file *file)
 {
@@ -1394,6 +1422,13 @@ static int dma_tb_release (
 	return 0;
 }
 
+static int dma_tb_evrelease (
+	struct inode *inode, struct file *file)
+{
+	deleteEventTBC(DCI_TBC(file));
+	acq200_releaseDCI(file);
+	return 0;
+}
 static unsigned int tb_poll(
 	struct file *file, struct poll_table_struct *poll_table)
 {
@@ -1515,6 +1550,46 @@ static ssize_t status_tb_read (
 	return rc;
 }
 
+static ssize_t status_tb_evread (
+	struct file *file, char *buf, size_t len, loff_t *offset)
+/** output last tblock as string data.
+ * TB is NOT marked as in_phase (busy).
+ */
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle;
+	char lbuf[80];
+	int rc;
+
+	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
+
+	if (list_empty(&tbc->tle_q)){
+		return -EINTR;
+	}
+
+	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+
+	if (len < 8){
+		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
+	}else{
+		rc = snprintf(lbuf, min(sizeof(lbuf), len),
+			"tblock %3d off 0x%08x phys:0x%08x len %d scount %d\n",
+			tle->tblock->iblock,
+			tle->tblock->offset,
+			pa_buf(DG) + tle->tblock->offset,
+			tle->tblock->tb_length,
+			tle->sample_count
+			);
+	}
+	tbc->c.tle = tle;
+
+	if (tbc->backlog){
+		--tbc->backlog;
+	}
+
+	COPY_TO_USER(buf, lbuf, rc);
+	return rc;
+}
 
 static ssize_t status_tb_write(
 	struct file *file, const char *buf, size_t len, loff_t *offset)
@@ -1532,6 +1607,27 @@ static ssize_t status_tb_write(
 		acq200_phase_release_tblock_entry(tle);
 		DCI(file)->tle_current = 0;
 		spin_unlock(&DG->tbc.lock);			
+	}
+
+	return len;
+}
+
+static ssize_t status_tb_evwrite(
+	struct file *file, const char *buf, size_t len, loff_t *offset)
+{
+//	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle = DCI(file)->tle_current;
+
+	/** @todo should check iblock on input; */
+
+	/** lazy init - first write sets mode flag */
+	DCI(file)->flags |= DCI_FLAGS_NORELEASE_ON_READ;
+
+	if (tle != 0){
+		spin_lock(&DG->tbc.lock);
+		acq200_phase_release_tblock_entry(tle);
+		DCI(file)->tle_current = 0;
+		spin_unlock(&DG->tbc.lock);
 	}
 
 	return len;
@@ -1824,6 +1920,13 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
+	static struct file_operations dma_tbstat_ev_ops = {
+		.open = dma_tb_evopen,
+		.read = status_tb_evread,
+		.write = status_tb_evwrite,
+		.release = dma_tb_evrelease,
+		.poll = tb_poll
+	};
 	static struct file_operations dma_tbstatus2_ops = {
 		.open = dma_tb_open,
 		.read = status2_tb_read,
@@ -1876,6 +1979,9 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.ops = &dma_tbstatus2_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
+	src.name = "tbstat_ev";
+	src.ops = &dma_tbstat_ev_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
 	tcount = updateFiles(&S_DFD, &backstop, 0, tcount);
 	return simple_fill_super(sb, DMAFS_MAGIC, S_DFD.files);

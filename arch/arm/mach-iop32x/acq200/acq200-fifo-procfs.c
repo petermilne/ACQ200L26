@@ -1978,6 +1978,8 @@ static int makeFullSearch(struct Phase* phase)
 			return ES_FOUND;			
 		}
 	}
+
+	return 0;
 }
 
 
