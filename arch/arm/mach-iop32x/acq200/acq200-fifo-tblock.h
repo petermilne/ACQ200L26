@@ -53,3 +53,5 @@ struct TblockListElement *locatePrevTblockInPhase(
 struct TblockListElement *locateNextTblockInPhase(
 	struct Phase *phase, struct TblockListElement *tble);
 void shareTblockInPhase(struct Phase *phase, TBLE *tle_cur);
+
+int getTblockFromOffset(unsigned offset);
