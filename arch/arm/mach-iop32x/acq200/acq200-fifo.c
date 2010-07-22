@@ -1661,16 +1661,15 @@ static struct Phase* onPIT_repeater(
 	struct Phase *phase, u32 status, u32* offset)
 {
 	struct list_head *clients = &DG->tbc_event.list;
-	struct list_head* pool = &DG->bigbuf.pool_tblocks;
 	int tbix = getTblockFromOffset(*offset);
-	/** @@todo send PIT to any PIT clients ... */
+
 	/* WORKTODO - should locate trigger and export ... */
 	dbg(1, "phase %s offset %u TBLOCK %u", phase->name, *offset, tbix);
-
 
 	spin_lock(&DG->tbc_event.lock);
 
 	if (!list_empty(clients)){
+		struct list_head* pool = &DG->bigbuf.pool_tblocks;
 		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
 		unsigned tboff = TBLOCK_OFFSET(*offset);
 		struct TblockConsumer *tbc;

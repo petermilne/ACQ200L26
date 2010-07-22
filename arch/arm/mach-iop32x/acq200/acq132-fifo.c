@@ -484,6 +484,14 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET, 
 			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);	
 		break;
+	case M_SOFT_CONTINUOUS:
+	/* gear up for multi-event mode ... if no events, there's no harm .. */
+		dbg(1, "M_SOFT_CONTINUOUS");
+		DMC_WO->looking_for_pit = 1;
+		activateSignal(capdef->ev[0]);
+		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET,
+			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);
+		break;
 	default:	
 		dbg(1, "mode %d %s", capdef->mode, 
 			acq132_getRGM()?"RGM":	acq132_is_DR()?"DR": "");
