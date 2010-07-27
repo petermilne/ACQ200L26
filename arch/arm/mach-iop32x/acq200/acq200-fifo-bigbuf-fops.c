@@ -1576,8 +1576,10 @@ static ssize_t status_tb_evread (
 		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
 	}else{
 		rc = snprintf(lbuf, min(sizeof(lbuf), len),
-			"tblock %3d esoff 0x%08x\n",
-				tle->tblock->iblock, tle->event_offset);
+			"tblock=%-3d pss=%-8u esoff=0x%08x\n",
+				tle->tblock->iblock,
+				tle->phase_sample_start,
+				tle->event_offset);
 	}
 	tbc->c.tle = tle;
 

@@ -482,11 +482,12 @@ static void addPitStore(struct DMC_WORK_ORDER *wo, u32 offset, u32 status)
 {
 	if (wo->pit_count < DG->pit_store.max_pits){
 		struct PIT_DEF *def = 
-			&DG->pit_store.the_pits[wo->pit_count++];
+			&DG->pit_store.the_pits[wo->pit_count];
 
 		def->offset = offset;
 		def->status = status;
 	}	
+	wo->pit_count++;
 }
 
 
@@ -1669,6 +1670,8 @@ static struct Phase* onPIT_repeater(
 	spin_lock(&DG->tbc_event.lock);
 
 	if (!list_empty(clients)){
+		long spb = DMA_BLOCK_LEN/sample_size();
+		unsigned pss = DG->stats.refill_blocks*spb - DMC_WO->pit_count;
 		struct list_head* pool = &DG->bigbuf.pool_tblocks;
 		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
 		unsigned tboff = TBLOCK_OFFSET(*offset);
@@ -1680,6 +1683,7 @@ static struct Phase* onPIT_repeater(
 
 				TBLE* tle = TBLE_LIST_ENTRY(pool->next);
 				tle->event_offset = tboff;
+				tle->phase_sample_start = pss;
 				++tbc->backlog;
 				atomic_inc(&tblock->in_phase);
 				tle->tblock = tblock;
