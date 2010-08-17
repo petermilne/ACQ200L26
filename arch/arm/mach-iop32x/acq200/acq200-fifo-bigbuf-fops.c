@@ -1552,6 +1552,9 @@ static ssize_t status_tb_read (
 	return rc;
 }
 
+#define BORDERLINE	0x100000
+#define TB_NOT_BORDERLINE	999
+
 static ssize_t status_tb_evread (
 	struct file *file, char *buf, size_t len, loff_t *offset)
 /** output last tblock as string data.
@@ -1575,9 +1578,34 @@ static ssize_t status_tb_evread (
 	if (len < 8){
 		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
 	}else{
+		int tb_prev = TB_NOT_BORDERLINE;
+		int tb_next = TB_NOT_BORDERLINE;
+
+		TBLE *tble_prev = list_entry(tle->neighbours.prev, TBLE, list);
+		TBLE *tble_next = list_entry(tle->neighbours.next, TBLE, list);
+		if (tle->event_offset > BORDERLINE){
+			if (tble_prev->tblock){
+				acq200_phase_release_tblock_entry(tble_prev);
+			}
+			list_del(&tble_prev->list);
+		}else{
+			if (tble_prev->tblock){
+				tb_prev = tble_prev->tblock->iblock;
+			}
+		}
+		if (tle->event_offset < TBLOCK_LEN(DG)-BORDERLINE){
+			if (tble_next->tblock){
+				acq200_phase_release_tblock_entry(tble_next);
+			}
+			list_del(&tble_next->list);
+		}else{
+			if (tble_next->tblock){
+				tb_next = tble_next->tblock->iblock;
+			}
+		}
 		rc = snprintf(lbuf, min(sizeof(lbuf), len),
-			"tblock=%-3d pss=%-8u esoff=0x%08x\n",
-				tle->tblock->iblock,
+			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x\n",
+				tb_prev, tle->tblock->iblock, tb_next,
 				tle->phase_sample_start,
 				tle->event_offset);
 	}
@@ -1595,7 +1623,9 @@ static ssize_t status_tb_write(
 	struct file *file, const char *buf, size_t len, loff_t *offset)
 {
 //	struct TblockConsumer *tbc = DCI_TBC(file);
-	struct TblockListElement *tle = DCI(file)->tle_current;
+	TBLE *tle = DCI(file)->tle_current;
+	TBLE *nbr;
+	TBLE *pos;
 	
 	/** @todo should check iblock on input; */
 
@@ -1604,6 +1634,13 @@ static ssize_t status_tb_write(
 
 	if (tle != 0){
 		spin_lock(&DG->tbc.lock);
+
+		list_for_each_entry_safe(nbr, pos, &tle->neighbours, list){
+			list_del(nbr);
+			if (nbr->tblock){
+				acq200_phase_release_tblock_entry(nbr);
+			}
+		}
 		acq200_phase_release_tblock_entry(tle);
 		DCI(file)->tle_current = 0;
 		spin_unlock(&DG->tbc.lock);			

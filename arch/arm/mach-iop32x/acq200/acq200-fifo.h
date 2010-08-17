@@ -290,6 +290,9 @@ struct TblockListElement {
 	unsigned sample_count;       /* number of samples in tb             */
 	struct list_head list;
 	unsigned event_offset;		/* optional event locator */
+
+	/* previous, next if in triplet NB : RARE OCCURRENCE */
+	struct list_head neighbours;
 };
 
 #define TBLE struct TblockListElement

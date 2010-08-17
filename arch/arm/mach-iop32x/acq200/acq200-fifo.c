@@ -160,6 +160,10 @@ module_param(tbc_discards, int, 0644);
 int disregard_empty_tblocks = 0;
 module_param(disregard_empty_tblocks, int, 0644);
 
+int tblock_already_in_phase_is_ok = 0;
+module_param(tblock_already_in_phase_is_ok, int, 0644);
+MODULE_PARM_DESC(tblock_already_in_phase_is_ok,
+		"set for apps like multivent that may pre-allocate");
 #define DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 #define DMA_ERROR IOP321_CSR_ERR
 
@@ -640,7 +644,8 @@ static struct TblockListElement* dmc_phase_add_tblock(
 			TBLE_LIST_ENTRY(empty_tblocks->next);
 		unsigned long flags;
 
-		if (atomic_read(&tle->tblock->in_phase)){	
+		if (tblock_already_in_phase_is_ok == 0 &&
+				atomic_read(&tle->tblock->in_phase)){
 			err("in_phase != 0");
 			finish_with_engines(-__LINE__);
 			return 0;			
@@ -1664,7 +1669,6 @@ static struct Phase* onPIT_repeater(
 	struct list_head *clients = &DG->tbc_event.list;
 	int tbix = getTblockFromOffset(*offset);
 
-	/* WORKTODO - should locate trigger and export ... */
 	dbg(1, "phase %s offset %u TBLOCK %u", phase->name, *offset, tbix);
 
 	spin_lock(&DG->tbc_event.lock);
@@ -1676,19 +1680,68 @@ static struct Phase* onPIT_repeater(
 		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
 		unsigned tboff = TBLOCK_OFFSET(*offset);
 		struct TblockConsumer *tbc;
+		TBLE* tble_m1;		/* previous tblock */
+		int found_self = 0;
+		struct TBLOCK *prev_tb = 0;
+		TBLE* next_tble = list_entry(
+			DG->bigbuf.empty_tblocks.next, TBLE, list);
+		struct TBLOCK *next_tb = next_tble->tblock;
+		
+		/** @@todo - get prev TB from phase, get next TB. */
+		
+		list_for_each_entry_reverse(tble_m1, &phase->tblocks, list){
+			dbg(1, "reverse list phase tblocks %d",
+						tble_m1->tblock->iblock);
+			if (!found_self){
+				if (tble_m1->tblock != tblock){
+					err("expected to find self failed");
+				}else{
+					found_self = 1;
+				}
+			}else{
+				prev_tb = tble_m1->tblock;
+				break;
+			}
+		}
+
+		dbg(1, "01: prev_tb %p next_tb %p", prev_tb, next_tb);
+		dbg(1, "02: pret_tb %d next_tb %d",
+					prev_tb->iblock, next_tb->iblock);
 
 		list_for_each_entry(tbc, clients, list){
 			if (tbc->backlog_limit == 0 ||
 			    tbc->backlog_limit > tbc->backlog){
 
 				TBLE* tle = TBLE_LIST_ENTRY(pool->next);
+				TBLE* tle_prev;
+				TBLE* tle_next;
+
+				dbg(1, "30: listp %p", &tle->list);
+
+				list_del(&tle->list);
 				tle->event_offset = tboff;
 				tle->phase_sample_start = pss;
 				++tbc->backlog;
 				atomic_inc(&tblock->in_phase);
 				tle->tblock = tblock;
 
-				list_move_tail(pool->next, &tbc->tle_q);
+				INIT_LIST_HEAD(&tle->neighbours);
+				
+				list_move(pool->next, &tle->neighbours);
+				list_move_tail(pool->next, &tle->neighbours);
+
+				tle_next = list_entry(tle->neighbours.next,
+						      TBLE, list);
+				tle_prev = list_entry(tle->neighbours.prev, 
+							TBLE, list);
+
+				tle_prev->tblock = prev_tb;
+				if (prev_tb){
+					atomic_inc(&prev_tb->in_phase);
+				}
+				tle_next->tblock = next_tb;
+				atomic_inc(&next_tb->in_phase);
+				list_add_tail(&tle->list, &tbc->tle_q);
 				wake_up_interruptible(&tbc->waitq);
 			}else{
 				tbc_discards++;
