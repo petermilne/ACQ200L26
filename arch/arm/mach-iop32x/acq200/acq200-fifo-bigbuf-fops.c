@@ -1559,6 +1559,11 @@ static ssize_t status_tb_evread (
 	struct file *file, char *buf, size_t len, loff_t *offset)
 /** output last tblock as string data.
  * TB is NOT marked as in_phase (busy).
+ *
+ * @@todo no way to recycle the buffers. Suggest maintain a list of tble
+ *  - add a list element to DCI
+ *  - then the write() function takes an int arg, scans the list and frees
+ *    corresponding tble.
  */
 {
 	struct TblockConsumer *tbc = DCI_TBC(file);
@@ -1652,6 +1657,8 @@ static ssize_t status_tb_write(
 static ssize_t status_tb_evwrite(
 	struct file *file, const char *buf, size_t len, loff_t *offset)
 {
+
+	return -999;	/** @@todo see above. */
 //	struct TblockConsumer *tbc = DCI_TBC(file);
 	struct TblockListElement *tle = DCI(file)->tle_current;
 
