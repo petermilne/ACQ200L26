@@ -1141,7 +1141,7 @@ struct DataChannelInfo {
 		struct TblockConsumer* tbc;
 	} _u;
 	unsigned flags;
-	struct TblockListElement *tle_current;
+	struct list_head list;		/** general purpose list of resources */
 };
 
 #define DCI_FLAGS_NORELEASE_ON_READ 0x00000001
@@ -1149,6 +1149,7 @@ struct DataChannelInfo {
 #define DCI(file) ((struct DataChannelInfo *)file->private_data)
 #define DCI_PHASE(file) (DCI(file)->_u.phase)
 #define DCI_TBC(file)	(DCI(file)->_u.tbc)
+#define DCI_LIST(file)	(&DCI(file)->list)
 
 #define DCI_SZ (sizeof(struct DataChannelInfo))
 

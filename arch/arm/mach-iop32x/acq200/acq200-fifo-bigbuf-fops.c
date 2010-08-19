@@ -46,6 +46,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/kdev_t.h>
+#include <linux/ctype.h>
 
 #include "acq200-mu-app.h"
 
@@ -77,6 +78,7 @@ void acq200_initDCI(struct file *file, int lchannel)
 		}
 		DCI(file)->ssize = RSIZE;
 	}
+	INIT_LIST_HEAD(DCI_LIST(file));
 }
 
 
@@ -1414,21 +1416,37 @@ static int dma_tb_evopen (
 	return 0;
 }
 
+#define STATUS_TB_ALL	999
+
+
+
+static void status_tb_free_tblocks(struct list_head* tble_list, int tblock)
+{
+	TBLE* cursor;
+	TBLE* tmp;
+
+	list_for_each_entry_safe(cursor, tmp, tble_list, list){
+		if (tblock == STATUS_TB_ALL ||
+		    tblock == cursor->tblock->iblock){
+			spin_lock(&DG->tbc.lock);
+			acq200_phase_release_tblock_entry(cursor);
+			spin_unlock(&DG->tbc.lock);
+			list_del(&cursor->list);
+		}
+	}
+}
+
+
 static int dma_tb_release (
 	struct inode *inode, struct file *file)
 {
+	status_tb_free_tblocks(DCI_LIST(file), STATUS_TB_ALL);
 	deleteTBC(DCI_TBC(file));
 	acq200_releaseDCI(file);
 	return 0;
 }
 
-static int dma_tb_evrelease (
-	struct inode *inode, struct file *file)
-{
-	deleteEventTBC(DCI_TBC(file));
-	acq200_releaseDCI(file);
-	return 0;
-}
+
 static unsigned int tb_poll(
 	struct file *file, struct poll_table_struct *poll_table)
 {
@@ -1596,7 +1614,9 @@ static ssize_t status_tb_evread (
 		}else{
 			if (tble_prev->tblock){
 				tb_prev = tble_prev->tblock->iblock;
+				list_move_tail(&tble_prev->list, DCI_LIST(file));
 			}
+
 		}
 		if (tle->event_offset < TBLOCK_LEN(DG)-BORDERLINE){
 			if (tble_next->tblock){
@@ -1606,8 +1626,10 @@ static ssize_t status_tb_evread (
 		}else{
 			if (tble_next->tblock){
 				tb_next = tble_next->tblock->iblock;
+				list_move_tail(&tble_next->list, DCI_LIST(file));
 			}
 		}
+		list_add_tail(&tle->list, DCI_LIST(file));
 		rc = snprintf(lbuf, min(sizeof(lbuf), len),
 			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x\n",
 				tb_prev, tle->tblock->iblock, tb_next,
@@ -1619,62 +1641,49 @@ static ssize_t status_tb_evread (
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
-
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
 }
 
-static ssize_t status_tb_write(
-	struct file *file, const char *buf, size_t len, loff_t *offset)
-{
-//	struct TblockConsumer *tbc = DCI_TBC(file);
-	TBLE *tle = DCI(file)->tle_current;
-	TBLE *nbr;
-	TBLE *pos;
-	
-	/** @todo should check iblock on input; */
-
-	/** lazy init - first write sets mode flag */
-	DCI(file)->flags |= DCI_FLAGS_NORELEASE_ON_READ;
-
-	if (tle != 0){
-		spin_lock(&DG->tbc.lock);
-
-		list_for_each_entry_safe(nbr, pos, &tle->neighbours, list){
-			list_del(nbr);
-			if (nbr->tblock){
-				acq200_phase_release_tblock_entry(nbr);
-			}
-		}
-		acq200_phase_release_tblock_entry(tle);
-		DCI(file)->tle_current = 0;
-		spin_unlock(&DG->tbc.lock);			
-	}
-
-	return len;
-}
 
 static ssize_t status_tb_evwrite(
 	struct file *file, const char *buf, size_t len, loff_t *offset)
 {
-
-	return -999;	/** @@todo see above. */
-//	struct TblockConsumer *tbc = DCI_TBC(file);
-	struct TblockListElement *tle = DCI(file)->tle_current;
-
-	/** @todo should check iblock on input; */
+	char lbuf[80];
+	char *s1;
+	char *s2;
+	
+	if (len >= 80) len = 80-1;
 
 	/** lazy init - first write sets mode flag */
 	DCI(file)->flags |= DCI_FLAGS_NORELEASE_ON_READ;
 
-	if (tle != 0){
-		spin_lock(&DG->tbc.lock);
-		acq200_phase_release_tblock_entry(tle);
-		DCI(file)->tle_current = 0;
-		spin_unlock(&DG->tbc.lock);
-	}
+	COPY_FROM_USER(lbuf, buf, len);
 
+	if ((s1 = strstr(lbuf, "tblock=")) != 0){
+		s1 += strlen("tblock=");
+	}else{
+		s1 = lbuf;
+	}
+	for ( ; s1 - lbuf < len; s1 = s2){
+		if ((s2 = strpbrk(s1, ", ")) != 0){
+			*s2++ = '\0';
+		}
+		status_tb_free_tblocks(DCI_LIST(file),
+					simple_strtoul(s1, 0, 10));
+	}
 	return len;
+}
+
+#define status_tb_write status_tb_evwrite
+
+static int dma_tb_evrelease (
+	struct inode *inode, struct file *file)
+{
+	status_tb_free_tblocks(DCI_LIST(file), STATUS_TB_ALL);
+	deleteEventTBC(DCI_TBC(file));
+	acq200_releaseDCI(file);
+	return 0;
 }
 
 static ssize_t status2_tb_read ( 
@@ -1712,7 +1721,7 @@ static ssize_t status2_tb_read (
 	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
 		acq200_phase_release_tblock_entry(tle);
 	}else{
-		DCI(file)->tle_current = tle;
+		list_move_tail(&tle->list, DCI_LIST(file));
 	}
 	spin_unlock(&DG->tbc.lock);	
 
