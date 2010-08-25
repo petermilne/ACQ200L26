@@ -35,12 +35,15 @@
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
 
+#include "acq100_rtm_t.h"
+
+
 
 static int __init acq100_rtm_t_init(void)
 {
 	struct resource mumem;
 	acq200_get_mumem_resource(&mumem);
-	DG->fpga.fifo.pa = virt_to_phys(mumem.start);
+	DG->fpga.fifo.pa = virt_to_phys((void*)mumem.start);
 
 	info("set fifo.pa to %x", DG->fpga.fifo.pa);
 	return 0;
