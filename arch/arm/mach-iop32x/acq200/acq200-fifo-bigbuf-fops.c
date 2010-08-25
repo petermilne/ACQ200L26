@@ -2024,6 +2024,10 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.ops = &dma_tb_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
+	/* the rest are all RW to allow buffer reserve/recycle */      
+	/* NB: tbstat2 doesn't actually reserver, W is chucked */
+	src.mode = S_IRUGO|S_IWUGO;
+
 	src.name = "tbstat";
 	src.ops = &dma_tbstatus_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
@@ -2035,6 +2039,7 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.name = "tbstat_ev";
 	src.ops = &dma_tbstat_ev_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
 
 	tcount = updateFiles(&S_DFD, &backstop, 0, tcount);
 	return simple_fill_super(sb, DMAFS_MAGIC, S_DFD.files);
