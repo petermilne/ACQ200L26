@@ -439,13 +439,18 @@ static int store_osam(
 	struct device_attribute *attr,
 	const char * buf)
 {
-	static const int good_shift[] = { -2, -1, 0, 1, 2 };
+	static const int good_shift[] = { -2, -1, 0, 1, 2, 3, 4, 5 };
 #define GOOD_SHIFT (sizeof(good_shift)/sizeof(int))
 
 	int nacc;
 	int shift;
 	int decimate = strstr(buf, "decimate") != 0;
+	int n4 = 0;
+	const char *cursor;
 
+	if ((cursor = strstr(buf, "nacc4="))){
+		sscanf(cursor, "nacc4=%d", &n4);
+	}
 	if (sscanf(buf, "nacc=%d shift=%d", &nacc, &shift) == 2 ||
 	    sscanf(buf, "%d %d", &nacc, &shift) == 2){
 		if (!IN_RANGE(nacc, 1, 16)){
@@ -454,7 +459,7 @@ static int store_osam(
 			err("bad shift %d", shift);
 		}else{
 			acq132_set_osam_nacc(
-				block, OSAMLR(lr), nacc, shift, decimate);
+				block, OSAMLR(lr), nacc, shift, decimate, n4);
 			return strlen(buf);
 		}
 	}else{
@@ -471,6 +476,7 @@ static ssize_t show_osam(
 {
 	int nacc, shift;
 	unsigned shift_code;
+	unsigned n4 = 0;
 
 	const u32 osam = *ACQ132_ADC_OSAM(block) >> OSAMLR(lr);
 
@@ -490,10 +496,11 @@ static ssize_t show_osam(
 	default:
 		return sprintf(buf, "illegal shift field 0x%x", shift_code);
 	}
+	n4 = (osam & (1<<ACQ132_ADC_OSAM_R_NACC4)) != 0;
 
-	return sprintf(buf, "nacc=%d shift=%d %s\n", nacc, shift, 
+	return sprintf(buf, "nacc=%d shift=%d %s nacc4=%d\n", nacc, shift, 
 		       osam&(1<<ACQ132_ADC_OSAM_R_ACCEN)? 
-				"accumulate": "decimate");
+				       "accumulate": "decimate", n4);
 }
 
 #define OSAM(BLK, LR)							\

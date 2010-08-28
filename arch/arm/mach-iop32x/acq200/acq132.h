@@ -177,9 +177,11 @@
 
 #define ACQ132_ADC_OSAM_L_NACC		28
 #define ACQ132_ADC_OSAM_L_SHIFT		24
+#define ACQ132_ADC_OSAM_L_NACC4		19	/* prescale by 4 */
 #define ACQ132_ADC_OSAM_L_ACCEN		16
 #define ACQ132_ADC_OSAM_R_NACC		12
 #define ACQ132_ADC_OSAM_R_SHIFT		 8
+#define ACQ132_ADC_OSAM_R_NACC4		 3	/* prescale by 4 */
 #define ACQ132_ADC_OSAM_R_ACCEN		 0
 
 #define OSAMBITS	0x0fU
@@ -237,7 +239,7 @@ void acq132_set_adc_range(u32 channels);
 u32 acq132_get_adc_range(void);
 
 void acq132_set_osam_nacc(
-	int dev, int lr, int nacc, int shift, int decimate);
+	int dev, int lr, int nacc, int shift, int decimate, int n4);
 
 static inline void acq132_adc_set_all(int reg, u32 bits)
 {
