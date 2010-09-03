@@ -1150,6 +1150,9 @@ static void* lut_memcpy(void* to, const void* from, __kernel_size_t nbytes)
 static int acq200_fifo_bigbuf_xxl_open (
 	struct inode *inode, struct file *file)
 {
+	if (!XX_valid){
+		return -ENODEV;
+	}	
 	fillLUT(LUT);	
 	DCI(file)->memcpy = lut_memcpy;
 	return acq200_fifo_bigbuf_xx_open(inode, file);
