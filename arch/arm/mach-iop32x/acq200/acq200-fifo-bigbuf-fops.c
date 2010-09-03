@@ -1992,8 +1992,9 @@ static int format__mmap(
 static int format__release(
         struct inode *inode, struct file *file)
 {
-	inode->i_size = fbLen(FB(file));
-	inode->i_mtime = CURRENT_TIME;
+	struct inode *d_inode = file->f_dentry->d_inode; 
+	d_inode->i_size = fbLen(FB(file));
+	d_inode->i_mtime = CURRENT_TIME;
 	return 0;
 }
 
