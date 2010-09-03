@@ -58,6 +58,8 @@
 
 #define ID_CHANXX	0
 
+static int XX_valid;
+
 void acq200_initDCI(struct file *file, int lchannel)
 {
 	file->private_data = kmalloc(DCI_SZ, GFP_KERNEL);
@@ -153,14 +155,16 @@ static void deleteEventTBC(struct TblockConsumer *tbc)
 static unsigned update_inode_stats(struct inode *inode)
 {
 	int ident = (int)inode->i_private;
-	unsigned ssize;
+	unsigned ssize = 0;
 	unsigned samples = 0;
 
 	switch(ident){
 	case BIGBUF_DATA_DEVICE_XXP:
 	case BIGBUF_DATA_DEVICE_XXL:
-		ssize = sample_size();
-		samples = SAMPLES;
+		if (XX_valid){
+			ssize = sample_size();
+			samples = SAMPLES;
+		}
 		break;
 	case BIGBUF_DATA_DEVICE_FMT:
 		return inode->i_size;
@@ -171,11 +175,7 @@ static unsigned update_inode_stats(struct inode *inode)
 				ssize = CSIZE;
 				samples = DG->getChannelNumSamples(	
 					acq200_lookup_pchan(lchannel));
-			}else{
-				ssize = 0;
 			}
-		}else{
-			ssize = 0;
 		}
 	}
 
@@ -203,6 +203,8 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	
 	unsigned nwords = DG->bigbuf.tblocks.blocklen/sizeof(short);
 	unsigned t_flags = DG->bigbuf.tblocks.t_flags;
+
+	XX_valid = false;
 
 	if (!tb_tmp) return -1;
 
@@ -1091,6 +1093,9 @@ static ssize_t fifo_bigbuf_xxX_read (
 int acq200_fifo_bigbuf_xx_open (
 	struct inode *inode, struct file *file)
 {
+	if (!XX_valid){
+		return -ENODEV;
+	}
 	acq200_initDCI(file, ID_CHANXX);
 	if (capdef_get_word_size() == sizeof(u32)){
 		DCI(file)->extract = tblock_rawxx_extractor32;
@@ -2283,6 +2288,17 @@ int acq200_removeDataConsumer(struct DataConsumerBuffer *dcb)
 	return 0;
 }
 
+static void set_xx_valid(void *not_used) 
+{
+	XX_valid = 1;
+}
+int acq200_fifo_bigbuf_fops_init(void)
+{
+	static struct Hookup xx_valid_hook = {
+		.the_hook = set_xx_valid
+	};
+	acq200_add_start_of_shot_hook(&xx_valid_hook);
+}
 
 EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_read_bbrp);
 EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_xxX_read);
