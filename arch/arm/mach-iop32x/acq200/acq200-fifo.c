@@ -4067,6 +4067,8 @@ static void init_dg(void)
 
 	DG->bigbuf.tblocks.getChannelData = getChannelData;
 	DG->getChannelNumSamples = getChannelNumSamples;
+
+	acq200_fifo_bigbuf_fops_init();
 }
 
 static void delete_dg(void)

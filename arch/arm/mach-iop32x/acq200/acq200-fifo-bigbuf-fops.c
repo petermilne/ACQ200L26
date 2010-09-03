@@ -2292,7 +2292,7 @@ static void set_xx_valid(void *not_used)
 {
 	XX_valid = 1;
 }
-int acq200_fifo_bigbuf_fops_init(void)
+void acq200_fifo_bigbuf_fops_init(void)
 {
 	static struct Hookup xx_valid_hook = {
 		.the_hook = set_xx_valid
