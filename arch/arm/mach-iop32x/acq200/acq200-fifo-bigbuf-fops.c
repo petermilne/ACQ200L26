@@ -1894,10 +1894,124 @@ out:
 }
 /** crib ends */
 
+struct FunctionBuf {
+	char *p_start;
+	char *p_end;
+};
+
+
+
+#define FB(filp) ((struct FunctionBuf *)filp->private_data)
+#define SET_FB(filp, fb) (filp->private_data = fb)
+
+struct FunctionBuf fb_format;
+
+#define FB_LIMIT 32768
+
+
+static inline size_t fbLen(struct FunctionBuf* fb)
+{
+	return fb->p_end - fb->p_start;
+}
+static inline size_t fbFree(struct FunctionBuf* fb)
+{
+	return FB_LIMIT - fbLen(fb);
+}
+
+static void *fbCursor(struct FunctionBuf* fb, int offset_bytes)
+{
+	return fb->p_start + offset_bytes;
+}
+
+static int format__open(struct inode *inode, struct file *filp)
+{
+	SET_FB(filp, &fb_format);
+
+	if (FB(filp)->p_start == 0){
+		FB(filp)->p_start = kmalloc(FB_LIMIT, GFP_KERNEL);
+		FB(filp)->p_end = FB(filp)->p_start;
+	}
+
+	if ((filp->f_mode & FMODE_WRITE) != 0){
+		/* truncate on write */
+		FB(filp)->p_end = FB(filp)->p_start; 
+
+		filp->f_dentry->d_inode->i_size = 0;
+	}
+	return 0;
+}
+
+static ssize_t format__write(struct file *filp, const char *buf,
+		size_t count, loff_t *offset)
+{
+	count = min(count, fbFree(FB(filp)));
+
+	if (count == 0){
+		return -EFBIG;
+	}
+	if (copy_from_user(fbCursor(FB(filp), *offset), buf, count)){
+		return -EFAULT;
+	}
+
+	FB(filp)->p_end += count;
+	*offset += count;
+	filp->f_dentry->d_inode->i_size += count;
+
+	return count;
+}
+
+static ssize_t format__read(struct file *filp, char *buf,
+		size_t count, loff_t *offset)
+{
+	size_t fb_left;
+	if (*offset >= fbLen(FB(filp))){
+		return 0;
+	}
+
+	fb_left = fbLen(FB(filp)) - *offset;
+
+	count = min(count, fb_left);
+
+	if (count > 0){
+		COPY_TO_USER(buf, fbCursor(FB(filp), *offset), count);
+		*offset += count;
+	}
+	return count;
+}
+
+static int format__mmap(
+	struct file *filp, struct vm_area_struct *vma)
+{
+	return io_remap_pfn_range( 
+		vma, vma->vm_start, 
+		__phys_to_pfn(virt_to_phys(FB(filp)->p_start)), 
+		vma->vm_end - vma->vm_start, 
+		vma->vm_page_prot 
+	);
+}
+static int format__release(
+        struct inode *inode, struct file *file)
+{
+	inode->i_size = fbLen(FB(file));
+	inode->i_mtime = CURRENT_TIME;
+	return 0;
+}
+
+
+
 
 static int AI_fs_fill_super (
 	struct super_block *sb, void *data, int silent)
 {
+	static struct file_operations format_ops = {
+		.open = format__open,
+		.read = format__read,
+		.write = format__write,
+		.mmap = format__mmap,
+		.release = format__release
+	};
+
+
 	static struct tree_descr front = {
 		NULL, NULL, 0
 	};
@@ -1937,6 +2051,12 @@ static int AI_fs_fill_super (
 	tcount = updateFiles(&S_AIFD, &src, 
 			     BIGBUF_DATA_DEVICE_XXP,
 			     tcount);
+
+	src.mode = S_IRUGO|S_IWUGO;
+
+	src.name = "format";	/* User Data File */
+	src.ops = &format_ops;
+	tcount = updateFiles(&S_AIFD, &src, 0, tcount);
 
 	tcount = updateFiles(&S_AIFD, &backstop, 0, tcount);
 	return ai_simple_fill_super(sb, AIAFS_MAGIC, &S_AIFD);
@@ -1986,7 +2106,6 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
-
 	static struct tree_descr front = {
 		NULL, NULL, 0
 	};
