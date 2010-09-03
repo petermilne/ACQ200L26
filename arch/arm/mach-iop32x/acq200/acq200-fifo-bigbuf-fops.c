@@ -162,6 +162,8 @@ static unsigned update_inode_stats(struct inode *inode)
 		ssize = sample_size();
 		samples = SAMPLES;
 		break;
+	case BIGBUF_DATA_DEVICE_FMT:
+		return inode->i_size;
 	default:
 		if ((ident&BIGBUF_CHANNEL_DATA_DEVICE) != 0){
 			int lchannel = ((unsigned)inode->i_private) & 0x7f;
@@ -1992,9 +1994,8 @@ static int format__mmap(
 static int format__release(
         struct inode *inode, struct file *file)
 {
-	struct inode *d_inode = file->f_dentry->d_inode; 
-	d_inode->i_size = fbLen(FB(file));
-	d_inode->i_mtime = CURRENT_TIME;
+	inode->i_size = fbLen(FB(file));
+	inode->i_mtime = CURRENT_TIME;
 	return 0;
 }
 
@@ -2057,7 +2058,7 @@ static int AI_fs_fill_super (
 
 	src.name = "format";	/* User Data File */
 	src.ops = &format_ops;
-	tcount = updateFiles(&S_AIFD, &src, 0, tcount);
+	tcount = updateFiles(&S_AIFD, &src, BIGBUF_DATA_DEVICE_FMT, tcount);
 
 	tcount = updateFiles(&S_AIFD, &backstop, 0, tcount);
 	return ai_simple_fill_super(sb, AIAFS_MAGIC, &S_AIFD);

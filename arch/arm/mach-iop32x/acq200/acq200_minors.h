@@ -91,6 +91,7 @@
  */
 #define BIGBUF_DATA_DEVICE_XXP 127
 #define BIGBUF_DATA_DEVICE_XXL 126
+#define BIGBUF_DATA_DEVICE_FMT 125
 /*
  * main module should define ACQ200_FPGA_REGS, void* regs mapping
  */
