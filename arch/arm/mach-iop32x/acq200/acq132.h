@@ -177,11 +177,11 @@
 
 #define ACQ132_ADC_OSAM_L_NACC		28
 #define ACQ132_ADC_OSAM_L_SHIFT		24
-#define ACQ132_ADC_OSAM_L_NACC4		19	/* prescale by 4 */
+#define ACQ132_ADC_OSAM_L_NACC4		18	/* prescale by 4 */
 #define ACQ132_ADC_OSAM_L_ACCEN		16
 #define ACQ132_ADC_OSAM_R_NACC		12
 #define ACQ132_ADC_OSAM_R_SHIFT		 8
-#define ACQ132_ADC_OSAM_R_NACC4		 3	/* prescale by 4 */
+#define ACQ132_ADC_OSAM_R_NACC4		 2	/* prescale by 4 */
 #define ACQ132_ADC_OSAM_R_ACCEN		 0
 
 #define OSAMBITS	0x0fU
@@ -192,6 +192,9 @@
 #define SHIFT_0	 0x00U
 #define SHIFT_P1 0x01U
 #define SHIFT_P2 0x02U
+#define SHIFT_P3 0x03U
+#define SHIFT_P4 0x04U
+#define SHIFT_P5 0x05U
 
 #define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
 

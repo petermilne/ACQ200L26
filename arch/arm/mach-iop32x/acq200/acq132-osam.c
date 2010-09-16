@@ -57,16 +57,13 @@ static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
 
 	switch(shift){
 	case -2:
-	default:
 		field = SHIFT_M2; break;
 	case -1:
 		field = SHIFT_M1; break;
-	case 1:
-		field = SHIFT_P1; break;
-	case 2:
-		field = SHIFT_P2; break;
-	case 0:
-		field = SHIFT_0; break;
+	default:
+		if (shift < 0) shift = 0;
+		if (shift > 5) shift = 5;
+		field = shift;
 	}
 
 	osam |= field << shl;

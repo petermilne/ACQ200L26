@@ -453,19 +453,25 @@ static int store_osam(
 	}
 	if (sscanf(buf, "nacc=%d shift=%d", &nacc, &shift) == 2 ||
 	    sscanf(buf, "%d %d", &nacc, &shift) == 2){
-		if (!IN_RANGE(nacc, 1, 16)){
-			err("bad nacc %d", nacc);		      
+		if (nacc > 16 && nacc <= 64){
+			n4 = 1;
+			nacc /= 4;
+		}else if (!IN_RANGE(nacc, 1, 16)){
+			err("bad nacc %d", nacc);
+			goto err_ret;
 		}else if (!belongs(shift, good_shift, GOOD_SHIFT)){
 			err("bad shift %d", shift);
-		}else{
-			acq132_set_osam_nacc(
-				block, OSAMLR(lr), nacc, shift, decimate, n4);
-			return strlen(buf);
+			goto err_ret;
 		}
+
+		acq132_set_osam_nacc(
+			block, OSAMLR(lr), nacc, shift, decimate, n4);
+		return strlen(buf);
 	}else{
 		err("failed to scan \"nacc=N shift=S\"");
 	}
 
+err_ret:
 	return -EINVAL;
 }
 static ssize_t show_osam(
@@ -487,14 +493,8 @@ static ssize_t show_osam(
 		shift = -1; break;
 	case SHIFT_M2:
 		shift = -2; break;
-	case SHIFT_0:
-		shift = 0; break;
-	case SHIFT_P1:
-		shift = 1; break;
-	case SHIFT_P2:
-		shift = 2; break;
 	default:
-		return sprintf(buf, "illegal shift field 0x%x", shift_code);
+		shift = shift_code;
 	}
 	n4 = (osam & (1<<ACQ132_ADC_OSAM_R_NACC4)) != 0;
 
