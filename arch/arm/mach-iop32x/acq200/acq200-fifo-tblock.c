@@ -927,8 +927,12 @@ void shareTblockInPhase(struct Phase *phase, TBLE *tle_cur)
 	dbg(1,"shared phase %s tblock %d", phase->name, tb->iblock);
 }
 
-
+int getTblockFromOffset(unsigned offset)
+{
+	return TBLOCK_INDEX(offset);
+}
 EXPORT_SYMBOL_GPL(acq200_phase_release_tblocks);
 EXPORT_SYMBOL_GPL(acq200_reserveFreeTblock);
 EXPORT_SYMBOL_GPL(acq200_reserveSpecificTblock);
 EXPORT_SYMBOL_GPL(acq200_replaceFreeTblock);
+EXPORT_SYMBOL_GPL(getTblockFromOffset);

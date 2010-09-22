@@ -177,9 +177,11 @@
 
 #define ACQ132_ADC_OSAM_L_NACC		28
 #define ACQ132_ADC_OSAM_L_SHIFT		24
+#define ACQ132_ADC_OSAM_L_NACC4		18	/* prescale by 4 */
 #define ACQ132_ADC_OSAM_L_ACCEN		16
 #define ACQ132_ADC_OSAM_R_NACC		12
 #define ACQ132_ADC_OSAM_R_SHIFT		 8
+#define ACQ132_ADC_OSAM_R_NACC4		 2	/* prescale by 4 */
 #define ACQ132_ADC_OSAM_R_ACCEN		 0
 
 #define OSAMBITS	0x0fU
@@ -190,6 +192,9 @@
 #define SHIFT_0	 0x00U
 #define SHIFT_P1 0x01U
 #define SHIFT_P2 0x02U
+#define SHIFT_P3 0x03U
+#define SHIFT_P4 0x04U
+#define SHIFT_P5 0x05U
 
 #define OSAMLR(lr) (((lr)=='L' || (lr) == 16)? 16: 0)
 
@@ -237,7 +242,7 @@ void acq132_set_adc_range(u32 channels);
 u32 acq132_get_adc_range(void);
 
 void acq132_set_osam_nacc(
-	int dev, int lr, int nacc, int shift, int decimate);
+	int dev, int lr, int nacc, int shift, int decimate, int n4);
 
 static inline void acq132_adc_set_all(int reg, u32 bits)
 {
@@ -453,8 +458,12 @@ const char* acq132_getChannelSpeedMask(void);
  * GATE_MAGIC is  0xaa55aa55aa55aa55
  */
 
-#define ACQ132_ES_DATA_MASK 0x0fc0
-#define ACQ132_ES_COLD_SAMPLES(es) (((es)&ACQ132_ES_DATA_MASK)>>6)
+/* Event data fields from rev 307+ */
+#define ACQ132_ES_DEC_CNT_MASK 0xff00
+#define ACQ132_ES_LAT_MASK	0x00fc
+
+#define ACQ132_ES_DEC_CNT(es)	(((es)&ACQ132_ES_DEC_CNT_MASK)>>8)
+#define ACQ132_ES_LAT_CNT(es)	(((es)&ACQ132_ES_LAT_MASK)>>2)
 
 extern int get_acq132_decim(void);
 extern void acq132_setAllDecimate(int dec);

@@ -46,6 +46,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/kdev_t.h>
+#include <linux/ctype.h>
 
 #include "acq200-mu-app.h"
 
@@ -56,6 +57,8 @@
 #endif
 
 #define ID_CHANXX	0
+
+static int XX_valid;
 
 void acq200_initDCI(struct file *file, int lchannel)
 {
@@ -77,6 +80,7 @@ void acq200_initDCI(struct file *file, int lchannel)
 		}
 		DCI(file)->ssize = RSIZE;
 	}
+	INIT_LIST_HEAD(DCI_LIST(file));
 }
 
 
@@ -86,7 +90,8 @@ void acq200_releaseDCI(struct file *file)
 	kfree(file->private_data);
 }
 
-static struct TblockConsumer *newTBC(unsigned backlog_limit)
+
+static struct TblockConsumer *_newTBC(struct LockedList * lockedList, unsigned backlog_limit)
 {
 	struct TblockConsumer *tbc = 
 		kzalloc(sizeof(struct TblockConsumer), GFP_KERNEL);
@@ -95,20 +100,21 @@ static struct TblockConsumer *newTBC(unsigned backlog_limit)
 	init_waitqueue_head(&tbc->waitq);
         INIT_LIST_HEAD(&tbc->tle_q);
 
-	spin_lock(&DG->tbc.lock);
-	list_add_tail(&tbc->list, &DG->tbc.clients);
-	spin_unlock(&DG->tbc.lock);
+	spin_lock(&lockedList->lock);
+	list_add_tail(&tbc->list, &lockedList->list);
+	spin_unlock(&lockedList->lock);
 	
 	return tbc;
 }
-static void deleteTBC(struct TblockConsumer *tbc)
+
+static void _deleteTBC(struct LockedList * lockedList, struct TblockConsumer *tbc)
 {
 	struct TblockListElement *cursor, *tmp;
 	int tblock_backlog = 0;
 
-	spin_lock(&DG->tbc.lock);
+	spin_lock(&lockedList->lock);
 	list_del(&tbc->list);
-	spin_unlock(&DG->tbc.lock);
+	spin_unlock(&lockedList->lock);
 
 	/* flush and free any waiting tblocks. 
 	 * list disconnected, no need to lock */
@@ -125,22 +131,43 @@ static void deleteTBC(struct TblockConsumer *tbc)
 	}
 }
 
+static struct TblockConsumer *newTBC(unsigned backlog_limit)
+{
+	return _newTBC(&DG->tbc, backlog_limit);
+}
+static void deleteTBC(struct TblockConsumer *tbc)
+{
+	return _deleteTBC(&DG->tbc, tbc);
+}
 
+static struct TblockConsumer *newEventTBC(unsigned backlog_limit)
+{
+	return _newTBC(&DG->tbc_event, backlog_limit);
+}
+
+static void deleteEventTBC(struct TblockConsumer *tbc)
+{
+	return _deleteTBC(&DG->tbc_event, tbc);
+}
 #define NOSAMPLES 0xffffffff
 
 
 static unsigned update_inode_stats(struct inode *inode)
 {
 	int ident = (int)inode->i_private;
-	unsigned ssize;
+	unsigned ssize = 0;
 	unsigned samples = 0;
 
 	switch(ident){
 	case BIGBUF_DATA_DEVICE_XXP:
 	case BIGBUF_DATA_DEVICE_XXL:
-		ssize = sample_size();
-		samples = SAMPLES;
+		if (XX_valid){
+			ssize = sample_size();
+			samples = SAMPLES;
+		}
 		break;
+	case BIGBUF_DATA_DEVICE_FMT:
+		return inode->i_size;
 	default:
 		if ((ident&BIGBUF_CHANNEL_DATA_DEVICE) != 0){
 			int lchannel = ((unsigned)inode->i_private) & 0x7f;
@@ -148,11 +175,7 @@ static unsigned update_inode_stats(struct inode *inode)
 				ssize = CSIZE;
 				samples = DG->getChannelNumSamples(	
 					acq200_lookup_pchan(lchannel));
-			}else{
-				ssize = 0;
 			}
-		}else{
-			ssize = 0;
 		}
 	}
 
@@ -180,6 +203,8 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	
 	unsigned nwords = DG->bigbuf.tblocks.blocklen/sizeof(short);
 	unsigned t_flags = DG->bigbuf.tblocks.t_flags;
+
+	XX_valid = false;
 
 	if (!tb_tmp) return -1;
 
@@ -1068,6 +1093,9 @@ static ssize_t fifo_bigbuf_xxX_read (
 int acq200_fifo_bigbuf_xx_open (
 	struct inode *inode, struct file *file)
 {
+	if (!XX_valid){
+		return -ENODEV;
+	}
 	acq200_initDCI(file, ID_CHANXX);
 	if (capdef_get_word_size() == sizeof(u32)){
 		DCI(file)->extract = tblock_rawxx_extractor32;
@@ -1122,6 +1150,9 @@ static void* lut_memcpy(void* to, const void* from, __kernel_size_t nbytes)
 static int acq200_fifo_bigbuf_xxl_open (
 	struct inode *inode, struct file *file)
 {
+	if (!XX_valid){
+		return -ENODEV;
+	}	
 	fillLUT(LUT);	
 	DCI(file)->memcpy = lut_memcpy;
 	return acq200_fifo_bigbuf_xx_open(inode, file);
@@ -1386,13 +1417,45 @@ static int dma_tb_open (
 	return 0;
 }
 
+static int dma_tb_evopen (
+	struct inode *inode, struct file *file)
+{
+	acq200_initDCI(file, ID_CHANXX);
+	DCI_TBC(file) = newEventTBC(DG->bigbuf.tblocks.nblocks - 10);
+	DCI(file)->extract = dma_xx_extractor;
+	return 0;
+}
+
+#define STATUS_TB_ALL	999
+
+
+
+static void status_tb_free_tblocks(struct list_head* tble_list, int tblock)
+{
+	TBLE* cursor;
+	TBLE* tmp;
+
+	list_for_each_entry_safe(cursor, tmp, tble_list, list){
+		if (tblock == STATUS_TB_ALL ||
+		    tblock == cursor->tblock->iblock){
+			spin_lock(&DG->tbc.lock);
+			acq200_phase_release_tblock_entry(cursor);
+			spin_unlock(&DG->tbc.lock);
+			list_del(&cursor->list);
+		}
+	}
+}
+
+
 static int dma_tb_release (
 	struct inode *inode, struct file *file)
 {
+	status_tb_free_tblocks(DCI_LIST(file), STATUS_TB_ALL);
 	deleteTBC(DCI_TBC(file));
 	acq200_releaseDCI(file);
 	return 0;
 }
+
 
 static unsigned int tb_poll(
 	struct file *file, struct poll_table_struct *poll_table)
@@ -1492,6 +1555,7 @@ static ssize_t status_tb_read (
 	}
 
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+	list_del(&tle->list);
 
 	if (len < 8){
 		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
@@ -1511,30 +1575,125 @@ static ssize_t status_tb_read (
 		--tbc->backlog;
 	}
 
+
+	COPY_TO_USER(buf, lbuf, rc);
+	return rc;
+}
+
+#define BORDERLINE	0x100000
+#define TB_NOT_BORDERLINE	999
+
+static ssize_t status_tb_evread (
+	struct file *file, char *buf, size_t len, loff_t *offset)
+/** output last tblock as string data.
+ * TB is NOT marked as in_phase (busy).
+ *
+ * @@todo no way to recycle the buffers. Suggest maintain a list of tble
+ *  - add a list element to DCI
+ *  - then the write() function takes an int arg, scans the list and frees
+ *    corresponding tble.
+ */
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle;
+	char lbuf[80];
+	int rc;
+
+	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
+
+	if (list_empty(&tbc->tle_q)){
+		return -EINTR;
+	}
+
+	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+	list_del(&tle->list);
+
+	if (len < 8){
+		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
+	}else{
+		int tb_prev = TB_NOT_BORDERLINE;
+		int tb_next = TB_NOT_BORDERLINE;
+
+		TBLE *tble_prev = list_entry(tle->neighbours.prev, TBLE, list);
+		TBLE *tble_next = list_entry(tle->neighbours.next, TBLE, list);
+		if (tle->event_offset > BORDERLINE){
+			if (tble_prev->tblock){
+				acq200_phase_release_tblock_entry(tble_prev);
+			}
+			list_del(&tble_prev->list);
+		}else{
+			if (tble_prev->tblock){
+				tb_prev = tble_prev->tblock->iblock;
+				list_move_tail(&tble_prev->list, DCI_LIST(file));
+			}
+
+		}
+		if (tle->event_offset < TBLOCK_LEN(DG)-BORDERLINE){
+			if (tble_next->tblock){
+				acq200_phase_release_tblock_entry(tble_next);
+			}
+			list_del(&tble_next->list);
+		}else{
+			if (tble_next->tblock){
+				tb_next = tble_next->tblock->iblock;
+				list_move_tail(&tble_next->list, DCI_LIST(file));
+			}
+		}
+		list_add_tail(&tle->list, DCI_LIST(file));
+		rc = snprintf(lbuf, min(sizeof(lbuf), len),
+			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x\n",
+				tb_prev, tle->tblock->iblock, tb_next,
+				tle->phase_sample_start,
+				tle->event_offset);
+	}
+	tbc->c.tle = tle;
+
+	if (tbc->backlog){
+		--tbc->backlog;
+	}
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
 }
 
 
-static ssize_t status_tb_write(
+static ssize_t status_tb_evwrite(
 	struct file *file, const char *buf, size_t len, loff_t *offset)
 {
-//	struct TblockConsumer *tbc = DCI_TBC(file);
-	struct TblockListElement *tle = DCI(file)->tle_current;
+	char lbuf[80];
+	char *s1;
+	char *s2;
 	
-	/** @todo should check iblock on input; */
+	if (len >= 80) len = 80-1;
 
 	/** lazy init - first write sets mode flag */
 	DCI(file)->flags |= DCI_FLAGS_NORELEASE_ON_READ;
 
-	if (tle != 0){
-		spin_lock(&DG->tbc.lock);
-		acq200_phase_release_tblock_entry(tle);
-		DCI(file)->tle_current = 0;
-		spin_unlock(&DG->tbc.lock);			
-	}
+	COPY_FROM_USER(lbuf, buf, len);
 
+	if ((s1 = strstr(lbuf, "tblock=")) != 0){
+		s1 += strlen("tblock=");
+	}else{
+		s1 = lbuf;
+	}
+	for ( ; s1 - lbuf < len; s1 = s2){
+		if ((s2 = strpbrk(s1, ", ")) != 0){
+			*s2++ = '\0';
+		}
+		status_tb_free_tblocks(DCI_LIST(file),
+					simple_strtoul(s1, 0, 10));
+	}
 	return len;
+}
+
+#define status_tb_write status_tb_evwrite
+
+static int dma_tb_evrelease (
+	struct inode *inode, struct file *file)
+{
+	status_tb_free_tblocks(DCI_LIST(file), STATUS_TB_ALL);
+	deleteEventTBC(DCI_TBC(file));
+	acq200_releaseDCI(file);
+	return 0;
 }
 
 static ssize_t status2_tb_read ( 
@@ -1572,7 +1731,7 @@ static ssize_t status2_tb_read (
 	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
 		acq200_phase_release_tblock_entry(tle);
 	}else{
-		DCI(file)->tle_current = tle;
+		list_move_tail(&tle->list, DCI_LIST(file));
 	}
 	spin_unlock(&DG->tbc.lock);	
 
@@ -1745,10 +1904,124 @@ out:
 }
 /** crib ends */
 
+struct FunctionBuf {
+	char *p_start;
+	char *p_end;
+};
+
+
+
+#define FB(filp) ((struct FunctionBuf *)filp->private_data)
+#define SET_FB(filp, fb) (filp->private_data = fb)
+
+struct FunctionBuf fb_format;
+
+#define FB_LIMIT 32768
+
+
+static inline size_t fbLen(struct FunctionBuf* fb)
+{
+	return fb->p_end - fb->p_start;
+}
+static inline size_t fbFree(struct FunctionBuf* fb)
+{
+	return FB_LIMIT - fbLen(fb);
+}
+
+static void *fbCursor(struct FunctionBuf* fb, int offset_bytes)
+{
+	return fb->p_start + offset_bytes;
+}
+
+static int format__open(struct inode *inode, struct file *filp)
+{
+	SET_FB(filp, &fb_format);
+
+	if (FB(filp)->p_start == 0){
+		FB(filp)->p_start = kmalloc(FB_LIMIT, GFP_KERNEL);
+		FB(filp)->p_end = FB(filp)->p_start;
+	}
+
+	if ((filp->f_mode & FMODE_WRITE) != 0){
+		/* truncate on write */
+		FB(filp)->p_end = FB(filp)->p_start; 
+
+		filp->f_dentry->d_inode->i_size = 0;
+	}
+	return 0;
+}
+
+static ssize_t format__write(struct file *filp, const char *buf,
+		size_t count, loff_t *offset)
+{
+	count = min(count, fbFree(FB(filp)));
+
+	if (count == 0){
+		return -EFBIG;
+	}
+	if (copy_from_user(fbCursor(FB(filp), *offset), buf, count)){
+		return -EFAULT;
+	}
+
+	FB(filp)->p_end += count;
+	*offset += count;
+	filp->f_dentry->d_inode->i_size += count;
+
+	return count;
+}
+
+static ssize_t format__read(struct file *filp, char *buf,
+		size_t count, loff_t *offset)
+{
+	size_t fb_left;
+	if (*offset >= fbLen(FB(filp))){
+		return 0;
+	}
+
+	fb_left = fbLen(FB(filp)) - *offset;
+
+	count = min(count, fb_left);
+
+	if (count > 0){
+		COPY_TO_USER(buf, fbCursor(FB(filp), *offset), count);
+		*offset += count;
+	}
+	return count;
+}
+
+static int format__mmap(
+	struct file *filp, struct vm_area_struct *vma)
+{
+	return io_remap_pfn_range( 
+		vma, vma->vm_start, 
+		__phys_to_pfn(virt_to_phys(FB(filp)->p_start)), 
+		vma->vm_end - vma->vm_start, 
+		vma->vm_page_prot 
+	);
+}
+static int format__release(
+        struct inode *inode, struct file *file)
+{
+	inode->i_size = fbLen(FB(file));
+	inode->i_mtime = CURRENT_TIME;
+	return 0;
+}
+
+
+
 
 static int AI_fs_fill_super (
 	struct super_block *sb, void *data, int silent)
 {
+	static struct file_operations format_ops = {
+		.open = format__open,
+		.read = format__read,
+		.write = format__write,
+		.mmap = format__mmap,
+		.release = format__release
+	};
+
+
 	static struct tree_descr front = {
 		NULL, NULL, 0
 	};
@@ -1789,6 +2062,12 @@ static int AI_fs_fill_super (
 			     BIGBUF_DATA_DEVICE_XXP,
 			     tcount);
 
+	src.mode = S_IRUGO|S_IWUGO;
+
+	src.name = "format";	/* User Data File */
+	src.ops = &format_ops;
+	tcount = updateFiles(&S_AIFD, &src, BIGBUF_DATA_DEVICE_FMT, tcount);
+
 	tcount = updateFiles(&S_AIFD, &backstop, 0, tcount);
 	return ai_simple_fill_super(sb, AIAFS_MAGIC, &S_AIFD);
 }
@@ -1824,13 +2103,19 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
+	static struct file_operations dma_tbstat_ev_ops = {
+		.open = dma_tb_evopen,
+		.read = status_tb_evread,
+		.write = status_tb_evwrite,
+		.release = dma_tb_evrelease,
+		.poll = tb_poll
+	};
 	static struct file_operations dma_tbstatus2_ops = {
 		.open = dma_tb_open,
 		.read = status2_tb_read,
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
-
 	static struct tree_descr front = {
 		NULL, NULL, 0
 	};
@@ -1868,12 +2153,20 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.ops = &dma_tb_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
+	/* the rest are all RW to allow buffer reserve/recycle */      
+	/* NB: tbstat2 doesn't actually reserver, W is chucked */
+	src.mode = S_IRUGO|S_IWUGO;
+
 	src.name = "tbstat";
 	src.ops = &dma_tbstatus_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
 	src.name = "tbstat2";
 	src.ops = &dma_tbstatus2_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
+	src.name = "tbstat_ev";
+	src.ops = &dma_tbstat_ev_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
 
@@ -1985,19 +2278,30 @@ int acq200_fifo_destroy_AIfs(void)
 
 int acq200_addDataConsumer(struct DataConsumerBuffer *dcb)
 {
-	spin_lock(&DG->dcb.lock);
-	list_add_tail(&dcb->list, &DG->dcb.clients);
-	spin_unlock(&DG->dcb.lock);
+	spin_lock(&DG->dcb.clients.lock);
+	list_add_tail(&dcb->list, &DG->dcb.clients.list);
+	spin_unlock(&DG->dcb.clients.lock);
 	return 0;
 }
 int acq200_removeDataConsumer(struct DataConsumerBuffer *dcb)
 {
-	spin_lock(&DG->dcb.lock);
+	spin_lock(&DG->dcb.clients.lock);
 	list_del(&dcb->list);
-	spin_unlock(&DG->dcb.lock);
+	spin_unlock(&DG->dcb.clients.lock);
 	return 0;
 }
 
+static void set_xx_valid(void *not_used) 
+{
+	XX_valid = 1;
+}
+void acq200_fifo_bigbuf_fops_init(void)
+{
+	static struct Hookup xx_valid_hook = {
+		.the_hook = set_xx_valid
+	};
+	acq200_add_start_of_shot_hook(&xx_valid_hook);
+}
 
 EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_read_bbrp);
 EXPORT_SYMBOL_GPL(acq200_fifo_bigbuf_xxX_read);

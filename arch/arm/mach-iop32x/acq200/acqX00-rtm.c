@@ -200,10 +200,16 @@ static ssize_t store_dio_bit(
 			default:
 				DIO_SET_INPUT(ibit);
 			}
+			strncpy(last_store, buf, sizeof(last_store));
 			set_outputs();
+			return strlen(buf);
+		}else{
+			snprintf(last_store, sizeof(last_store), 
+						"ERR2:%s", buf);
 		}
+	}else{
+		snprintf(last_store, sizeof(last_store), "ERR1:%s", buf);
 	}
-
         return strlen(buf);
 }
 

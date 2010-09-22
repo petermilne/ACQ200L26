@@ -160,6 +160,10 @@ module_param(tbc_discards, int, 0644);
 int disregard_empty_tblocks = 0;
 module_param(disregard_empty_tblocks, int, 0644);
 
+int tblock_already_in_phase_is_ok = 0;
+module_param(tblock_already_in_phase_is_ok, int, 0644);
+MODULE_PARM_DESC(tblock_already_in_phase_is_ok,
+		"set for apps like multivent that may pre-allocate");
 #define DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 #define DMA_ERROR IOP321_CSR_ERR
 
@@ -482,11 +486,12 @@ static void addPitStore(struct DMC_WORK_ORDER *wo, u32 offset, u32 status)
 {
 	if (wo->pit_count < DG->pit_store.max_pits){
 		struct PIT_DEF *def = 
-			&DG->pit_store.the_pits[wo->pit_count++];
+			&DG->pit_store.the_pits[wo->pit_count];
 
 		def->offset = offset;
 		def->status = status;
 	}	
+	wo->pit_count++;
 }
 
 
@@ -591,7 +596,7 @@ static int woOnRefill(
 
 static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 {
-	struct list_head* clients = &DG->tbc.clients;
+	struct list_head* clients = &DG->tbc.list;
 	struct list_head* pool = &DG->bigbuf.pool_tblocks;
 	spin_lock(&DG->tbc.lock);
 
@@ -639,7 +644,8 @@ static struct TblockListElement* dmc_phase_add_tblock(
 			TBLE_LIST_ENTRY(empty_tblocks->next);
 		unsigned long flags;
 
-		if (atomic_read(&tle->tblock->in_phase)){	
+		if (tblock_already_in_phase_is_ok == 0 &&
+				atomic_read(&tle->tblock->in_phase)){
 			err("in_phase != 0");
 			finish_with_engines(-__LINE__);
 			return 0;			
@@ -766,9 +772,9 @@ static void _dmc_handle_dcb(
 	struct iop321_dma_desc *pbuf, u32 offset
 	)
 {
-	struct list_head* clients = &DG->dcb.clients;
+	struct list_head* clients = &DG->dcb.clients.list;
 
-	spin_lock(&DG->dcb.lock);
+	spin_lock(&DG->dcb.clients.lock);
 
 	if (!list_empty(clients)){
 		struct DataConsumerBuffer *dcb;
@@ -784,7 +790,7 @@ static void _dmc_handle_dcb(
 	}
 	pbuf->DD_FIFSTAT = 0;
 
-	spin_unlock(&DG->dcb.lock);
+	spin_unlock(&DG->dcb.clients.lock);
 }
 
 
@@ -1389,7 +1395,7 @@ static void run_dmc_early_action(u32 fifstat)
  * also, that the early_actions() can be called from interrupt state.
  */
 {
-	struct list_head* clients = &DG->dcb.clients;
+	struct list_head* clients = &DG->dcb.clients.list;
 
 	if (!list_empty(clients)){
 		struct DataConsumerBuffer *dcb;
@@ -1660,7 +1666,89 @@ static void init_phase(struct Phase *phase, int len, int oneshot)
 static struct Phase* onPIT_repeater(
 	struct Phase *phase, u32 status, u32* offset)
 {
-	/* WORKTODO - should locate trigger and export ... */
+	struct list_head *clients = &DG->tbc_event.list;
+	int tbix = getTblockFromOffset(*offset);
+
+	dbg(1, "phase %s offset %u TBLOCK %u", phase->name, *offset, tbix);
+
+	spin_lock(&DG->tbc_event.lock);
+
+	if (!list_empty(clients)){
+		long spb = DMA_BLOCK_LEN/sample_size();
+		unsigned pss = DG->stats.refill_blocks*spb - DMC_WO->pit_count;
+		struct list_head* pool = &DG->bigbuf.pool_tblocks;
+		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
+		unsigned tboff = TBLOCK_OFFSET(*offset);
+		struct TblockConsumer *tbc;
+		TBLE* tble_m1;		/* previous tblock */
+		int found_self = 0;
+		struct TBLOCK *prev_tb = 0;
+		TBLE* next_tble = list_entry(
+			DG->bigbuf.empty_tblocks.next, TBLE, list);
+		struct TBLOCK *next_tb = next_tble->tblock;
+		
+		/** @@todo - get prev TB from phase, get next TB. */
+		
+		list_for_each_entry_reverse(tble_m1, &phase->tblocks, list){
+			dbg(1, "reverse list phase tblocks %d",
+						tble_m1->tblock->iblock);
+			if (!found_self){
+				if (tble_m1->tblock != tblock){
+					err("expected to find self failed");
+				}else{
+					found_self = 1;
+				}
+			}else{
+				prev_tb = tble_m1->tblock;
+				break;
+			}
+		}
+
+		dbg(1, "01: prev_tb %p next_tb %p", prev_tb, next_tb);
+		dbg(1, "02: pret_tb %d next_tb %d",
+					prev_tb->iblock, next_tb->iblock);
+
+		list_for_each_entry(tbc, clients, list){
+			if (tbc->backlog_limit == 0 ||
+			    tbc->backlog_limit > tbc->backlog){
+
+				TBLE* tle = TBLE_LIST_ENTRY(pool->next);
+				TBLE* tle_prev;
+				TBLE* tle_next;
+
+				dbg(1, "30: listp %p", &tle->list);
+
+				list_del(&tle->list);
+				tle->event_offset = tboff;
+				tle->phase_sample_start = pss;
+				++tbc->backlog;
+				atomic_inc(&tblock->in_phase);
+				tle->tblock = tblock;
+
+				INIT_LIST_HEAD(&tle->neighbours);
+				
+				list_move(pool->next, &tle->neighbours);
+				list_move_tail(pool->next, &tle->neighbours);
+
+				tle_next = list_entry(tle->neighbours.next,
+						      TBLE, list);
+				tle_prev = list_entry(tle->neighbours.prev, 
+							TBLE, list);
+
+				tle_prev->tblock = prev_tb;
+				if (prev_tb){
+					atomic_inc(&prev_tb->in_phase);
+				}
+				tle_next->tblock = next_tb;
+				atomic_inc(&next_tb->in_phase);
+				list_add_tail(&tle->list, &tbc->tle_q);
+				wake_up_interruptible(&tbc->waitq);
+			}else{
+				tbc_discards++;
+			}
+		}
+	}
+	spin_unlock(&DG->tbc_event.lock);
 	return phase;
 }
 
@@ -1668,6 +1756,7 @@ static struct Phase * onPIT_clear(
 	struct Phase *phase, u32 status, u32* offset)
 {
 	struct Phase* next = NEXT_PHASE(phase);
+
 	/* @@todo common def 196 216 needed */
 	/* @@todo WHY NOT eve[1] ?? */
 	deactivateSignal(CAPDEF->ev[0]);
@@ -3957,14 +4046,11 @@ static void init_dg(void)
 	memcpy(DG, MYDG, sizeof(struct DevGlobs));
 	DG->ipc = IPC;
 	DG->wo = DMC_WO;
-	DG->dcb.lock = SPIN_LOCK_UNLOCKED;
 
 	acq200_transform_init();
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 
 	DG->cdog_max_jiffies = CDOG_MAX_JIFFIES;
-	INIT_LIST_HEAD(&DG->dcb.clients);
-	spin_lock_init(&DG->dcb.lock);
 
 	DMC_WO->getNextEmpty = GET_NEXT_EMPTY;
 	DMC_WO->handleEmpties = dmc_handle_empties_default;
@@ -3972,13 +4058,17 @@ static void init_dg(void)
 	INIT_LIST_HEAD(&DG->start_of_shot_hooks);
 	INIT_LIST_HEAD(&DG->end_of_shot_hooks);
 
-	INIT_LIST_HEAD(&DG->tbc.clients);
-	spin_lock_init(&DG->tbc.lock);
+	initLockedList(&DG->dcb.clients);
+	initLockedList(&DG->tbc);
+	initLockedList(&DG->tbc_event);
+	initLockedList(&DG->refillClients);
 
 	INIT_WORK(&onEnable_work, onEnableAction);
 
 	DG->bigbuf.tblocks.getChannelData = getChannelData;
 	DG->getChannelNumSamples = getChannelNumSamples;
+
+	acq200_fifo_bigbuf_fops_init();
 }
 
 static void delete_dg(void)

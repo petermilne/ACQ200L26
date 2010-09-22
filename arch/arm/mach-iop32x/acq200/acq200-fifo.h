@@ -114,6 +114,18 @@ struct TblockConsumer {
 	unsigned backlog_limit;
 };
 
+/* typedef void (* RefillClient)(void *data, int nbytes); */
+
+struct RefillClient {
+	void (*action)(void *data, int nbytes);
+	struct list_head list;
+};
+
+struct LockedList {
+	spinlock_t lock;
+	struct list_head list;
+};
+
 struct DataConsumerBuffer {
 	wait_queue_head_t waitq;
 	struct list_head list;
@@ -277,6 +289,10 @@ struct TblockListElement {
 	unsigned tblock_sample_start;/* sample offset of first sample in tb */
 	unsigned sample_count;       /* number of samples in tb             */
 	struct list_head list;
+	unsigned event_offset;		/* optional event locator */
+
+	/* previous, next if in triplet NB : RARE OCCURRENCE */
+	struct list_head neighbours;
 };
 
 #define TBLE struct TblockListElement
@@ -362,10 +378,7 @@ struct DMC_WORK_ORDER {
 		int iodd;           
 	} control_target;
 
-	struct {
-		struct list_head list;
-		spinlock_t lock;
-	} stateListeners;
+	struct LockedList stateListeners;
 };
 
 
@@ -474,8 +487,6 @@ struct ArgBlock {
 	int argc;
 };
 
-
-typedef void (* RefillClient)(void *data, int nbytes);
 
 struct DevGlobs {
 	int btype;
@@ -616,8 +627,7 @@ struct DevGlobs {
 	struct DCB {
 		int dcb_max;
 		int dcb_max_backlog;
-		spinlock_t lock;
-		struct list_head clients;
+		struct LockedList clients;
 	} dcb;
 
 	struct BurstDef burst;
@@ -655,20 +665,18 @@ struct DevGlobs {
 	struct ArgBlock post_arm_hook;
 	struct ArgBlock post_shot_hook;	
 
-	struct TblockClients {
-		spinlock_t lock;
-		struct list_head clients;
-	} tbc;
-
-	struct RefillClientStruct {
-		spinlock_t lock;
-		RefillClient client;
-	} refillClient;
+	struct LockedList tbc;
+	struct LockedList tbc_event;
+	struct LockedList refillClients;
 
 	unsigned (*getChannelNumSamples)(int pchan);
 };
 
-
+static inline void initLockedList(struct LockedList *rc)
+{
+	INIT_LIST_HEAD(&rc->list);
+	spin_lock_init(&rc->lock);
+}
 
 #define INDEXOF_TBLOCK(tblock) ((tblock) - DG->bigbuf.tblocks.the_tblocks)
 #define VA_TBLOCK(tblock) (va_buf(DG) + (tblock)->offset)
@@ -953,7 +961,7 @@ static inline void nsleep(int nsecs)
 	u32 maxgtsr = nsecs/NSECS_PER_GTSR;
 	u32 gtsr;
 
-	for(nsecs /= 10; nsecs; nsecs--){   /* extra delay if GTSR stopped */
+	for (nsecs /= 10; nsecs; nsecs--){   /* extra delay if GTSR stopped */
 		gtsr = *IOP321_GTSR;
 		
 		if (gtsr - startgtsr > maxgtsr){  /* normal case */
@@ -1133,7 +1141,7 @@ struct DataChannelInfo {
 		struct TblockConsumer* tbc;
 	} _u;
 	unsigned flags;
-	struct TblockListElement *tle_current;
+	struct list_head list;		/** general purpose list of resources */
 };
 
 #define DCI_FLAGS_NORELEASE_ON_READ 0x00000001
@@ -1141,6 +1149,7 @@ struct DataChannelInfo {
 #define DCI(file) ((struct DataChannelInfo *)file->private_data)
 #define DCI_PHASE(file) (DCI(file)->_u.phase)
 #define DCI_TBC(file)	(DCI(file)->_u.tbc)
+#define DCI_LIST(file)	(&DCI(file)->list)
 
 #define DCI_SZ (sizeof(struct DataChannelInfo))
 
@@ -1286,8 +1295,9 @@ static inline int field_shift(u32 field)
 extern int search_for_epos_in_tblock(
 	struct Phase* phase, unsigned isearch, int max_dma_blocks);
 
-void acq200_addRefillClient(RefillClient client);
-void acq200_delRefillClient(RefillClient client);
+void acq200_addRefillClient(struct RefillClient *client);
+void acq200_delRefillClient(struct RefillClient *client);
 void acq200_runRefillClient(void *data, int nbytes);
 
+void acq200_fifo_bigbuf_fops_init(void);
 #endif /* ACQ200_FIFO_H__ */

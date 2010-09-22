@@ -1,60 +1,67 @@
 /* ------------------------------------------------------------------------- */
-/* refill-client.c - consumer for refill data eg mean device                 */
+/* acq100_rtm_t.c  - RTM-T adapter		                             */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2010 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
-
     This program is free software; you can redistribute it and/or modify
     it under the terms of Version 2 of the GNU General Public License
     as published by the Free Software Foundation;
-
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
+
 #include <linux/kernel.h>
-#include <linux/list.h>
+
+#define ACQ196
 
 
+#ifndef EXPORT_SYMTAB
+#define EXPORT_SYMTAB
+#include <linux/module.h>
+#endif
+
+#include <asm/arch-iop32x/iop321.h>
 #include "acqX00-port.h"
-/* keep debug local to this module */
-#define acq200_debug acq200_mean_debug   
-
+#include "acq200.h"
 #include "acq200_debug.h"
-#include "acq200-fifo-local.h"     /* DG */
 
-#include "acq32busprot.h"
+#include "acq200-fifo-top.h"
+#include "acq200-fifo-local.h"
+#include "acq200-fifo.h"
+
+#include "acq100_rtm_t.h"
 
 
-void acq200_addRefillClient(struct RefillClient *client)
+
+static int __init acq100_rtm_t_init(void)
 {
-	spin_lock(&DG->refillClients.lock);
-	list_add_tail(&client->list, &DG->refillClients.list);
-	spin_unlock(&DG->refillClients.lock);
+	struct resource mumem;
+	acq200_get_mumem_resource(&mumem);
+	DG->fpga.fifo.pa = virt_to_phys((void*)mumem.start);
+
+	info("set fifo.pa to %x", DG->fpga.fifo.pa);
+	return 0;
 }
 
-void acq200_delRefillClient(struct RefillClient *client)
+static void __exit
+acq100_rtm_t_exit_module(void)
 {
-	spin_lock(&DG->refillClients.lock);
-	list_del(&client->list);
-	spin_unlock(&DG->refillClients.lock);
-
-	acq200_addRefillClient(0);
-} 
-
-void acq200_runRefillClient(void *data, int nbytes)
-{
-	struct RefillClient *client;
-
-	spin_lock(&DG->refillClients.lock);
-	list_for_each_entry(client, &DG->refillClients.list, list){
-		client->action(data, nbytes);
-	}
-	spin_unlock(&DG->refillClients.lock);
+	DG->fpga.fifo.pa = ACQ200_FPGA_P+ACQ196_FIFO_OFFSET;
+	info("restore fifo.pa to %x", DG->fpga.fifo.pa);
 }
+
+module_init(acq100_rtm_t_init);
+module_exit(acq100_rtm_t_exit_module);
+
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Peter.Milne@d-tacq.com");
+MODULE_DESCRIPTION("ACQ100 RTM-T adapter");
+
+

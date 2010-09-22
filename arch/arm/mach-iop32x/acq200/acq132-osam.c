@@ -57,16 +57,13 @@ static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
 
 	switch(shift){
 	case -2:
-	default:
 		field = SHIFT_M2; break;
 	case -1:
 		field = SHIFT_M1; break;
-	case 1:
-		field = SHIFT_P1; break;
-	case 2:
-		field = SHIFT_P2; break;
-	case 0:
-		field = SHIFT_0; break;
+	default:
+		if (shift < 0) shift = 0;
+		if (shift > 5) shift = 5;
+		field = shift;
 	}
 
 	osam |= field << shl;
@@ -74,7 +71,7 @@ static inline u32 acq132_adc_set_shift(u32 osam, int shl, int shift)
 }
 
 void acq132_set_osam_nacc(
-	int dev, int lr, int nacc, int shift, int decimate)
+	int dev, int lr, int nacc, int shift, int decimate, int n4)
 {
 	u32 osam = *ACQ132_ADC_OSAM(dev);				
 	u32 osam1 = osam;						
@@ -87,6 +84,11 @@ void acq132_set_osam_nacc(
 		osam &= ~(1<<(ACQ132_ADC_OSAM_R_ACCEN+lr));
 	}else{
 		osam |= 1<<(ACQ132_ADC_OSAM_R_ACCEN+lr);
+	}
+	if (n4){
+		osam |= 1 << (ACQ132_ADC_OSAM_R_NACC4+lr);
+	}else{
+		osam &= ~(1 << (ACQ132_ADC_OSAM_R_NACC4+lr));
 	}
 	*ACQ132_ADC_OSAM(dev) = osam;
 	dbg(1, "%p was: 0x%08x set 0x%08x reads 0x%08x ",
@@ -106,8 +108,8 @@ void acq132_setAllDecimate(int dec)
 	dbg(1, "setting decimation to %d", dec);
 
 	for (block = 0; block <= 3; ++block){
-		acq132_set_osam_nacc(block, OSAMLR('L'), dec, -2, DECIM);
-		acq132_set_osam_nacc(block, OSAMLR('R'), dec, -2, DECIM);
+		acq132_set_osam_nacc(block, OSAMLR('L'), dec, -2, DECIM, 0);
+		acq132_set_osam_nacc(block, OSAMLR('R'), dec, -2, DECIM, 0);
 	}
 }	
 
