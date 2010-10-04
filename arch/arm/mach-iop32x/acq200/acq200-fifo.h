@@ -1002,6 +1002,7 @@ static inline void usec_delay(unsigned usecs)
  * TBLOCK_LEN: pick a number divisible by 24, 32, 4096 ...
  */
 
+#define ABS_MAX_TBLOCKS	512	/* PGM:cautious, avoid huge list small TBLOCK*/
 #define _TBLOCK_LEN 0x600000   
 
 #define TBLOCK_LEN(dg) ((dg)->bigbuf.tblocks.blocklen)
@@ -1213,6 +1214,9 @@ int acq216_setAntiPhase(int enable);  /* ACQ216HS, sets channelMask too */
 
 /** this is hack, but may end up becoming permanent :-) */
 
+/** @@todo WARNING valid for TBLOCK_LEN=0x600000 ONLY
+ ** only used in legacy live streaming .. ignore
+ */
 #define TBLOCK_NUM(addr) (((addr)>>21)/3)
 #define TBLOCK_START(tb) (((tb)*3) << 21)
 #define TBLOCK_LIMIT(tb) (TBLOCK_START(tb)+ACQ200_TBLOCK_SIZE)
