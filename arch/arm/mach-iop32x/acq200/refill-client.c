@@ -34,27 +34,46 @@
 
 void acq200_addRefillClient(struct RefillClient *client)
 {
-	spin_lock(&DG->refillClients.lock);
-	list_add_tail(&client->list, &DG->refillClients.list);
-	spin_unlock(&DG->refillClients.lock);
+	struct RefillClient* cursor;
+
+	list_for_each_entry(cursor, &DG->refillClients.list, list){
+		if (cursor == client){
+			break;
+		}
+	}
+	//spin_lock(&DG->refillClients.lock);
+	/* don't add twice */
+	if (cursor != client){
+		list_add_tail(&client->list, &DG->refillClients.list);
+	}
+	//spin_unlock(&DG->refillClients.lock);
 }
 
 void acq200_delRefillClient(struct RefillClient *client)
 {
-	spin_lock(&DG->refillClients.lock);
-	list_del(&client->list);
-	spin_unlock(&DG->refillClients.lock);
+	struct RefillClient* cursor;
 
-	acq200_addRefillClient(0);
+	list_for_each_entry(cursor, &DG->refillClients.list, list){
+		if (cursor == client){
+			break;
+		}
+	}
+	
+	//spin_lock(&DG->refillClients.lock);
+	/* only delete if in the list */
+	if (cursor == client){
+		list_del(&client->list);
+	}
+	//spin_unlock(&DG->refillClients.lock);
 } 
 
 void acq200_runRefillClient(void *data, int nbytes)
 {
 	struct RefillClient *client;
 
-	spin_lock(&DG->refillClients.lock);
+	//spin_lock(&DG->refillClients.lock);
 	list_for_each_entry(client, &DG->refillClients.list, list){
 		client->action(data, nbytes);
 	}
-	spin_unlock(&DG->refillClients.lock);
+	//spin_unlock(&DG->refillClients.lock);
 }
