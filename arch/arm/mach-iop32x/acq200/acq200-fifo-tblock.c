@@ -269,14 +269,23 @@ void acq200_init_tblock_list(void)
 static void build_tblock_list(void)
 {
 	struct TBLOCKLIST *tbl = &DG->bigbuf.tblocks;
+	int kernel_blocklen;
 
-	if (!tbl->blocklen){
-		return;
+	kernel_blocklen = acq200_get_tblock_resource(&DG->bigbuf.tblocks.tmp);
+
+	if (kernel_blocklen <= tbl->blocklen){
+		tbl->blocklen = kernel_blocklen;
 	}
 
-	tbl->blocklen = acq200_get_tblock_resource(&DG->bigbuf.tblocks.tmp);
+	if (tbl->blocklen == 0){
+		err("BLOCKLEN == 0");
+	}
 	tbl->nblocks = len_buf(DG)/tbl->blocklen;
-	tbl->the_tblocks = kmalloc(sizeof(struct TBLOCK)*tbl->nblocks, GFP_KERNEL);
+	if (tbl->nblocks > ABS_MAX_TBLOCKS){
+		tbl->nblocks = ABS_MAX_TBLOCKS;	
+	}
+	tbl->the_tblocks = 
+		kmalloc(sizeof(struct TBLOCK)*tbl->nblocks, GFP_KERNEL);
 
 	DBG(1, "kmalloc(%d) => %p", sizeof(struct TBLOCK) * tbl->nblocks,
 	    tbl->the_tblocks );

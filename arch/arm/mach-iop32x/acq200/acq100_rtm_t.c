@@ -37,15 +37,17 @@
 
 #include "acq100_rtm_t.h"
 
-
+#define REVID	"acq100_rtm_t B1000"
 
 static int __init acq100_rtm_t_init(void)
 {
 	struct resource mumem;
+
+	info(REVID);
 	acq200_get_mumem_resource(&mumem);
 	DG->fpga.fifo.pa = virt_to_phys((void*)mumem.start);
-
-	info("set fifo.pa to %x", DG->fpga.fifo.pa);
+	*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_RTM_T;
+	info("set fifo.pa to %x, set SYSCON_DAC_RTM", DG->fpga.fifo.pa);
 	return 0;
 }
 
@@ -53,6 +55,7 @@ static void __exit
 acq100_rtm_t_exit_module(void)
 {
 	DG->fpga.fifo.pa = ACQ200_FPGA_P+ACQ196_FIFO_OFFSET;
+	*ACQ196_SYSCON_DAC &= ~ACQ196_SYSCON_DAC_RTM_T;
 	info("restore fifo.pa to %x", DG->fpga.fifo.pa);
 }
 

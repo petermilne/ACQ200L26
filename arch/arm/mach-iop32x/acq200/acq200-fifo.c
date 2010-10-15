@@ -168,6 +168,10 @@ MODULE_PARM_DESC(tblock_already_in_phase_is_ok,
 #define DMA_ERROR IOP321_CSR_ERR
 
 
+int tblock_len = _TBLOCK_LEN;
+module_param(tblock_len, int, 0444);
+MODULE_PARM_DESC(tblock_len, "length of tblock in bytes");
+
 static char errbuf[128];
 
 static void preEnable(void);   /* call immediately BEFORE trigger en */
@@ -4044,6 +4048,9 @@ static void init_dg(void)
 	DMC_WO->stateListeners.lock = SPIN_LOCK_UNLOCKED;
 	INIT_LIST_HEAD(&DMC_WO->phases);
 	memcpy(DG, MYDG, sizeof(struct DevGlobs));
+	
+	DG->bigbuf.tblocks.blocklen = tblock_len;
+	info("set DG->bigbuf.tblocks.blocklen %d", DG->bigbuf.tblocks.blocklen);
 	DG->ipc = IPC;
 	DG->wo = DMC_WO;
 
@@ -4069,6 +4076,8 @@ static void init_dg(void)
 	DG->getChannelNumSamples = getChannelNumSamples;
 
 	acq200_fifo_bigbuf_fops_init();
+
+	info("99 DG->bigbuf.tblocks.blocklen %d", DG->bigbuf.tblocks.blocklen);
 }
 
 static void delete_dg(void)
