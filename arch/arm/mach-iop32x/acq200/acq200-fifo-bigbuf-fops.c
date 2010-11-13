@@ -60,6 +60,12 @@
 
 static int XX_valid;
 
+int debug_tbstat_ev = 0;
+module_param(debug_tbstat_ev, int, 0644);
+MODULE_PARM_DESC(debug_tbstat_ev, "turn on tbstat debugs");
+
+extern int acq200_tblock_debug;		/* @@todo desperate debug measure */
+
 void acq200_initDCI(struct file *file, int lchannel)
 {
 	file->private_data = kmalloc(DCI_SZ, GFP_KERNEL);
@@ -1434,16 +1440,20 @@ static void status_tb_free_tblocks(struct list_head* tble_list, int tblock)
 {
 	TBLE* cursor;
 	TBLE* tmp;
+	int old_acq200_tblock_debug = acq200_tblock_debug;
 
 	list_for_each_entry_safe(cursor, tmp, tble_list, list){
 		if (tblock == STATUS_TB_ALL ||
 		    tblock == cursor->tblock->iblock){
 			spin_lock(&DG->tbc.lock);
+			if (debug_tbstat_ev) acq200_tblock_debug = 1;
 			acq200_phase_release_tblock_entry(cursor);
+			if (debug_tbstat_ev) acq200_tblock_debug = 0;
 			spin_unlock(&DG->tbc.lock);
-			list_del(&cursor->list);
 		}
 	}
+
+	acq200_tblock_debug = old_acq200_tblock_debug;
 }
 
 
@@ -1620,23 +1630,20 @@ static ssize_t status_tb_evread (
 			if (tble_prev->tblock){
 				acq200_phase_release_tblock_entry(tble_prev);
 			}
-			list_del(&tble_prev->list);
 		}else{
 			if (tble_prev->tblock){
 				tb_prev = tble_prev->tblock->iblock;
 				list_move_tail(&tble_prev->list, DCI_LIST(file));
 			}
-
 		}
 		if (tle->event_offset < TBLOCK_LEN(DG)-BORDERLINE){
 			if (tble_next->tblock){
 				acq200_phase_release_tblock_entry(tble_next);
 			}
-			list_del(&tble_next->list);
 		}else{
 			if (tble_next->tblock){
 				tb_next = tble_next->tblock->iblock;
-				list_move_tail(&tble_next->list, DCI_LIST(file));
+				list_move_tail(&tble_next->list,DCI_LIST(file));
 			}
 		}
 		list_add_tail(&tle->list, DCI_LIST(file));
@@ -1651,6 +1658,7 @@ static ssize_t status_tb_evread (
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
+	dbg(!debug_tbstat_ev, "read:\"%s\"", lbuf);
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
 }
@@ -1676,11 +1684,16 @@ static ssize_t status_tb_evwrite(
 		s1 = lbuf;
 	}
 	for ( ; s1 - lbuf < len; s1 = s2){
+		unsigned tbix;
 		if ((s2 = strpbrk(s1, ", ")) != 0){
 			*s2++ = '\0';
 		}
-		status_tb_free_tblocks(DCI_LIST(file),
-					simple_strtoul(s1, 0, 10));
+
+		tbix = simple_strtoul(s1, 0, 10);
+
+		dbg(!debug_tbstat_ev, "free:\"%03d\"", tbix);
+
+		status_tb_free_tblocks(DCI_LIST(file), tbix);
 	}
 	return len;
 }

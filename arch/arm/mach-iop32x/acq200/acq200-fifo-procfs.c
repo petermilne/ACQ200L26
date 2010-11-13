@@ -3255,18 +3255,19 @@ static int acq200_proc_free_tblocks(
                 int* eof, void* data )
 {
 	struct TblockListElement* tle;
-	int iblock = 0;
-
 	len = 0;
 
 #define PRINTF(fmt, args...) len += sprintf(buf+len, fmt, ## args)
 
 	PRINTF("list of free tblocks\n");
 
+iterate:
 	list_for_each_entry(tle, &DG->bigbuf.free_tblocks, list){
-		PRINTF("%2d %2d %08x\n", 
-		       iblock, tle->tblock->iblock, tle->tblock->offset);
-		++iblock;
+		if (tle == 0 || tle->tblock == 0){
+			err("found broken tblocks list .. try again");
+			goto iterate;
+		}
+		PRINTF("%2d\n", tle->tblock->iblock);
 	}
 #undef PRINTF
 	return len;

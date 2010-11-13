@@ -40,7 +40,7 @@
 #include <linux/moduleparam.h>
 
 
-static int acq200_tblock_debug = 0;
+int acq200_tblock_debug = 0;
 module_param(acq200_tblock_debug, int, 0664);
 
 int fix_event_share_tblock;
@@ -364,7 +364,8 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 	struct TBLOCK* tblock = tle->tblock;
 	unsigned long flags;
 
-	DBG(1, "entry %d in_phase %d", tblock->iblock, TB_IN_PHASE(tblock));
+	dbg(!acq200_tblock_debug, 
+		"[%d] entry in_phase %d", tblock->iblock, TB_IN_PHASE(tblock));
 
 	if (TB_IN_PHASE(tblock) <= 0){
 		err("ERROR [%2d] in_phase %d", 
@@ -373,10 +374,8 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 	}
 
 	if (atomic_dec_and_test(&tblock->in_phase)){
-		DBG(1, "add_free %d", tblock->iblock);
-		DBG(1, "call list_move_tail %d", tblock->iblock);
-		DBG(1, "old: next:%p prev:%p", 
-		    tle->list.next, tle->list.prev);
+		dbg(!acq200_tblock_debug, "add_free %d old: next:%p prev:%p",
+			 tblock->iblock, tle->list.next, tle->list.prev);
 
 		tblock_clear(tblock);
 
@@ -384,9 +383,11 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 		list_move_tail(&tle->list, &bb->free_tblocks);
 		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 
-		DBG(1, "ret  list_move_tail %d", tblock->iblock);
+		dbg(!acq200_tblock_debug, 
+			"[%d] ret  list_move_tail", tblock->iblock);
 	}else{
-		DBG(1, "shared tblock stash wrapper in pool");
+		dbg(!acq200_tblock_debug, 
+		 "[%d] shared tblock stash wrapper in pool", tblock->iblock);
 
 		spin_lock_irqsave(&bb->tb_list_lock, flags);
 		list_move_tail(&tle->list, &bb->pool_tblocks);
