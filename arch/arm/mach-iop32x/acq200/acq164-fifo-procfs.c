@@ -438,8 +438,8 @@ void acq200_setChannelMask(unsigned mask)
 {
 	int lchan;
 
-	CAPDEF_set_nchan(NCHAN);
 	CAPDEF->channel_mask = mask&0x3;
+	CAPDEF_set_nchan(((mask&0x1) != 0)*32 + ((mask&0x2) != 0)*32);
 
 	for (lchan = 1; lchan <= NCHAN; ++lchan){
 		int enable =  ((1 << (lchan-1)/32) & mask) != 0;
