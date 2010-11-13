@@ -1547,12 +1547,8 @@ static struct CAPDEF* acq216_createCapdef(void)
 		.pit_stop = 1,
 		.pipeline_offset = { 0, 3, 3, 3 }
 	};
-	struct CAPDEF* capdef = kmalloc(sizeof(struct CAPDEF), GFP_KERNEL);
-
-	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
-
-	capdef_set_nchan(capdef, 16);
-	capdef_set_word_size(capdef, 2);
+	
+	struct CAPDEF *capdef = acq2xx_createCapdef(&_capdef, 2);
 
 /* name, minDIx, maxDIx, DIx, rising, is_active, commit */
 	capdef->ev[0] = 

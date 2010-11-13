@@ -54,7 +54,7 @@
 #include <asm/arch/acqX00-irq.h>
 
 #include "acqX00-port.h"
-#include "acq200-fifo-top.h"
+
 #include "acq200-fifo-tblock.h"
 #include "acq200-stream-api.h"
 
@@ -258,7 +258,17 @@ static void acq200_global_mask_op(u32 mask, int maskon)
 }
 
 
+static inline struct CAPDEF* acq2xx_createCapdef(
+	struct CAPDEF* template, int ws)
+{
+	struct CAPDEF* capdef = kmalloc(sizeof(struct CAPDEF), GFP_KERNEL);
 
+	memcpy(capdef, template, sizeof(struct CAPDEF));
+	capdef_set_nchan(capdef, acq200_aichan);
+	capdef_set_word_size(capdef, ws);
+	
+	return capdef;
+}
 
 #define HITIDE (DG->hitide)
 #define LOTIDE (DG->lotide)
