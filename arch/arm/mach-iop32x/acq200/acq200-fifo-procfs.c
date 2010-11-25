@@ -1312,6 +1312,27 @@ static ssize_t show_word_size(
 static DEVICE_ATTR(word_size, S_IRUGO, show_word_size, 0);
 
 
+static ssize_t show_code_min(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%d\n", ACQ200_CODE_MIN);
+}
+
+static DEVICE_ATTR(code_min, S_IRUGO, show_code_min, 0);
+
+static ssize_t show_code_max(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char *buf)
+{
+	return sprintf(buf, "%d\n", ACQ200_CODE_MAX);
+}
+
+static DEVICE_ATTR(code_max, S_IRUGO, show_code_max, 0);
+
+
 
 
 #ifndef WAV232
@@ -1512,6 +1533,10 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_post_arm_hook);
 	DEVICE_CREATE_FILE(dev, &dev_attr_post_shot_hook);
 	DEVICE_CREATE_FILE(dev, &dev_attr_fifo_int_count);
+
+	DEVICE_CREATE_FILE(dev, &dev_attr_code_min);
+	DEVICE_CREATE_FILE(dev, &dev_attr_code_max);
+
 	DEVICE_MK_DEV_SYSFS(dev);
 }
 

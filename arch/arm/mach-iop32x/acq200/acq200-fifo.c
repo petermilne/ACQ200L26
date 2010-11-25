@@ -4167,6 +4167,13 @@ unsigned acq200_getDI6(void) {
 	return *ACQ200_DIOCON&0x0ff;
 }
 
+#ifndef ACQ164
+int acq200_bits(void)
+{
+	return 16;
+}
+#endif
+
 EXPORT_SYMBOL_GPL(enable_acq);
 EXPORT_SYMBOL_GPL(disable_acq);
 EXPORT_SYMBOL_GPL(acq200_check_entire_es);
@@ -4190,3 +4197,4 @@ EXPORT_SYMBOL_GPL(acq200_stateListenerMakeStatecode);
 EXPORT_SYMBOL_GPL(DMC_WO);
 EXPORT_SYMBOL_GPL(CAPDEF);
 EXPORT_SYMBOL_GPL(DG);
+EXPORT_SYMBOL_GPL(acq200_bits);

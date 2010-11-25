@@ -1304,4 +1304,7 @@ void acq200_delRefillClient(struct RefillClient *client);
 void acq200_runRefillClient(void *data, int nbytes);
 
 void acq200_fifo_bigbuf_fops_init(void);
+
+int acq200_bits(void);
+
 #endif /* ACQ200_FIFO_H__ */

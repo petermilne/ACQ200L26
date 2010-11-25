@@ -27,10 +27,13 @@
 #define ACQ164_SAMPLE_WORD_SIZE	4	/* 24 bit sample in 32 bit field */
 #define ACQ164_BEST_CLK		32768000
 
+#define ACQ164_RJ_REV		0x304	/* data now right justified */
+
 #define ACQ164_BDR		FPGA_REG(0x00)
 #define ACQ164_FIFCON		FPGA_REG(0x04)
 #define ACQ164_FIFSTAT		FPGA_REG(0x08)
 #define ACQ164_SYSCON		FPGA_REG(0x0c)
+#define ACQ164_OSR		FPGA_REG(0x10)
 #define ACQ164_ICS527		FPGA_REG(0x14)
 #define ACQ164_SYSCONDAC	FPGA_REG(0x18)
 #define ACQ164_CLKCON		FPGA_REG(0x1c)
@@ -180,8 +183,11 @@
 #define ACQ100_ICR_HOTEN 0x00000080
 #define ACQ100_ICR_DACEN 0x80000000
 
-#ifndef __ASSEMBLER__
 
+#define ACQ164_OSR_MASK	0x00ff		/* Over Sampling Register 0=1x */
+
+
+#ifndef __ASSEMBLER__
 
 static inline u32 acq164_syscon_set(u32 flags) {
 	return *ACQ164_SYSCON |= flags;
@@ -249,6 +255,19 @@ static inline void stop_capture(void)
 void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 
 extern struct OB_CLOCK_DEF ob_clock_def;
+
+#define CLAMP(xx,ll,rr)         ((xx) = (xx)<(ll)? (ll): (xx)>(rr)? (rr): (xx))
+
+static inline void acq164_set_nacc(int nacc)
+{
+	CLAMP(nacc, 1, 256);
+	*ACQ164_OSR = nacc - 1;
+}
+
+static inline int acq164_get_nacc(void)
+{
+	return (*ACQ164_OSR & ACQ164_OSR_MASK) + 1;
+}
 
 
 
