@@ -606,13 +606,25 @@ static int woOnRefill(
 	return phase != wo->now;         /* event is in NEW Phase */
 }
 
+static unsigned getPhaseSampleStart(void) 
+/**< returns start sample in phase. is this really accurate? */
+{
+	long spb = DMA_BLOCK_LEN/sample_size();
+	unsigned pss = DG->stats.refill_blocks*spb - DMC_WO->pit_count;
+
+	return pss;
+}
+
 #ifndef WAV232
 
 static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 {
-	struct list_head* clients = &DG->tbc.list;
+	struct list_head* clients = &DG->tbc_regular.list;
 	struct list_head* pool = &DG->bigbuf.pool_tblocks;
-	spin_lock(&DG->tbc.lock);
+	unsigned pss = getPhaseSampleStart();
+
+	spin_lock(&DG->tbc_regular.lock);
+
 
 	if (!list_empty(clients)){
 		struct TblockConsumer *tbc;
@@ -626,6 +638,8 @@ static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 
 				atomic_inc(&tblock->in_phase);
 				tle->tblock = tblock;
+				tle->phase_sample_start = pss;
+				
 
 				list_move_tail(pool->next, &tbc->tle_q);
 				wake_up_interruptible(&tbc->waitq);	
@@ -634,7 +648,7 @@ static void _dmc_handle_tb_clients(struct TBLOCK *tblock)
 			}
 		}
 	}
-	spin_unlock(&DG->tbc.lock);
+	spin_unlock(&DG->tbc_regular.lock);
 }
 
 
@@ -1688,8 +1702,7 @@ static struct Phase* onPIT_repeater(
 	spin_lock(&DG->tbc_event.lock);
 
 	if (!list_empty(clients)){
-		long spb = DMA_BLOCK_LEN/sample_size();
-		unsigned pss = DG->stats.refill_blocks*spb - DMC_WO->pit_count;
+		unsigned pss = getPhaseSampleStart();
 		struct list_head* pool = &DG->bigbuf.pool_tblocks;
 		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
 		unsigned tboff = TBLOCK_OFFSET(*offset);
@@ -4076,7 +4089,7 @@ static void init_dg(void)
 	INIT_LIST_HEAD(&DG->end_of_shot_hooks);
 
 	initLockedList(&DG->dcb.clients);
-	initLockedList(&DG->tbc);
+	initLockedList(&DG->tbc_regular);
 	initLockedList(&DG->tbc_event);
 	initLockedList(&DG->refillClients);
 

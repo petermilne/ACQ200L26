@@ -139,11 +139,11 @@ static void _deleteTBC(struct LockedList * lockedList, struct TblockConsumer *tb
 
 static struct TblockConsumer *newTBC(unsigned backlog_limit)
 {
-	return _newTBC(&DG->tbc, backlog_limit);
+	return _newTBC(&DG->tbc_regular, backlog_limit);
 }
 static void deleteTBC(struct TblockConsumer *tbc)
 {
-	return _deleteTBC(&DG->tbc, tbc);
+	return _deleteTBC(&DG->tbc_regular, tbc);
 }
 
 static struct TblockConsumer *newEventTBC(unsigned backlog_limit)
@@ -1445,11 +1445,15 @@ static void status_tb_free_tblocks(struct list_head* tble_list, int tblock)
 	list_for_each_entry_safe(cursor, tmp, tble_list, list){
 		if (tblock == STATUS_TB_ALL ||
 		    tblock == cursor->tblock->iblock){
-			spin_lock(&DG->tbc.lock);
+			spin_lock(&DG->tbc_regular.lock);
+			spin_lock(&DG->tbc_event.lock);
+
 			if (debug_tbstat_ev) acq200_tblock_debug = 1;
 			acq200_phase_release_tblock_entry(cursor);
 			if (debug_tbstat_ev) acq200_tblock_debug = 0;
-			spin_unlock(&DG->tbc.lock);
+
+			spin_unlock(&DG->tbc_event.lock);
+			spin_unlock(&DG->tbc_regular.lock);
 		}
 	}
 
@@ -1507,9 +1511,12 @@ static ssize_t dma_tb_read (
 		    tbc->c.tle, headroom, headroom==0? "release": "hold");
 
 		if (headroom == 0){
-			spin_lock(&DG->tbc.lock);
+			spin_lock(&DG->tbc_regular.lock);
+			spin_lock(&DG->tbc_event.lock);
+
 			acq200_phase_release_tblock_entry(tbc->c.tle);
-			spin_unlock(&DG->tbc.lock);	
+			spin_unlock(&DG->tbc_event.lock);
+			spin_unlock(&DG->tbc_regular.lock);	
 			tbc->c.cursor = 0;
 		}
 	}else{
@@ -1721,9 +1728,9 @@ static ssize_t status2_tb_read (
 	int rc;
 
 	if (tbc->c.tle){
-		spin_lock(&DG->tbc.lock);
+		spin_lock(&DG->tbc_regular.lock);
 		acq200_phase_release_tblock_entry(tbc->c.tle);
-		spin_unlock(&DG->tbc.lock);	
+		spin_unlock(&DG->tbc_regular.lock);	
 	}
 		
 	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
@@ -1734,19 +1741,23 @@ static ssize_t status2_tb_read (
 
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
 
-	rc = snprintf(lbuf, len, "%03d\n", tle->tblock->iblock);
+	/* phase_sample_start: allows clients to sync to samples,
+         * in case of late joining, or missed tblocks 
+         */
+	rc = snprintf(lbuf, len, "%03d %d\n", 
+		      tle->tblock->iblock, tle->phase_sample_start);
 
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
-	spin_lock(&DG->tbc.lock);
+	spin_lock(&DG->tbc_regular.lock);
 
 	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
 		acq200_phase_release_tblock_entry(tle);
 	}else{
 		list_move_tail(&tle->list, DCI_LIST(file));
 	}
-	spin_unlock(&DG->tbc.lock);	
+	spin_unlock(&DG->tbc_regular.lock);	
 
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;

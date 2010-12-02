@@ -665,7 +665,7 @@ struct DevGlobs {
 	struct ArgBlock post_arm_hook;
 	struct ArgBlock post_shot_hook;	
 
-	struct LockedList tbc;
+	struct LockedList tbc_regular;
 	struct LockedList tbc_event;
 	struct LockedList refillClients;
 
