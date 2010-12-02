@@ -219,102 +219,6 @@ struct TBLOCK* getTblock(Tbxo tb)
 }
 
 
-void acq132_transform_row(
-	short *to, short *from, int nsamples, int channel_sam)
-/* read a block of data from to and farm 8 channels to from */
-{
-	union {
-		unsigned long long ull[2];
-		short ch[8];
-	} buf;
-	unsigned long long *full = (unsigned long long *)from;
-	int sam;
-	int chx;
-
-	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
-	    to, from, nsamples, channel_sam);
-
-	if (stub_transform){
-		TBG(3, "stub");
-		return;
-
-	}
-	for (sam = 0; sam < nsamples; ++sam){
-		buf.ull[0] = *full++;
-		buf.ull[1] = *full++;
-
-#ifdef DEBUGGING
-		if ((short*)full < from1 || (short*)full > from2){
-			err("from outrun at  %p %p %p sam:%d",
-			    from1, full, from2, sam);
-			return;
-		}
-#endif
-
-		for (chx = 0; chx < ROW_CHAN; ++chx){
-
-#ifdef DEBUGGING
-			short *pto = to + chx*channel_sam + sam;
-			if (pto < to1 || pto > to2){
-				err("buffer outrun at %p %p %p chx:%d sam:%d",
-				    to1, pto, to2, chx, sam);
-				return;
-			}
-#endif
-			to[chx*channel_sam + sam] = buf.ch[chx];
-		}			
-	}
-
-	TBG(3, "99");	
-}
-static void acq132_transform(short *to, short *from, int nwords, int stride)
-{
-	const int nsamples = nwords/stride;	
-	const int rows = stride/ROW_CHAN;
-	const int block_words = rows * ROW_CHAN * ROW_SAM;
-	int blocks = nwords/block_words;
-	int nw = nwords;
-	int block;
-#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
-
-	if (blocks * block_words < nwords){
-		++blocks;
-	}
-
-	TBG(1, "blocks:%d", blocks);
-	TBG(1, "nsamples:%d", nsamples);
-
-#ifdef DEBUGGING
-	to1 = to;
-	to2 = to+nwords;
-	TBG(1, "to   %p to %p", to1, to2);
-	from1 = from;
-	from2 = from+nwords;
-	TBG(1, "from %p to %p", from1, from2);
-#endif
-
-	for (block = 0; block < blocks; ++block, nw -= block_words){
-		const int bsamples = min(nw, block_words)/rows/ROW_CHAN;
-		int row;
-
-		TBG(3, "block:%d to:%p from:%p bsamples %d", 
-		    block, to, from, bsamples);
-
-		for (row = 0; row < rows; ++row){
-			acq132_transform_row(
-				to + ROW_OFF(row), 
-				from, 
-				bsamples,
-				nsamples
-				);
-			from += bsamples*ROW_CHAN;
-		}
-		to += bsamples;
-		TBG(3, "block:%d to:%p from:%p", block, to, from);
-	}
-
-	TBG(1, "99");
-}
 
 /* It makes sense to build the ES detect and remove into the transform 
  * because the DQAD is already in cache. ie the cost of search is small
@@ -726,6 +630,8 @@ static void* acq132_deblock(short * const from, int nwords, int stride)
 	return to;
 
 }
+
+
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
 	dbg(1, "to:tblock:%d from:tblock:%d", 
@@ -737,11 +643,6 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 	acq132_transform_unblocked(
 		to, acq132_deblock(from, nwords, stride), nwords, stride);
 }
-
-static 	struct Transformer transformer = {
-	.name = "acq132",
-	.transform = acq132_transform
-};
 
 static struct Transformer transformer_es = {
 	.name = "acq132es",
@@ -808,14 +709,9 @@ static struct Hookup transformer_es_hook = {
 void acq132_register_transformers(void)
 {
 	int it;
-	it = acq200_registerTransformer(&transformer);
-	if (it >= 0){
-		acq200_add_start_of_shot_hook(&transformer_es_hook);
-		acq200_registerTransformer(&transformer_es);
-		acq200_setTransformer(it);
-	}else{
-		err("transformer %s NOT registered", transformer.name);
-	}
+	acq200_add_start_of_shot_hook(&transformer_es_hook);
+	it = acq200_registerTransformer(&transformer_es);
+	acq200_setTransformer(it);
 }
 
 
