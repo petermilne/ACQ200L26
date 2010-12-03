@@ -611,6 +611,11 @@ static unsigned getPhaseSampleStart(void)
 {
 	long spb = DMA_BLOCK_LEN/sample_size();
 	unsigned pss = DG->stats.refill_blocks*spb - DMC_WO->pit_count;
+	/* round down to beginning of TBLOCK */
+	unsigned sptb = TBLOCK_LEN(DG)/sample_size();
+
+	pss /= sptb;
+	pss *= sptb;
 
 	return pss;
 }
