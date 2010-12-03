@@ -583,8 +583,8 @@ int acq132_transform_row_es1pQ(
 #endif
 
 		/* ROW_CHAN == 2 */
-		to[0*channel_sam + tosam] = buf >> 16;
-		to[1*channel_sam + tosam] = buf & 0x0000ffff;
+		to[0*channel_sam + tosam] = buf & 0x0000ffff;
+		to[1*channel_sam + tosam] = buf >> 16;
 
 		++tosam;		
 	}
@@ -663,10 +663,10 @@ static void acq132_transform_unblocked1pQ(
 
 #ifdef DEBUGGING
 	to1 = to;
-	to2 = to+nsamples*ROWS*ROW_CHAN;
+	to2 = to+nsamples*ROWS*ROW_CHAN4;
 	TBG(1, "to   %p to %p", to1, to2);
 	from1 = from;
-	from2 = from+nsamples*ROWS*ROW_CHAN;
+	from2 = from+nsamples*ROWS*ROW_CHAN4;
 	TBG(1, "from %p to %p", from1, from2);
 #endif
 
@@ -678,7 +678,7 @@ static void acq132_transform_unblocked1pQ(
 			nsamples,
 			nsamples
 			);
-		from += nsamples*ROW_CHAN;
+		from += nsamples*ROW_CHAN4;
 	}
 
 	TBG(1, "99");
@@ -738,12 +738,10 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
 }
 
-#define DUAL_CHAN	2	/* number of channels per DQ in 1pQ mode */
-
 static void acq132_transform_es1pQ(
 	short *to, short *from, int nwords, int stride)
 {
-	int ROWS = stride/DUAL_CHAN;
+	int ROWS = stride/ROW_CHAN4;
 
 	dbg(1, "to:tblock:%d from:tblock:%d", 
 	    TBLOCK_INDEX((void*)to - va_buf(DG)),

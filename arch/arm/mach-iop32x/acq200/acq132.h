@@ -434,7 +434,7 @@ static inline void reset_gpg(void)
 
 /* but with channel masking, we have 2 more possibilities: */
 #define ROW_CHAN2	4	/* two channels per fpga */
-#define ROW_CHAN4	8	/* one channel per fpga */
+#define ROW_CHAN4	2	/* one channel per fpga */
 
 #define LRCH	2
 #define QUADCH	4
