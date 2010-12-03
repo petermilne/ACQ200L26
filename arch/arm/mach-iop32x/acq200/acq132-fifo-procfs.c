@@ -1049,8 +1049,11 @@ int count_bits(unsigned mask) {
 }
 static int isValidMask(unsigned mm, int shr)
 {
-	unsigned left = mm >> (shr + 16);
-	unsigned right = (mm >> shr) & 0x0000ffff;
+	unsigned left =  (mm&0xffff0000) >> (shr + 16);
+	unsigned right = (mm&0x0000ffff) >> shr;
+
+	dbg(2, "mm: %08x shr:%d left:%08x right:%08x", 
+	    mm, shr, left, right);
 
 	if (left != right){
 		dbg(1, "%x ! = %x\n", left<<16, right);
@@ -1060,6 +1063,7 @@ static int isValidMask(unsigned mm, int shr)
 	case MASK_1:
 	case MASK_2:
 	case MASK_4:
+		dbg(2, "return IS_VALID");
 		return 1;
 	default:
 		dbg(1, "%x not valid\n", left);
@@ -1100,6 +1104,8 @@ void acq200_setChannelMask(unsigned mask)
 	unsigned mm;
 	int lchan;
 	unsigned vmask = 0;
+
+	dbg(1, "mask:%08x", mask);
 
 	if ((mm = mask&MASK_D) != 0 && isValidMask(mm, 12)){
 		vmask |= mm;
