@@ -541,19 +541,68 @@ int acq132_transform_row_es(
 	return tosam;
 }
 
+int acq132_transform_row_es1pQ(
+	short *to, 
+/*      short *to[ROW_CHAN], */
+	short *from, int nsamples, int channel_sam)
+/* read a1 block of data from to and farm 2 channels to from */
+{
+	unsigned long buf;
+	unsigned long *full = (unsigned long *)from;
+	int sam;
+	int tosam = 0;
+
+	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
+	    to, from, nsamples, channel_sam);
+
+	if (stub_transform){
+		TBG(3, "stub");
+		return nsamples;
+
+	}
+	for (sam = nsamples; sam != 0; --sam){
+		void *before = full;
+		buf = *full++;
+
+		/* rapid fail ES_MAGIC test 
+		 aa55 aa55 0000 0000 aa55 aa55 0000 0000
+		 */
+		if ((buf>>16) == ES_MAGIC_WORD &&
+                    (*full>>16) == ES_MAGIC_WORD &&
+		    /* @@todo! */
+		    /* remove pre-increment from cursor */
+		    remove_es(nsamples-sam, (unsigned short*)before, before)){
+			continue;
+		}
+#ifdef DEBUGGING
+		if ((short*)full < from1 || (short*)full > from2){
+			err("from outrun at  %p %p %p sam:%d",
+			    from1, full, from2, sam);
+			return nsamples;
+		}
+#endif
+
+		/* ROW_CHAN == 2 */
+		to[0*channel_sam + tosam] = buf >> 16;
+		to[1*channel_sam + tosam] = buf & 0x0000ffff;
+
+		++tosam;		
+	}
+
+	TBG(3, "99");	
+	return tosam;
+}
 
 
 #define DQ_ROW_OFF(blk, rows) (blk*TBLOCK_LEN(DG)/rows)
 
 static void acq132_transform_unblocked(
-	short *to, short *from, int nwords, int stride)
+	short *to, short *from, int nsamples, int ROWS)
 {
 /* keep a stash of NSCAN to vectors */
-	const int nsamples = nwords/stride;	
-	const int ROWS = stride/ROW_CHAN;
 #define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 	int row_off[MAX_ROWS];
-	int row = stride/ROW_CHAN;
+	int row;
 
 	if (ROWS > MAX_ROWS){
 		err("rows %d > MAX_ROWS", ROWS);
@@ -570,10 +619,10 @@ static void acq132_transform_unblocked(
 
 #ifdef DEBUGGING
 	to1 = to;
-	to2 = to+nwords;
+	to2 = to+nsamples*ROWS*ROW_CHAN;
 	TBG(1, "to   %p to %p", to1, to2);
 	from1 = from;
-	from2 = from+nwords;
+	from2 = from+nsamples*ROWS*ROW_CHAN;
 	TBG(1, "from %p to %p", from1, from2);
 #endif
 
@@ -591,10 +640,53 @@ static void acq132_transform_unblocked(
 	TBG(1, "99");
 }
 
-static void* acq132_deblock(short * const from, int nwords, int stride)
+static void acq132_transform_unblocked1pQ(
+	short *to, short *from, int nsamples, int ROWS)
+{
+/* keep a stash of NSCAN to vectors */
+#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
+	int row_off[MAX_ROWS];
+	int row;
+
+	if (ROWS > MAX_ROWS){
+		err("rows %d > MAX_ROWS", ROWS);
+		return;
+	}
+
+	G_rows = ROWS;
+
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
+	}
+
+	TBG(1, "nsamples:%d", nsamples);
+
+#ifdef DEBUGGING
+	to1 = to;
+	to2 = to+nsamples*ROWS*ROW_CHAN;
+	TBG(1, "to   %p to %p", to1, to2);
+	from1 = from;
+	from2 = from+nsamples*ROWS*ROW_CHAN;
+	TBG(1, "from %p to %p", from1, from2);
+#endif
+
+
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] += acq132_transform_row_es1pQ(
+			to + row_off[row], 
+			from, 
+			nsamples,
+			nsamples
+			);
+		from += nsamples*ROW_CHAN;
+	}
+
+	TBG(1, "99");
+}
+
+static void* acq132_deblock(short * const from, int nwords, int ROWS)
 {
 	void* const to = BB_PTR(g_esm.es_deblock->tblock->offset);
-	const int ROWS = stride/ROW_CHAN;
 	void *frm = from;
 	int row_off[MAX_ROWS];
 	int row;
@@ -634,6 +726,8 @@ static void* acq132_deblock(short * const from, int nwords, int stride)
 
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
+	int ROWS = stride/ROW_CHAN;
+
 	dbg(1, "to:tblock:%d from:tblock:%d", 
 	    TBLOCK_INDEX((void*)to - va_buf(DG)),
 	    TBLOCK_INDEX((void*)from - va_buf(DG)));
@@ -641,12 +735,35 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 	G_current_transform_tbxo = va2tbxo(from);
 
 	acq132_transform_unblocked(
-		to, acq132_deblock(from, nwords, stride), nwords, stride);
+		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
 }
+
+#define DUAL_CHAN	2	/* number of channels per DQ in 1pQ mode */
+
+static void acq132_transform_es1pQ(
+	short *to, short *from, int nwords, int stride)
+{
+	int ROWS = stride/DUAL_CHAN;
+
+	dbg(1, "to:tblock:%d from:tblock:%d", 
+	    TBLOCK_INDEX((void*)to - va_buf(DG)),
+	    TBLOCK_INDEX((void*)from - va_buf(DG)));
+
+	G_current_transform_tbxo = va2tbxo(from);
+
+	acq132_transform_unblocked1pQ(
+		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
+}
+
+
 
 static struct Transformer transformer_es = {
 	.name = "acq132es",
 	.transform = acq132_transform_es
+};
+static struct Transformer transformer_es1pQ = {
+	.name = "acq132es1pQ",
+	.transform = acq132_transform_es1pQ
 };
 
 static int transformSelected(void *fun, const char* name)
@@ -710,8 +827,9 @@ void acq132_register_transformers(void)
 {
 	int it;
 	acq200_add_start_of_shot_hook(&transformer_es_hook);
-	it = acq200_registerTransformer(&transformer_es);
+	it = acq200_registerTransformer(&transformer_es);       
 	acq200_setTransformer(it);
+	acq200_registerTransformer(&transformer_es1pQ);
 }
 
 
