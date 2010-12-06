@@ -106,7 +106,7 @@ int acq200_lookup_pchan(int lchannel)
 /** lchannel in = 1:32 nameplate order return 0:32 memory order */
 {
 	int block = ((lchannel-1)>>BLOCK_SHR);  /* 1:32=>0, 33:64=>1 */
-	int index = lchannel&BLOCK_MASK;	/* 1 = 1, 33 = 1 */
+	int index = lchannel - block*NCHANNELSBLOCK;
 
 	return (block<<BLOCK_SHR) + plut[index] - 1;
 }
