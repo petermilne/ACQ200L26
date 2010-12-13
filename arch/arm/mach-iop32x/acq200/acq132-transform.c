@@ -108,6 +108,11 @@ module_param(timebase_encoding, int, 0644);
 /* -1: advance, 0: ignore, 1: retard */
 int control_event_adjust = -1;
 module_param(control_event_adjust, int, 0644);
+MODULE_PARM_DESC(control_event_adjust, "k * es_lat_cnt event adjust");
+
+int control_event_adjust_offset = 0;
+module_param(control_event_adjust_offset, int, 0644);
+MODULE_PARM_DESC(control_event_adjust_offset, "constant offset to event adjust");
 
 /* 2 sample pipeline, could be more: eg with FIR.
  * values found for decimating boxcar found empirically */
@@ -238,6 +243,7 @@ static inline unsigned getTsclkNs(void)
 
 
 #define ES_MAGIC_WORD 0xaa55
+#define ES_MAGIC_LONG (ES_MAGIC_WORD<<16 | ES_MAGIC_WORD)
 
 struct ES_INFO {
 	struct ES_DESCRIPTOR *esi_base;   /* base of ES vector */
@@ -388,6 +394,9 @@ int remove_es(int sam, unsigned short* ch, void *before)
 	const char* id = "none";
 	int rc = DG->show_event == 0; /* remove unless show_event */
 	
+	dbg(1, "sam: %d ch:%p before:%p ts:%x %x", 
+	    sam, ch, before, ch[5], ch[7]);
+
 	if (g_esm.es_cursor){	
 		unsigned ts = ch[5] << 16 | ch[7];
 		if (already_known(ts)){
@@ -566,20 +575,27 @@ int acq132_transform_row_es1pQ(
 
 		/* rapid fail ES_MAGIC test 
 		 aa55 aa55 0000 0000 aa55 aa55 0000 0000
+		0493000 aa55 aa55 0355 0355 aa55 aa55 0355 0355
+		0493800 aa55 aa55 0355 0355 aa55 aa55 0355 0355
 		 */
-		if ((buf>>16) == ES_MAGIC_WORD &&
-                    (*full>>16) == ES_MAGIC_WORD &&
-		    /* @@todo! */
-		    /* remove pre-increment from cursor */
+		if (buf == ES_MAGIC_LONG){
+			TBG(1, "ES_MAGIC_LONG %08lx %08lx %08lx %08lx",
+			    buf, full[1], full[3], full[5]);
+		}
+		if (buf == ES_MAGIC_LONG     && full[1] == ES_MAGIC_LONG &&
 		    remove_es(nsamples-sam, (unsigned short*)before, before)){
+			full += 7;
+			dbg(1, "remove_es() said YES");
 			continue;
 		}
+#if 0
 #ifdef DEBUGGING
 		if ((short*)full < from1 || (short*)full > from2){
 			err("from outrun at  %p %p %p sam:%d",
 			    from1, full, from2, sam);
 			return nsamples;
 		}
+#endif
 #endif
 
 		/* ROW_CHAN == 2 */
@@ -787,10 +803,8 @@ static TBLE *reserveFreeTblock(const char *id){
 static void transformer_es_onStart(void *unused)
 /* @TODO wants to be onPreArm (but not implemented) */
 {
-	if (!TRANSFORM_SELECTED(acq132_transform_es)){
-		return;
-	}else{
-
+	if (TRANSFORM_SELECTED(acq132_transform_es) ||
+	    TRANSFORM_SELECTED(acq132_transform_es1pQ) ){
 		if (g_esm.es_tble == 0 &&
 			(g_esm.es_tble = reserveFreeTblock("ES")) == 0){
 			return;
@@ -848,6 +862,9 @@ static int acq132_get_event_adjust(void)
 	int cold_adj_samples = 0;
 	int event_offset_bytes;
 
+	TBG(0, "acq132_es_lat_cnt %d acq132_es_dec_cnt %d",
+	    acq132_es_lat_cnt[0], acq132_es_dec_cnt[0]);
+
 	if (control_event_adjust){
 		int lat_cnt = acq132_es_lat_cnt[0];
 		int ii;
@@ -875,6 +892,7 @@ static int acq132_get_event_adjust(void)
 		    lat_cnt);
 			
 		cold_adj_samples = lat_cnt * control_event_adjust;
+		cold_adj_samples += control_event_adjust_offset;
 
 		if (acq132_es_dec_cnt[0] >= get_acq132_decim()-1){
 			dbg(1, "add dec_cnt adj %d", dec_cnt_adjust);
@@ -904,6 +922,8 @@ int _acq132_fix_event_already_found(
 	struct TBLOCK *tb = getTblock(g_esm.es_base->tbxo);
 	int id;
 	
+	TBG(1, "es_tbix:%d es_tboff:%d", es_tbix, es_tboff);
+
 	tle_cur = locateTblockInPhase(phase, es_tbix);
 	if (tle_cur == 0){
 		err("FAILED locateTblockInPhase cur %d", es_tbix);
