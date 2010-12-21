@@ -128,6 +128,13 @@ char acq100_scatter_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 int disable_acq_debug = 0;         /* set 1 */
 module_param(disable_acq_debug, int, 0664);
 
+int trig_is_gate = 1;
+module_param(trig_is_gate, int, 0644);
+/* capture stops when trigger reverts to original state. 
+ * set zero to ignore trigger after first edge eg for short pulse trigger,
+ * then stop capture using software to set "stop"
+ * or use ESTOP_DIx
+ */
 
 int ESTOP_DIx = 5;
 module_param(ESTOP_DIx, int, 0644);
@@ -707,7 +714,7 @@ static inline NZE shouldStop(void)
 		ds.stop_reason = "ESTOP";
 		dbg(1, "estop");
 		return 1;
-	}else if ((dix&dg.trig_mask) == dg.trig_quit){
+	}else if (!trig_is_gate && (dix&dg.trig_mask) == dg.trig_quit){
 		ds.stop_reason = "TRIG_QUIT";
 		dbg(1, "trig_quit");
 		return 1;
