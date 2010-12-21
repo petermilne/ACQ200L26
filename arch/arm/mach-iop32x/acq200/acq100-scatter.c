@@ -111,7 +111,7 @@
 
 #define MAXPOOL (MAXDEST*ENTRIES_PER_CYCLE*2)
 
-#define VERID "$Revision: 1.6 $ build B1000 "
+#define VERID "$Revision: 1.6 $ build B1002 "
 char acq100_scatter_driver_name[] = "acq100_scatter";
 char acq100_scatter_driver_string[] = "D-TACQ Scatter Control Device";
 char acq100_scatter_driver_version[] = VERID __DATE__ " Features:\n";
