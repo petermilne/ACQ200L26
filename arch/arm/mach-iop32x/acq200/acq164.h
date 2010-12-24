@@ -260,13 +260,14 @@ extern struct OB_CLOCK_DEF ob_clock_def;
 
 static inline void acq164_set_nacc(int nacc)
 {
-	CLAMP(nacc, 1, 256);
-	*ACQ164_OSR = nacc - 1;
+	CLAMP(nacc, 1, 64);
+	*ACQ164_OSR = nacc;
 }
 
 static inline int acq164_get_nacc(void)
 {
-	return (*ACQ164_OSR & ACQ164_OSR_MASK) + 1;
+	int nacc = *ACQ164_OSR & ACQ164_OSR_MASK;
+	return nacc == 0? 1: nacc;
 }
 
 
