@@ -124,8 +124,11 @@ int store_hook(struct ArgBlock *argBlock, const char* buf, int count)
 	count = min((size_t)count, strlen(buf));
 
 	memcpy(base = (char*)&argBlock->argv[MAXARGS], buf, count);
+	while (count > 1 && base[count-1] == '\n'){
+		--count;
+	}
 	base[count] = '\0';
-
+	
 	for (argc = 0; argc < MAXARGS &&
 		     ((argBlock->argv[argc] = strsep(&base, " ")) != NULL); 
 		++argc){
