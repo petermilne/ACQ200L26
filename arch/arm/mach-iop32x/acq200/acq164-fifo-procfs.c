@@ -257,17 +257,6 @@ static DEVICE_ATTR(channel_mapping, S_IRUGO, show_channel_mapping, 0);
 
 
 
-static int build_channel_mapping_bin(int start, char* buf)
-{
-	int lchan;
-	short *sb = (short*)buf;
-
-	for (lchan = start + 1; lchan <= start + 32; ++lchan){
-		*sb ++ = (short)acq200_lookup_pchan(lchan);
-	}
-	return 32*sizeof(short);
-}
-
 static ssize_t show_channel_mapping_bin(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -657,8 +646,8 @@ static int acq164_bits(void)
 #define MAX_24	((1 << (24-1)) - 1)
 #define MIN_24  (-(1 << (24 - 1)))
 
-#define MAX_32 ((1<< (32 - 1)) - 1)
-#define MIN_32 (-(1 << (32 - 1)))
+#define MAX_32 0x7FFFFFFF
+#define MIN_32 (-MAX_32 - 1)
 
 int acq164_code_min(void)
 {

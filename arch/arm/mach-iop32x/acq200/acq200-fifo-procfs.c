@@ -973,8 +973,94 @@ static inline void acq200_setDiocon(u32 diocon)
 	*ACQ200_DIOCON = control_mirror = diocon;
 }
 
+unsigned acq200_getDIO6(void)
+{
+	return *ACQ200_DIOCON;
+}
+
+
 
 static char last_store[32];
+
+#define DS_IS_INPUT 1
+#define DS_IS_OUTPUT 2
+static int do_store_dio_bit(int ibit, char value)
+/* return 1 if input */
+{
+	unsigned control = *ACQ200_DIOCON;
+	int rc = 0;
+
+	if (ibit >= 0 && ibit < MAXDIOBIT){
+		rc = DS_IS_OUTPUT;
+		switch(value){
+		case DIO_MASK_OUTPUT1:
+			control = DIO_SET_OUTPUT1(control, ibit);
+			break;
+		case DIO_MASK_OUTPUT0:
+			control = DIO_SET_OUTPUT0(control, ibit);
+			break;
+		case DIO_MASK_OUTPUT_PP:
+			control = DIO_SET_OUTPUT0(control, ibit);
+			*ACQ200_DIOCON = control;
+			control = DIO_SET_OUTPUT1(control, ibit);
+			*ACQ200_DIOCON = control;
+			control = DIO_SET_OUTPUT0(control, ibit);
+			break;
+		case DIO_MASK_OUTPUT_NP:
+			control = DIO_SET_OUTPUT1(control, ibit);
+			*ACQ200_DIOCON = control;
+			control = DIO_SET_OUTPUT0(control, ibit);
+			*ACQ200_DIOCON = control;
+			control = DIO_SET_OUTPUT1(control, ibit);
+			break;
+		case DIO_MASK_INPUT:
+		default:
+			/* set as input. record standard value */
+			control = DIO_SET_INPUT(control, ibit);
+			rc = DS_IS_INPUT;
+		}
+		
+		acq200_setDiocon(control);
+	}
+	return rc;
+}
+
+
+static void do_show_dio_bit(char* ubuf, unsigned control, int ibit)
+{
+	if (DIO_IS_OUTPUT(control, ibit)){
+		*ubuf = DIO_IS_OUTPUT1(control, ibit)?
+			DIO_MASK_OUTPUT1: DIO_MASK_OUTPUT0;
+	}else{
+		*ubuf = DIO_IS_INPUTH(control, ibit)?
+			DIO_MASK_INPUT1: DIO_MASK_INPUT0;
+	} 	
+}
+static ssize_t store_dio_bitx(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count,
+	int bitx)
+{
+	do_store_dio_bit(bitx, buf[0]);
+	return strlen(buf);
+}
+
+static ssize_t show_dio_bitx(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf,
+	int bitx)
+{
+	unsigned control = acq200_getDIO6();
+	int ibit = 0;
+
+	do_show_dio_bit(&buf[ibit], control, bitx);
+
+	buf[ibit++] = '\n';
+	buf[ibit] = '\0';
+	return strlen(buf);
+}
 
 static ssize_t store_dio_bit(
 	struct device * dev, 
@@ -983,57 +1069,64 @@ static ssize_t store_dio_bit(
 {
 	int ibit;
 	char value;
-	unsigned control = *ACQ200_DIOCON;
 
 	if (sscanf(buf, "%d %c", &ibit, &value) == 2 ||
             sscanf(buf, "%d=%c", &ibit, &value) == 2    ){
-		if (ibit >= 0 && ibit < MAXDIOBIT){
-			switch(value){
-			case DIO_MASK_OUTPUT1:
-				control = DIO_SET_OUTPUT1(control, ibit);
-				break;
-			case DIO_MASK_OUTPUT0:
-				control = DIO_SET_OUTPUT0(control, ibit);
-				break;
-			case DIO_MASK_OUTPUT_PP:
-				control = DIO_SET_OUTPUT0(control, ibit);
-				*ACQ200_DIOCON = control;
-				control = DIO_SET_OUTPUT1(control, ibit);
-				*ACQ200_DIOCON = control;
-				control = DIO_SET_OUTPUT0(control, ibit);
-				break;
-			case DIO_MASK_OUTPUT_NP:
-				control = DIO_SET_OUTPUT1(control, ibit);
-				*ACQ200_DIOCON = control;
-				control = DIO_SET_OUTPUT0(control, ibit);
-				*ACQ200_DIOCON = control;
-				control = DIO_SET_OUTPUT1(control, ibit);
-				break;
-			case DIO_MASK_INPUT:
-			default:
-				/* set as input. record standard value */
-				control = DIO_SET_INPUT(control, ibit);
-				sprintf(last_store, "%d -", ibit);
-				goto write_reg;
-			}
+		switch (do_store_dio_bit(ibit, value)){
+		case DS_IS_INPUT:
+			sprintf(last_store, "%d -", ibit);
+			break;	
+		case DS_IS_OUTPUT:
 			strncpy(last_store, buf, sizeof(last_store)-1);
-		write_reg:
-			acq200_setDiocon(control);
+			break;
+		default:
+			;
 		}
 	}
 
         return strlen(buf);
 }
 
+#define DIO_BIT_KNOB(BX)						\
+	static ssize_t show_dio_bit_##BX(				\
+		struct device * dev,					\
+		struct device_attribute *attr,				\
+		char * buf)						\
+	{								\
+		return show_dio_bitx(dev, attr, buf, BX);		\
+	}								\
+	static ssize_t store_dio_bit_##BX(				\
+		struct device * dev,					\
+		struct device_attribute *attr,				\
+		const char * buf,					\
+		size_t count)						\
+	{								\
+		return store_dio_bitx(dev, attr, buf, count, BX);	\
+	}								\
+									\
+	static DEVICE_ATTR(dio_bit_##BX, S_IRUGO|S_IWUGO,		\
+			   show_dio_bit_##BX, store_dio_bit_##BX)	\
+
+
+
+DIO_BIT_KNOB(0);
+DIO_BIT_KNOB(1);
+DIO_BIT_KNOB(2);
+DIO_BIT_KNOB(3);
+DIO_BIT_KNOB(4);
+DIO_BIT_KNOB(5);
+DIO_BIT_KNOB(6);
+
+
 static ssize_t show_dio_bit(
-	struct device * dev, 
+	struct device * dev,
 	struct device_attribute *attr,
 	char * buf)
 {
 	strcpy(buf, last_store);
 	return strlen(last_store);
 }
-
+	
 static DEVICE_ATTR(dio_bit, S_IRUGO|S_IWUGO, show_dio_bit, store_dio_bit);
 
 
@@ -1062,11 +1155,6 @@ static ssize_t store_dio(
         return strlen(buf);
 }
 
-unsigned acq200_getDIO6(void)
-{
-	return *ACQ200_DIOCON;
-}
-
 
 static ssize_t show_dio(
 	struct device * dev, 
@@ -1077,13 +1165,7 @@ static ssize_t show_dio(
 	unsigned control = acq200_getDIO6();
 
 	for (ibit = 0; ibit != MAXDIOBIT; ++ibit){
-		if (DIO_IS_OUTPUT(control, ibit)){
-			buf[ibit] = DIO_IS_OUTPUT1(control, ibit)?
-				DIO_MASK_OUTPUT1: DIO_MASK_OUTPUT0;
-		}else{
-			buf[ibit] = DIO_IS_INPUTH(control, ibit)?
-				DIO_MASK_INPUT1: DIO_MASK_INPUT0;
-		} 
+		do_show_dio_bit(&buf[ibit], control, ibit);
 	}
 	buf[ibit++] = '\n';
 	buf[ibit] = '\0';
@@ -1489,6 +1571,13 @@ void mk_dev_sysfs(struct device* dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio_space);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_0);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_1);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_2);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_3);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_4);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_5);
+	DEVICE_CREATE_FILE(dev, &dev_attr_dio_bit_6);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dio_raw);
 	DEVICE_CREATE_FILE(dev, &dev_attr_poll_dio);
 #ifndef WAV232
@@ -1715,6 +1804,26 @@ static ssize_t show_int_clk(
 		       acq200_clk_hz/1000,
 		       acq200_clk_hz/1000000);
 }
+
+static ssize_t show_int_clk_div(
+       struct device_driver * driver, char * buf)
+{
+        return sprintf(buf,"%u\n", arch_get_int_clk_div());
+}
+
+static ssize_t store_int_clk_div(
+	struct device_driver * driver, const char * buf, size_t count)
+{
+	u32 div;
+	if (sscanf(buf, "%u", &div) == 1){
+		div = max(2U, div);
+		arch_set_int_clk_div(div);
+		deactivateSignal(CAPDEF->ext_clk);
+		activateSignal(CAPDEF->int_clk_src);
+	};
+	return strlen(buf);
+}
+
 #endif
 
 static ssize_t store_int_clk(
@@ -1745,24 +1854,6 @@ static ssize_t store_int_clk(
 	return strlen(buf);
 }
 
-static ssize_t show_int_clk_div(
-       struct device_driver * driver, char * buf)
-{
-        return sprintf(buf,"%u\n", arch_get_int_clk_div());
-}
-
-static ssize_t store_int_clk_div(
-	struct device_driver * driver, const char * buf, size_t count)
-{
-	u32 div;
-	if (sscanf(buf, "%u", &div) == 1){
-		div = max(2U, div);
-		arch_set_int_clk_div(div);
-		deactivateSignal(CAPDEF->ext_clk);
-		activateSignal(CAPDEF->int_clk_src);
-	};
-	return strlen(buf);
-}
 
 
 
