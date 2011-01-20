@@ -1057,8 +1057,8 @@ static ssize_t show_dio_bitx(
 
 	do_show_dio_bit(&buf[ibit], control, bitx);
 
-	buf[ibit++] = '\n';
-	buf[ibit] = '\0';
+	buf[++ibit] = '\n';
+	buf[++ibit] = '\0';
 	return strlen(buf);
 }
 
