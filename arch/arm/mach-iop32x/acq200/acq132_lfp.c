@@ -35,6 +35,7 @@
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
 
+
 static	int plut[] = {
 /* index: memory order 1:32 
  * value: nameplate order 1:32 
@@ -58,12 +59,41 @@ static	int plut[] = {
 };
 #define PLUT_ELEMS (sizeof(plut)/sizeof(int))
 
+static int acq132_lfp_set_special_lut(unsigned mask)
+{
+	static const int lut11[] = {
+/* index: memory order 1:32 
+ * value: nameplate order 1:32 
+ */
+	[ 1] =  15, [ 2] = 31,
+	[ 3] =  11, [ 4] = 27,
+	};
+
+	switch(mask){
+	case 0x00010001:
+		acq200_setChannelLut(lut11, 2);
+		break;
+	case 0x00110011:
+		acq200_setChannelLut(lut11, 4);
+		break;
+	default:
+		acq200_setChannelLut(plut, PLUT_ELEMS);
+		break;
+	}
+	return 0;
+}
+
+
 static int __init acq132_lfp_init(void)
 {
 	info("lfp setting custom channel LUT");	
 	acq200_setChannelLut(plut, PLUT_ELEMS);
+	acq132_set_special_lut = acq132_lfp_set_special_lut;
 	return 0;
 }
+
+
+
 
 static void __exit
 acq132_lfp_exit_module(void)

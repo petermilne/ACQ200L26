@@ -196,4 +196,7 @@ void acq200_init_clkCounterMonitor(struct CLKCOUNTER_DESCR* clk_probe);
 void acq200_start_clkCounterMonitor(void);
 void acq200_stop_clkCounterMonitor(void);
 int acq200_clkCounterMonitor_requestedToStop(void);
+
+extern int (*acq132_set_special_lut)(unsigned mask);
+
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

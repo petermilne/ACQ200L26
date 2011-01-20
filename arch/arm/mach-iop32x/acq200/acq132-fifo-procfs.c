@@ -1099,7 +1099,7 @@ eg
 */
 
 
-static int set_special_lut(unsigned mask)
+static int acq132_regular_set_special_lut(unsigned mask)
 {
 	static const int lut11[] = {
 /* index: memory order 1:32 
@@ -1117,11 +1117,14 @@ static int set_special_lut(unsigned mask)
 		acq200_setChannelLut(lut11, 4);
 		break;
 	default:
-		acq200_setChannelLut(0, 0);	/**< @@todo LFP fail!. */
+		acq200_setChannelLut(0, 0);
 		break;
 	}
 	return 0;
 }
+
+int (*acq132_set_special_lut)(unsigned mask) = 
+		acq132_regular_set_special_lut;
 
 void acq200_setChannelMask(unsigned mask)
 {
@@ -1150,7 +1153,7 @@ void acq200_setChannelMask(unsigned mask)
 		CAPDEF->channel_mask = vmask;
 		acq132_set_channel_mask(vmask);
 
-		set_special_lut(vmask);
+		acq132_set_special_lut(vmask);
 
 		for (lchan = mm = 1; mm; mm<<=1, lchan++){
 			acq200_setChannelEnabled(
@@ -1348,3 +1351,5 @@ static void acq132_create_proc_entries(struct proc_dir_entry* root)
 	        dump_regs_entry->proc_fops = &dump_regs_proc_fops;
 	}
 }
+
+EXPORT_SYMBOL_GPL(acq132_set_special_lut);
