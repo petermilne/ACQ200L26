@@ -78,6 +78,14 @@
 #define ACQ_HAS_COUNTER	1
 #define ACQ_HAS_GATE	1
 
+#ifndef __ASSEMBLER__
+extern int acq164_code_min(void);
+extern int acq164_code_max(void);
+
+#define ACQ200_CODE_MIN acq164_code_min()
+#define ACQ200_CODE_MAX acq164_code_max()
+#endif
+
 #elif defined WAV232
 
 #define DMA_BLOCK_LEN 1024
@@ -105,6 +113,12 @@
 
 #ifndef GET_NEXT_EMPTY
 #define GET_NEXT_EMPTY default_getNextEmpty
+#endif
+
+
+#ifndef ACQ200_CODE_MIN
+#define ACQ200_CODE_MIN -32768
+#define ACQ200_CODE_MAX 32767
 #endif
 
 #endif

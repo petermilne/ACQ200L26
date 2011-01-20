@@ -434,7 +434,7 @@ static inline void reset_gpg(void)
 
 /* but with channel masking, we have 2 more possibilities: */
 #define ROW_CHAN2	4	/* two channels per fpga */
-#define ROW_CHAN4	8	/* one channel per fpga */
+#define ROW_CHAN4	2	/* one channel per fpga */
 
 #define LRCH	2
 #define QUADCH	4
@@ -460,7 +460,7 @@ const char* acq132_getChannelSpeedMask(void);
 
 /* Event data fields from rev 307+ */
 #define ACQ132_ES_DEC_CNT_MASK 0xff00
-#define ACQ132_ES_LAT_MASK	0x00fc
+#define ACQ132_ES_LAT_MASK     0x00fc
 
 #define ACQ132_ES_DEC_CNT(es)	(((es)&ACQ132_ES_DEC_CNT_MASK)>>8)
 #define ACQ132_ES_LAT_CNT(es)	(((es)&ACQ132_ES_LAT_MASK)>>2)

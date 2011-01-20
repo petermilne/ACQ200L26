@@ -108,6 +108,11 @@ module_param(timebase_encoding, int, 0644);
 /* -1: advance, 0: ignore, 1: retard */
 int control_event_adjust = -1;
 module_param(control_event_adjust, int, 0644);
+MODULE_PARM_DESC(control_event_adjust, "k * es_lat_cnt event adjust");
+
+int control_event_adjust_offset = 0;
+module_param(control_event_adjust_offset, int, 0644);
+MODULE_PARM_DESC(control_event_adjust_offset, "constant offset to event adjust");
 
 /* 2 sample pipeline, could be more: eg with FIR.
  * values found for decimating boxcar found empirically */
@@ -219,102 +224,6 @@ struct TBLOCK* getTblock(Tbxo tb)
 }
 
 
-void acq132_transform_row(
-	short *to, short *from, int nsamples, int channel_sam)
-/* read a block of data from to and farm 8 channels to from */
-{
-	union {
-		unsigned long long ull[2];
-		short ch[8];
-	} buf;
-	unsigned long long *full = (unsigned long long *)from;
-	int sam;
-	int chx;
-
-	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
-	    to, from, nsamples, channel_sam);
-
-	if (stub_transform){
-		TBG(3, "stub");
-		return;
-
-	}
-	for (sam = 0; sam < nsamples; ++sam){
-		buf.ull[0] = *full++;
-		buf.ull[1] = *full++;
-
-#ifdef DEBUGGING
-		if ((short*)full < from1 || (short*)full > from2){
-			err("from outrun at  %p %p %p sam:%d",
-			    from1, full, from2, sam);
-			return;
-		}
-#endif
-
-		for (chx = 0; chx < ROW_CHAN; ++chx){
-
-#ifdef DEBUGGING
-			short *pto = to + chx*channel_sam + sam;
-			if (pto < to1 || pto > to2){
-				err("buffer outrun at %p %p %p chx:%d sam:%d",
-				    to1, pto, to2, chx, sam);
-				return;
-			}
-#endif
-			to[chx*channel_sam + sam] = buf.ch[chx];
-		}			
-	}
-
-	TBG(3, "99");	
-}
-static void acq132_transform(short *to, short *from, int nwords, int stride)
-{
-	const int nsamples = nwords/stride;	
-	const int rows = stride/ROW_CHAN;
-	const int block_words = rows * ROW_CHAN * ROW_SAM;
-	int blocks = nwords/block_words;
-	int nw = nwords;
-	int block;
-#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
-
-	if (blocks * block_words < nwords){
-		++blocks;
-	}
-
-	TBG(1, "blocks:%d", blocks);
-	TBG(1, "nsamples:%d", nsamples);
-
-#ifdef DEBUGGING
-	to1 = to;
-	to2 = to+nwords;
-	TBG(1, "to   %p to %p", to1, to2);
-	from1 = from;
-	from2 = from+nwords;
-	TBG(1, "from %p to %p", from1, from2);
-#endif
-
-	for (block = 0; block < blocks; ++block, nw -= block_words){
-		const int bsamples = min(nw, block_words)/rows/ROW_CHAN;
-		int row;
-
-		TBG(3, "block:%d to:%p from:%p bsamples %d", 
-		    block, to, from, bsamples);
-
-		for (row = 0; row < rows; ++row){
-			acq132_transform_row(
-				to + ROW_OFF(row), 
-				from, 
-				bsamples,
-				nsamples
-				);
-			from += bsamples*ROW_CHAN;
-		}
-		to += bsamples;
-		TBG(3, "block:%d to:%p from:%p", block, to, from);
-	}
-
-	TBG(1, "99");
-}
 
 /* It makes sense to build the ES detect and remove into the transform 
  * because the DQAD is already in cache. ie the cost of search is small
@@ -334,6 +243,7 @@ static inline unsigned getTsclkNs(void)
 
 
 #define ES_MAGIC_WORD 0xaa55
+#define ES_MAGIC_LONG (ES_MAGIC_WORD<<16 | ES_MAGIC_WORD)
 
 struct ES_INFO {
 	struct ES_DESCRIPTOR *esi_base;   /* base of ES vector */
@@ -484,6 +394,9 @@ int remove_es(int sam, unsigned short* ch, void *before)
 	const char* id = "none";
 	int rc = DG->show_event == 0; /* remove unless show_event */
 	
+	dbg(1, "sam: %d ch:%p before:%p ts:%x %x", 
+	    sam, ch, before, ch[5], ch[7]);
+
 	if (g_esm.es_cursor){	
 		unsigned ts = ch[5] << 16 | ch[7];
 		if (already_known(ts)){
@@ -637,19 +550,75 @@ int acq132_transform_row_es(
 	return tosam;
 }
 
+int acq132_transform_row_es1pQ(
+	short *to, 
+/*      short *to[ROW_CHAN], */
+	short *from, int nsamples, int channel_sam)
+/* read a1 block of data from to and farm 2 channels to from */
+{
+	unsigned long buf;
+	unsigned long *full = (unsigned long *)from;
+	int sam;
+	int tosam = 0;
+
+	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
+	    to, from, nsamples, channel_sam);
+
+	if (stub_transform){
+		TBG(3, "stub");
+		return nsamples;
+
+	}
+	for (sam = nsamples; sam != 0; --sam){
+		void *before = full;
+		buf = *full++;
+
+		/* rapid fail ES_MAGIC test 
+		 aa55 aa55 0000 0000 aa55 aa55 0000 0000
+		0493000 aa55 aa55 0355 0355 aa55 aa55 0355 0355
+		0493800 aa55 aa55 0355 0355 aa55 aa55 0355 0355
+		 */
+		if (buf == ES_MAGIC_LONG){
+			TBG(1, "ES_MAGIC_LONG %08lx %08lx %08lx %08lx",
+			    buf, full[1], full[3], full[5]);
+		}
+		if (buf == ES_MAGIC_LONG     && full[1] == ES_MAGIC_LONG &&
+		    remove_es(nsamples-sam, (unsigned short*)before, before)){
+			full += 7;
+			dbg(1, "remove_es() said YES");
+			continue;
+		}
+#if 0
+#ifdef DEBUGGING
+		if ((short*)full < from1 || (short*)full > from2){
+			err("from outrun at  %p %p %p sam:%d",
+			    from1, full, from2, sam);
+			return nsamples;
+		}
+#endif
+#endif
+
+		/* ROW_CHAN == 2 */
+		to[0*channel_sam + tosam] = buf & 0x0000ffff;
+		to[1*channel_sam + tosam] = buf >> 16;
+
+		++tosam;		
+	}
+
+	TBG(3, "99");	
+	return tosam;
+}
 
 
 #define DQ_ROW_OFF(blk, rows) (blk*TBLOCK_LEN(DG)/rows)
 
 static void acq132_transform_unblocked(
-	short *to, short *from, int nwords, int stride)
+	short *to, short *from, int nsamples, int ROWS)
 {
 /* keep a stash of NSCAN to vectors */
-	const int nsamples = nwords/stride;	
-	const int ROWS = stride/ROW_CHAN;
 #define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 	int row_off[MAX_ROWS];
-	int row = stride/ROW_CHAN;
+	int row;
 
 	if (ROWS > MAX_ROWS){
 		err("rows %d > MAX_ROWS", ROWS);
@@ -666,10 +635,10 @@ static void acq132_transform_unblocked(
 
 #ifdef DEBUGGING
 	to1 = to;
-	to2 = to+nwords;
+	to2 = to+nsamples*ROWS*ROW_CHAN;
 	TBG(1, "to   %p to %p", to1, to2);
 	from1 = from;
-	from2 = from+nwords;
+	from2 = from+nsamples*ROWS*ROW_CHAN;
 	TBG(1, "from %p to %p", from1, from2);
 #endif
 
@@ -687,10 +656,53 @@ static void acq132_transform_unblocked(
 	TBG(1, "99");
 }
 
-static void* acq132_deblock(short * const from, int nwords, int stride)
+static void acq132_transform_unblocked1pQ(
+	short *to, short *from, int nsamples, int ROWS)
+{
+/* keep a stash of NSCAN to vectors */
+#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
+	int row_off[MAX_ROWS];
+	int row;
+
+	if (ROWS > MAX_ROWS){
+		err("rows %d > MAX_ROWS", ROWS);
+		return;
+	}
+
+	G_rows = ROWS;
+
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
+	}
+
+	TBG(1, "nsamples:%d", nsamples);
+
+#ifdef DEBUGGING
+	to1 = to;
+	to2 = to+nsamples*ROWS*ROW_CHAN4;
+	TBG(1, "to   %p to %p", to1, to2);
+	from1 = from;
+	from2 = from+nsamples*ROWS*ROW_CHAN4;
+	TBG(1, "from %p to %p", from1, from2);
+#endif
+
+
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] += acq132_transform_row_es1pQ(
+			to + row_off[row], 
+			from, 
+			nsamples,
+			nsamples
+			);
+		from += nsamples*ROW_CHAN4;
+	}
+
+	TBG(1, "99");
+}
+
+static void* acq132_deblock(short * const from, int nwords, int ROWS)
 {
 	void* const to = BB_PTR(g_esm.es_deblock->tblock->offset);
-	const int ROWS = stride/ROW_CHAN;
 	void *frm = from;
 	int row_off[MAX_ROWS];
 	int row;
@@ -726,8 +738,12 @@ static void* acq132_deblock(short * const from, int nwords, int stride)
 	return to;
 
 }
+
+
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
+	int ROWS = stride/ROW_CHAN;
+
 	dbg(1, "to:tblock:%d from:tblock:%d", 
 	    TBLOCK_INDEX((void*)to - va_buf(DG)),
 	    TBLOCK_INDEX((void*)from - va_buf(DG)));
@@ -735,17 +751,33 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 	G_current_transform_tbxo = va2tbxo(from);
 
 	acq132_transform_unblocked(
-		to, acq132_deblock(from, nwords, stride), nwords, stride);
+		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
 }
 
-static 	struct Transformer transformer = {
-	.name = "acq132",
-	.transform = acq132_transform
-};
+static void acq132_transform_es1pQ(
+	short *to, short *from, int nwords, int stride)
+{
+	int ROWS = stride/ROW_CHAN4;
+
+	dbg(1, "to:tblock:%d from:tblock:%d", 
+	    TBLOCK_INDEX((void*)to - va_buf(DG)),
+	    TBLOCK_INDEX((void*)from - va_buf(DG)));
+
+	G_current_transform_tbxo = va2tbxo(from);
+
+	acq132_transform_unblocked1pQ(
+		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
+}
+
+
 
 static struct Transformer transformer_es = {
 	.name = "acq132es",
 	.transform = acq132_transform_es
+};
+static struct Transformer transformer_es1pQ = {
+	.name = "acq132es1pQ",
+	.transform = acq132_transform_es1pQ
 };
 
 static int transformSelected(void *fun, const char* name)
@@ -771,10 +803,8 @@ static TBLE *reserveFreeTblock(const char *id){
 static void transformer_es_onStart(void *unused)
 /* @TODO wants to be onPreArm (but not implemented) */
 {
-	if (!TRANSFORM_SELECTED(acq132_transform_es)){
-		return;
-	}else{
-
+	if (TRANSFORM_SELECTED(acq132_transform_es) ||
+	    TRANSFORM_SELECTED(acq132_transform_es1pQ) ){
 		if (g_esm.es_tble == 0 &&
 			(g_esm.es_tble = reserveFreeTblock("ES")) == 0){
 			return;
@@ -808,14 +838,10 @@ static struct Hookup transformer_es_hook = {
 void acq132_register_transformers(void)
 {
 	int it;
-	it = acq200_registerTransformer(&transformer);
-	if (it >= 0){
-		acq200_add_start_of_shot_hook(&transformer_es_hook);
-		acq200_registerTransformer(&transformer_es);
-		acq200_setTransformer(it);
-	}else{
-		err("transformer %s NOT registered", transformer.name);
-	}
+	acq200_add_start_of_shot_hook(&transformer_es_hook);
+	it = acq200_registerTransformer(&transformer_es);       
+	acq200_setTransformer(it);
+	acq200_registerTransformer(&transformer_es1pQ);
 }
 
 
@@ -835,6 +861,9 @@ static int acq132_get_event_adjust(void)
 {
 	int cold_adj_samples = 0;
 	int event_offset_bytes;
+
+	TBG(0, "acq132_es_lat_cnt %d acq132_es_dec_cnt %d",
+	    acq132_es_lat_cnt[0], acq132_es_dec_cnt[0]);
 
 	if (control_event_adjust){
 		int lat_cnt = acq132_es_lat_cnt[0];
@@ -863,6 +892,7 @@ static int acq132_get_event_adjust(void)
 		    lat_cnt);
 			
 		cold_adj_samples = lat_cnt * control_event_adjust;
+		cold_adj_samples += control_event_adjust_offset;
 
 		if (acq132_es_dec_cnt[0] >= get_acq132_decim()-1){
 			dbg(1, "add dec_cnt adj %d", dec_cnt_adjust);
@@ -892,6 +922,8 @@ int _acq132_fix_event_already_found(
 	struct TBLOCK *tb = getTblock(g_esm.es_base->tbxo);
 	int id;
 	
+	TBG(1, "es_tbix:%d es_tboff:%d", es_tbix, es_tboff);
+
 	tle_cur = locateTblockInPhase(phase, es_tbix);
 	if (tle_cur == 0){
 		err("FAILED locateTblockInPhase cur %d", es_tbix);

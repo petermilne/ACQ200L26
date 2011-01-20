@@ -34,9 +34,7 @@
 #include <linux/platform_device.h>
 
 #include "acq200-fifo-top.h"
-
 #include "acq200-fifo-local.h"
-
 #include "acq200-fifo.h"
 #include "acq132.h"
 
@@ -1229,12 +1227,7 @@ static struct CAPDEF* acq132_createCapdef(void)
 		.mode = M_SOFT_TRANSIENT,
 		.pit_stop = 1
 	};
-	struct CAPDEF* capdef = kmalloc(sizeof(struct CAPDEF), GFP_KERNEL);
-
-	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
-
-	capdef_set_nchan(capdef, AICHAN_DEFAULT);
-	capdef_set_word_size(capdef, 2);
+	struct CAPDEF* capdef = acq2xx_createCapdef(&_capdef, 2);
 
 	/* name, minDIx, maxDIx, DIx, rising, is_active, commit	*/
 	capdef->ev[1] = 

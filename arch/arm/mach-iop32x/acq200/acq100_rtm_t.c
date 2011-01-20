@@ -17,8 +17,52 @@
 
 
 #include <linux/kernel.h>
+#include <linux/serial_8250.h>
+#include <asm/arch-iop32x/acqX00-irq.h>
 
 #define ACQ196
+
+#define ACQ200_UART_XTAL 14181800
+
+
+#define RTM_T_UART_2		(ACQ200_UART+0x100)
+#define RTM_T_UART_2_IRQ	IRQ_ACQ100_ETH
+
+static struct plat_serial8250_port acqX00_serial_platform_port[] = {
+	{
+	.membase        = (void*)ACQ200_UART+0x100,
+	.mapbase	= RTM_T_UART_2,
+	.irq		= RTM_T_UART_2_IRQ,
+	.uartclk	= ACQ200_UART_XTAL,
+	.regshift	= 0,
+	.iotype		= UPIO_MEM,
+	.flags		= UPF_BOOT_AUTOCONF|UPF_SHARE_IRQ,
+	},
+	{}
+};
+
+static struct resource uart_res = {
+	.name = "acqX00 uart",
+	.flags = IORESOURCE_MEM
+};
+
+static struct resource acqX00_uart_resources[] = {
+	[0] = {
+		.start = RTM_T_UART_2,
+		.end = RTM_T_UART_2+0x40,
+		.flags = IORESOURCE_MEM,
+		.parent = &iomem_resource
+	}
+};
+static struct platform_device acqX00_serial_device = {
+	.name			= "serial8250",
+	.id			= PLAT8250_DEV_PLATFORM1,
+	.dev			= {
+		.platform_data	= acqX00_serial_platform_port,
+	},
+	.num_resources = 1,
+	.resource = acqX00_uart_resources
+};
 
 
 #ifndef EXPORT_SYMTAB
@@ -33,6 +77,8 @@
 
 #include "acq200-fifo-top.h"
 #include "acq200-fifo-local.h"
+
+#undef CSIZE
 #include "acq200-fifo.h"
 
 #include "acq100_rtm_t.h"
@@ -48,6 +94,8 @@ static int __init acq100_rtm_t_init(void)
 	DG->fpga.fifo.pa = virt_to_phys((void*)mumem.start);
 	*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_RTM_T;
 	info("set fifo.pa to %x, set SYSCON_DAC_RTM", DG->fpga.fifo.pa);
+
+	platform_device_register(&acqX00_serial_device);
 	return 0;
 }
 

@@ -99,16 +99,20 @@ static int hw_fudge(int lchan)
 }
 
 
+#define BLOCK_SHR	5
+#define BLOCK_MASK	((1<<BLOCK_SHR)-1)
+
 int acq200_lookup_pchan(int lchannel)
 /** lchannel in = 1:32 nameplate order return 0:32 memory order */
 {
-	int block = ((lchannel-1)/NCHANNELSBLOCK);
+	int block = ((lchannel-1)>>BLOCK_SHR);  /* 1:32=>0, 33:64=>1 */
 	int index = lchannel - block*NCHANNELSBLOCK;
 
-	return block*NCHANNELSBLOCK + plut[index] - 1;
+	return (block<<BLOCK_SHR) + plut[index] - 1;
 }
 
 int acq200_lookup_lchan(int pchan)
+/* this looks wrong? pchan starts at zero .. */
 {
 	int block = ((pchan-1)/NCHANNELSBLOCK);
 	int match = ((pchan-1)%NCHANNELSBLOCK) + 1;

@@ -257,17 +257,6 @@ static DEVICE_ATTR(channel_mapping, S_IRUGO, show_channel_mapping, 0);
 
 
 
-static int build_channel_mapping_bin(int start, char* buf)
-{
-	int lchan;
-	short *sb = (short*)buf;
-
-	for (lchan = start + 1; lchan <= start + 32; ++lchan){
-		*sb ++ = (short)acq200_lookup_pchan(lchan);
-	}
-	return 32*sizeof(short);
-}
-
 static ssize_t show_channel_mapping_bin(
 	struct device * dev, 
 	struct device_attribute *attr,
@@ -284,7 +273,32 @@ static ssize_t show_channel_mapping_bin(
 }
 static DEVICE_ATTR(channel_mapping_bin, S_IRUGO, show_channel_mapping_bin, 0);
 
+static ssize_t set_nacc(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int nacc;
 
+	if (sscanf(buf, "%d", &nacc) == 1){
+		acq164_set_nacc(nacc);
+		return strlen(buf);		
+	}else{
+		dbg(1, "90 FAIL");
+		return -1;
+	}
+}
+
+static int show_nacc(
+	struct device *dev,
+	struct device_attribute *attr,
+	char *buf
+	)
+{
+	return sprintf(buf, "%d\n", acq164_get_nacc());
+}
+
+static DEVICE_ATTR(nacc, S_IRUGO|S_IWUGO, show_nacc, set_nacc);
 
 
 static int sfpga_get_rev(void)
@@ -370,7 +384,7 @@ static ssize_t show_fpga_state(
 	int len = 0;
 	u32 debug_old;
 	u32 t1, t2;
-	int s_ok = 0, a_ok = 0;
+	int s_ok = 0;
 	int rev = sfpga_get_rev();
 
 	if (rev == 0){
@@ -387,7 +401,8 @@ static ssize_t show_fpga_state(
 		s_ok = 1;
 	}
 
-	len = sprintf(buf, "S_FPGA=%s\n", s_ok && a_ok? "GOOD": "ERR");
+	len = sprintf(buf, "S_FPGA=%s rev=%04x\n", 
+		      s_ok? "GOOD": "ERR", rev);
 	return len;
 }
 
@@ -429,7 +444,8 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_ClkCounter);
 	DEVICE_CREATE_FILE(dev, &dev_attr_index_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_index_mas);
-	DEVICE_CREATE_FILE(dev, &dev_attr_adc_mode);	
+	DEVICE_CREATE_FILE(dev, &dev_attr_adc_mode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_nacc);	
 }
 
 
@@ -438,8 +454,8 @@ void acq200_setChannelMask(unsigned mask)
 {
 	int lchan;
 
-	CAPDEF_set_nchan(NCHAN);
 	CAPDEF->channel_mask = mask&0x3;
+	CAPDEF_set_nchan(((mask&0x1) != 0)*32 + ((mask&0x2) != 0)*32);
 
 	for (lchan = 1; lchan <= NCHAN; ++lchan){
 		int enable =  ((1 << (lchan-1)/32) & mask) != 0;
@@ -486,6 +502,7 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ164_FIFCON),
 		REGS_LUT_ENTRY(ACQ164_FIFSTAT),
 		REGS_LUT_ENTRY(ACQ164_SYSCON),
+		REGS_LUT_ENTRY(ACQ164_OSR),
 		REGS_LUT_ENTRY(ACQ164_ICS527),
 		REGS_LUT_ENTRY(ACQ164_SYSCONDAC),
 		REGS_LUT_ENTRY(ACQ164_CLKCON),
@@ -513,6 +530,7 @@ int acq200_dumpregs_diag(char* buf, int len)
 	APPEND(ACQ164_FIFCON);
 	APPEND(ACQ164_FIFSTAT);
 	APPEND(ACQ164_SYSCON);
+	APPEND(ACQ164_OSR);
 	APPEND(ACQ164_ICS527);
 	APPEND(ACQ164_SYSCONDAC);
 	APPEND(ACQ164_CLKCON);
@@ -608,3 +626,49 @@ static void acq164_create_proc_entries(struct proc_dir_entry* root)
 	        dump_regs_entry->proc_fops = &dump_regs_proc_fops;
 	}
 }
+
+
+
+static int acq164_bits(void)
+{
+	if (acq164_sfpga_get_rev() >= ACQ164_RJ_REV){
+		int ibit = 0;
+		int nacc = acq164_get_nacc();
+
+		for (ibit = 0; 1<<ibit < nacc; ++ibit)
+			;
+		return ibit + 24;
+	}else{
+		return 32;
+	}
+}
+
+#define MAX_24	((1 << (24-1)) - 1)
+#define MIN_24  (-(1 << (24 - 1)))
+
+#define MAX_32 0x7FFFFFFF
+#define MIN_32 (-MAX_32 - 1)
+
+int acq164_code_min(void)
+{
+	if (acq164_sfpga_get_rev() >= ACQ164_RJ_REV){
+		return acq164_get_nacc() * MIN_24;
+	}else{
+		return MIN_32;
+	}
+}
+
+int acq164_code_max(void)
+{
+	if (acq164_sfpga_get_rev() >= ACQ164_RJ_REV){
+		return acq164_get_nacc() * MAX_24;
+	}else{
+		return MAX_32;
+	}
+}
+
+int acq200_bits(void)
+{
+	return acq164_bits();
+}
+EXPORT_SYMBOL_GPL(acq200_bits);

@@ -60,6 +60,12 @@
 
 static int XX_valid;
 
+int debug_tbstat_ev = 0;
+module_param(debug_tbstat_ev, int, 0644);
+MODULE_PARM_DESC(debug_tbstat_ev, "turn on tbstat debugs");
+
+extern int acq200_tblock_debug;		/* @@todo desperate debug measure */
+
 void acq200_initDCI(struct file *file, int lchannel)
 {
 	file->private_data = kmalloc(DCI_SZ, GFP_KERNEL);
@@ -133,11 +139,11 @@ static void _deleteTBC(struct LockedList * lockedList, struct TblockConsumer *tb
 
 static struct TblockConsumer *newTBC(unsigned backlog_limit)
 {
-	return _newTBC(&DG->tbc, backlog_limit);
+	return _newTBC(&DG->tbc_regular, backlog_limit);
 }
 static void deleteTBC(struct TblockConsumer *tbc)
 {
-	return _deleteTBC(&DG->tbc, tbc);
+	return _deleteTBC(&DG->tbc_regular, tbc);
 }
 
 static struct TblockConsumer *newEventTBC(unsigned backlog_limit)
@@ -1434,16 +1440,24 @@ static void status_tb_free_tblocks(struct list_head* tble_list, int tblock)
 {
 	TBLE* cursor;
 	TBLE* tmp;
+	int old_acq200_tblock_debug = acq200_tblock_debug;
 
 	list_for_each_entry_safe(cursor, tmp, tble_list, list){
 		if (tblock == STATUS_TB_ALL ||
 		    tblock == cursor->tblock->iblock){
-			spin_lock(&DG->tbc.lock);
+			spin_lock(&DG->tbc_regular.lock);
+			spin_lock(&DG->tbc_event.lock);
+
+			if (debug_tbstat_ev) acq200_tblock_debug = 1;
 			acq200_phase_release_tblock_entry(cursor);
-			spin_unlock(&DG->tbc.lock);
-			list_del(&cursor->list);
+			if (debug_tbstat_ev) acq200_tblock_debug = 0;
+
+			spin_unlock(&DG->tbc_event.lock);
+			spin_unlock(&DG->tbc_regular.lock);
 		}
 	}
+
+	acq200_tblock_debug = old_acq200_tblock_debug;
 }
 
 
@@ -1497,9 +1511,12 @@ static ssize_t dma_tb_read (
 		    tbc->c.tle, headroom, headroom==0? "release": "hold");
 
 		if (headroom == 0){
-			spin_lock(&DG->tbc.lock);
+			spin_lock(&DG->tbc_regular.lock);
+			spin_lock(&DG->tbc_event.lock);
+
 			acq200_phase_release_tblock_entry(tbc->c.tle);
-			spin_unlock(&DG->tbc.lock);	
+			spin_unlock(&DG->tbc_event.lock);
+			spin_unlock(&DG->tbc_regular.lock);	
 			tbc->c.cursor = 0;
 		}
 	}else{
@@ -1620,23 +1637,20 @@ static ssize_t status_tb_evread (
 			if (tble_prev->tblock){
 				acq200_phase_release_tblock_entry(tble_prev);
 			}
-			list_del(&tble_prev->list);
 		}else{
 			if (tble_prev->tblock){
 				tb_prev = tble_prev->tblock->iblock;
 				list_move_tail(&tble_prev->list, DCI_LIST(file));
 			}
-
 		}
 		if (tle->event_offset < TBLOCK_LEN(DG)-BORDERLINE){
 			if (tble_next->tblock){
 				acq200_phase_release_tblock_entry(tble_next);
 			}
-			list_del(&tble_next->list);
 		}else{
 			if (tble_next->tblock){
 				tb_next = tble_next->tblock->iblock;
-				list_move_tail(&tble_next->list, DCI_LIST(file));
+				list_move_tail(&tble_next->list,DCI_LIST(file));
 			}
 		}
 		list_add_tail(&tle->list, DCI_LIST(file));
@@ -1651,6 +1665,7 @@ static ssize_t status_tb_evread (
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
+	dbg(!debug_tbstat_ev, "read:\"%s\"", lbuf);
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
 }
@@ -1676,11 +1691,16 @@ static ssize_t status_tb_evwrite(
 		s1 = lbuf;
 	}
 	for ( ; s1 - lbuf < len; s1 = s2){
+		unsigned tbix;
 		if ((s2 = strpbrk(s1, ", ")) != 0){
 			*s2++ = '\0';
 		}
-		status_tb_free_tblocks(DCI_LIST(file),
-					simple_strtoul(s1, 0, 10));
+
+		tbix = simple_strtoul(s1, 0, 10);
+
+		dbg(!debug_tbstat_ev, "free:\"%03d\"", tbix);
+
+		status_tb_free_tblocks(DCI_LIST(file), tbix);
 	}
 	return len;
 }
@@ -1708,9 +1728,9 @@ static ssize_t status2_tb_read (
 	int rc;
 
 	if (tbc->c.tle){
-		spin_lock(&DG->tbc.lock);
+		spin_lock(&DG->tbc_regular.lock);
 		acq200_phase_release_tblock_entry(tbc->c.tle);
-		spin_unlock(&DG->tbc.lock);	
+		spin_unlock(&DG->tbc_regular.lock);	
 	}
 		
 	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
@@ -1721,19 +1741,23 @@ static ssize_t status2_tb_read (
 
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
 
-	rc = snprintf(lbuf, len, "%03d\n", tle->tblock->iblock);
+	/* phase_sample_start: allows clients to sync to samples,
+         * in case of late joining, or missed tblocks 
+         */
+	rc = snprintf(lbuf, len, "%03d %d\n", 
+		      tle->tblock->iblock, tle->phase_sample_start);
 
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
-	spin_lock(&DG->tbc.lock);
+	spin_lock(&DG->tbc_regular.lock);
 
 	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
 		acq200_phase_release_tblock_entry(tle);
 	}else{
 		list_move_tail(&tle->list, DCI_LIST(file));
 	}
-	spin_unlock(&DG->tbc.lock);	
+	spin_unlock(&DG->tbc_regular.lock);	
 
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;

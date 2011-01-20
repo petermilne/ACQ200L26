@@ -933,13 +933,8 @@ static struct CAPDEF* acq164_createCapdef(void)
 		.mode = M_SOFT_TRANSIENT,
 		.pit_stop = 1
 	};
-	struct CAPDEF* capdef = kmalloc(sizeof(struct CAPDEF), GFP_KERNEL);
-
-	memcpy(capdef, &_capdef, sizeof(struct CAPDEF));
-
-	capdef_set_nchan(capdef, AICHAN_DEFAULT);
-	capdef_set_word_size(capdef,  ACQ164_SAMPLE_WORD_SIZE);
-
+	struct CAPDEF* capdef = 
+			acq2xx_createCapdef(&_capdef, ACQ164_SAMPLE_WORD_SIZE);
 	
 	capdef->ev[0] = createSignal(
 		"event0", SIG(EVS), 3, SIG(EDG), 0, acq164_commitEv0);

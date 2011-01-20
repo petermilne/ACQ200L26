@@ -99,18 +99,10 @@
 #include "acq200-fifo-local.h"     /* DG */
 
 #include "acq200-mu.h"
-
-
 #include "acq32busprot.h"          /* soft link to orig file */
-
 #include "acq200-dmac.h"
-
 #include "acq196.h"
-
 #include "acq200-inline-dma.h"
-
-int acq100_scatter_debug;
-module_param(acq100_scatter_debug, int, 0664);
 
 
 #define MAXDEST 6             
@@ -119,24 +111,42 @@ module_param(acq100_scatter_debug, int, 0664);
 
 #define MAXPOOL (MAXDEST*ENTRIES_PER_CYCLE*2)
 
-#define VERID "$Revision: 1.6 $ build B1000 "
+#define VERID "$Revision: 1.6 $ build B1002 "
 char acq100_scatter_driver_name[] = "acq100_scatter";
 char acq100_scatter_driver_string[] = "D-TACQ Scatter Control Device";
 char acq100_scatter_driver_version[] = VERID __DATE__ " Features:\n";
 char acq100_scatter_copyright[] = "Copyright (c) 2004 D-TACQ Solutions Ltd";
 
+
+int acq100_scatter_debug;
+module_param(acq100_scatter_debug, int, 0664);
+
 int disable_acq_debug = 0;         /* set 1 */
 module_param(disable_acq_debug, int, 0664);
 
 
+int trig_is_gate = 1;
+module_param(trig_is_gate, int, 0644);
+MODULE_PARM_DESC(trig_is_gate, 
+	"1:  capture stops when trigger reverts to original state. ");
+/*
+ * set zero to ignore trigger after first edge eg for short pulse trigger,
+ * then stop capture using software to set <stop>
+ * or use ESTOP_DIx
+ */
+
 int ESTOP_DIx = 5;
 module_param(ESTOP_DIx, int, 0644);
+MODULE_PARM_DESC(ESTOP_DIx, "DIx transition stops capture");
 
 int ESTOP_DIx_HIGH = 0;
 module_param(ESTOP_DIx_HIGH, int, 0644);
+MODULE_PARM_DESC(ESTOP_DIx, "DIx transition HIGH [!LOW] stops capture");
 
 int ACCUMULATE = 0;
 module_param(ACCUMULATE, int, 0644);
+MODULE_PARM_DESC(ACCUMULATE, 
+	"!= 0: accumulate mode, >0: front porch to delay accumulate start");
 
 #define CHANNEL_MASK (CAPDEF->channel_mask)
 
@@ -194,6 +204,7 @@ struct Globs {
 
 static struct Stats {
 	unsigned long cycle;
+	unsigned long samples;
 	int entry;
 	int state;
 	int data_pollcat;
@@ -707,7 +718,7 @@ static inline NZE shouldStop(void)
 		ds.stop_reason = "ESTOP";
 		dbg(1, "estop");
 		return 1;
-	}else if ((dix&dg.trig_mask) == dg.trig_quit){
+	}else if (!trig_is_gate && (dix&dg.trig_mask) == dg.trig_quit){
 		ds.stop_reason = "TRIG_QUIT";
 		dbg(1, "trig_quit");
 		return 1;
@@ -904,20 +915,23 @@ static void run_shot_accumulate(void)
 				EXIT_LOOP(4);
 			}
 
+
 			DG->stats.hot_fifo_histo[*ACQ196_FIFSTAT&0x0f]++;
 
 			if (DMA_STA(*active_channel)&DMA_EOT){
 				err("DMA_STA not clear 0x%08x", 
 				    DMA_STA(*active_channel));
 			}
+			++ds.samples;	/* valid for one sample per chain */
 			++ds.dma_arms;
 			DMA_FIRE(*active_channel);
 
 			if (waitForEOT(active_channel)){
 				EXIT_LOOP(5);
 			}
-
-			accumulate();
+			if (ds.samples >= ACCUMULATE){
+				accumulate();
+			}
 
 			if (dmaTee(active_channel, dg.elements[entry].next)){
 				EXIT_LOOP(6);
@@ -1351,10 +1365,7 @@ static struct platform_device acq100_scatter_device = {
 
 static int __init acq100_scatter_init( void )
 {
-	int rc;
-	acq200_debug = acq100_scatter_debug;
-
-	rc = driver_register(&acq100_scatter_driver);
+	int rc = driver_register(&acq100_scatter_driver);
 	if (rc){
 		return rc;
 	}

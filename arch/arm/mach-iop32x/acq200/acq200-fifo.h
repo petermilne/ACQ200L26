@@ -665,7 +665,7 @@ struct DevGlobs {
 	struct ArgBlock post_arm_hook;
 	struct ArgBlock post_shot_hook;	
 
-	struct LockedList tbc;
+	struct LockedList tbc_regular;
 	struct LockedList tbc_event;
 	struct LockedList refillClients;
 
@@ -1304,4 +1304,7 @@ void acq200_delRefillClient(struct RefillClient *client);
 void acq200_runRefillClient(void *data, int nbytes);
 
 void acq200_fifo_bigbuf_fops_init(void);
+
+int acq200_bits(void);
+
 #endif /* ACQ200_FIFO_H__ */

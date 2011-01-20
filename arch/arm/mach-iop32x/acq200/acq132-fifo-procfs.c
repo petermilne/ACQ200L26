@@ -1049,8 +1049,11 @@ int count_bits(unsigned mask) {
 }
 static int isValidMask(unsigned mm, int shr)
 {
-	unsigned left = mm >> (shr + 16);
-	unsigned right = (mm >> shr) & 0x0000ffff;
+	unsigned left =  (mm&0xffff0000) >> (shr + 16);
+	unsigned right = (mm&0x0000ffff) >> shr;
+
+	dbg(2, "mm: %08x shr:%d left:%08x right:%08x", 
+	    mm, shr, left, right);
 
 	if (left != right){
 		dbg(1, "%x ! = %x\n", left<<16, right);
@@ -1060,6 +1063,7 @@ static int isValidMask(unsigned mm, int shr)
 	case MASK_1:
 	case MASK_2:
 	case MASK_4:
+		dbg(2, "return IS_VALID");
 		return 1;
 	default:
 		dbg(1, "%x not valid\n", left);
@@ -1095,11 +1099,37 @@ eg
 */
 
 
+static int set_special_lut(unsigned mask)
+{
+	static const int lut11[] = {
+/* index: memory order 1:32 
+ * value: nameplate order 1:32 
+ */
+	[ 1] =  1, [ 2] = 17,
+	[ 3] =  5, [ 4] = 21,
+	};
+
+	switch(mask){
+	case 0x00010001:
+		acq200_setChannelLut(lut11, 2);
+		break;
+	case 0x00110011:
+		acq200_setChannelLut(lut11, 4);
+		break;
+	default:
+		acq200_setChannelLut(0, 0);	/**< @@todo LFP fail!. */
+		break;
+	}
+	return 0;
+}
+
 void acq200_setChannelMask(unsigned mask)
 {
 	unsigned mm;
 	int lchan;
 	unsigned vmask = 0;
+
+	dbg(1, "mask:%08x", mask);
 
 	if ((mm = mask&MASK_D) != 0 && isValidMask(mm, 12)){
 		vmask |= mm;
@@ -1117,14 +1147,17 @@ void acq200_setChannelMask(unsigned mask)
 	dbg(1, "mask %08x vmask %08x %s", mask, vmask, mask==vmask?"OK":"ERR");
 
 	if (vmask == mask){
+		CAPDEF->channel_mask = vmask;
+		acq132_set_channel_mask(vmask);
+
+		set_special_lut(vmask);
+
 		for (lchan = mm = 1; mm; mm<<=1, lchan++){
 			acq200_setChannelEnabled(
 				acq200_lookup_pchan(lchan), (mm&vmask) != 0);
 		}
 
 		CAPDEF_set_nchan(count_bits(vmask));
-		CAPDEF->channel_mask = vmask;
-		acq132_set_channel_mask(vmask);
 	}else{
 		err("mask not valid: 0x%08x good=0x%08x", mask, vmask);
 	}
