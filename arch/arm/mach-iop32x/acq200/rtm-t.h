@@ -87,7 +87,7 @@
 #define RTMT_Q_SPI_DAT		0xb0
 #define RTMT_Q_MBOX1		0xb8
 #define RTMT_Q_MBOX2		0xbc
-#define	RTMT_Q_END		RTM_Q_MBOX2
+#define	RTMT_Q_END		RTMT_Q_MBOX2
 #define REGS_LEN	        (0x80+RTMT_Q_END+4)
 
 #define RTMT_H_PCIE_CSR_FPGA_FAMILY	0xff000000
@@ -201,6 +201,7 @@
 
 #define UART_LEN	512
 
+#define RTM_T_UART_XTAL	(2*14181800)
 
 /* idea by John: make it a multiple of 3 to handle 96ch align case */
 #define NBUFFERS	66
