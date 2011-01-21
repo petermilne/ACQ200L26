@@ -201,7 +201,8 @@
 
 #define UART_LEN	512
 
-#define RTM_T_UART_XTAL	(2*14181800)
+/* it's actually double, but then we'd have to update stty */
+#define RTM_T_UART_XTAL	(14181800)
 
 /* idea by John: make it a multiple of 3 to handle 96ch align case */
 #define NBUFFERS	66
