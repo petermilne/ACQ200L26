@@ -23,29 +23,28 @@
 #include <linux/module.h>
 #endif
 
+#include <linux/moduleparam.h>
+
 #include <asm/arch-iop32x/iop321.h>
 #include "acqX00-port.h"
+#define acq200_debug rtm_t_debug
 #include "acq200.h"
 #include "acq200_debug.h"
 
 #include "acq200-fifo-top.h"
 #include "acq200-fifo-local.h"
 
-
-
-#include "rtm-t.h"		/* @@todo - clash? .. */
 #include "acq100_rtm_t.h"
 
 #define REVID	"acq100_rtm_t B1001"
 
-
-#define RTM_T_BASE (ACQ200_EXTERNIO+0x100)
-#define RTM_T_REG(offset) ((volatile u32*)((unsigned)RTM_T_BASE+(offset)))
-
+int rtm_t_debug;
+module_param(rtm_t_debug, int , 0644);
 
 
 static void __init acq100_redirect(void)
 {
+
 	struct resource mumem;
 
 	acq200_get_mumem_resource(&mumem);
@@ -70,7 +69,7 @@ static ssize_t store_mbox##MB(						\
 	u32 value = 0;							\
 									\
 	if (sscanf(buf, "0x%x", &value) || sscanf(buf, "%d", &value)){	\
-		*RTM_T_REG(reg) = value;				\
+		*RTMT_REG(reg) = value;				\
 	}								\
 									\
         return strlen(buf);						\
@@ -81,7 +80,7 @@ static ssize_t show_mbox##MB(						\
 	struct device_attribute *attr,					\
 	char * buf)							\
 {									\
-	u32 value = *RTM_T_REG(reg);					\
+	u32 value = *RTMT_REG(reg);					\
 	sprintf(buf, "0x%08x %d\n", value, value);			\
 									\
 	return strlen(buf);						\
@@ -143,6 +142,8 @@ static struct device_driver rtm_t_driver = {
 
 static int all_good;
 
+extern int rtm_t_spi_master_init(struct device *dev);
+
 static int __init acq100_rtm_t_init(void)
 {
 	int rc;
@@ -161,6 +162,8 @@ static int __init acq100_rtm_t_init(void)
 	if (rc != 0){
 		goto uart_fail;
 	}
+	rc = rtm_t_spi_master_init(&rtm_t_device.dev);
+
 	acq100_redirect();
 	all_good = 1;		/* force cleanup on module unload */
 	return rc;

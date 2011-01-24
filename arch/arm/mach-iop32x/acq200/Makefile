@@ -240,7 +240,7 @@ acq100_skel-objs := acq100-skel.o
 
 acq196_mac-objs := acq196-mac.o
 
-acq100_rtm_t-objs := acq100_rtm_t_main.o acq100_rtm_t_uart.o
+acq100_rtm_t-objs := acq100_rtm_t_main.o acq100_rtm_t_uart.o acq100_rtm_t_spi.o
 
 #acq216-fiq.o: acq216-fiq.S
 #wav232-fiq.o: wav232-fiq.S

@@ -160,6 +160,7 @@
 #define RTMT_XXXX_FIFSTA_OVERFLOW	(1<<2)
 #define RTMT_XXXX_FIFSTA_EMPTY		(1<<1)
 
+#define RTMT_Q_SPI_BUSY			(1<<31)
 #define RTMT_Q_SPI_CTL_START		(1<<7)
 #define RTMT_Q_SPI_CS			(1<<0)
 #define RTMT_Q_SPI_HOLD			(1<<1)
