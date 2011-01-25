@@ -1018,6 +1018,7 @@ static void acq164_set_defaults(void)
 {
 	info("setIntClkHz %d", ACQ164_BEST_CLK);
 	acq200_setIntClkHz(ACQ164_BEST_CLK);
+	*ACQ164_SYSCON |= ACQ164_SYSCON_CLKDIV;
 }
 
 
