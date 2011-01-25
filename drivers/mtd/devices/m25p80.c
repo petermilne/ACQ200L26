@@ -43,6 +43,9 @@
 #define	OPCODE_RES		0xab	/* Read Electronic Signature */
 #define	OPCODE_RDID		0x9f	/* Read JEDEC ID */
 
+#define OPCODE_UNIQUE_ID	0x4b	/* May not be on every chip */
+#define OPCODE_CMR		0xff	/* Winbond: Continuous Mode Reset. */
+
 /* Status Register bits. */
 #define	SR_WIP			1	/* Write in progress */
 #define	SR_WEL			2	/* Write enable latch */
@@ -173,6 +176,139 @@ static int erase_sector(struct m25p *flash, u32 offset)
 
 /****************************************************************************/
 
+
+static int winbond_query_id(struct m25p *flash)
+{
+	struct spi_transfer t[2];
+	struct spi_message m;
+	u_char buf[4];
+
+	spi_message_init(&m);
+	memset(t, 0, (sizeof t));
+
+	t[0].tx_buf = flash->command;
+	t[0].len = 4;
+	spi_message_add_tail(&t[0], &m);
+
+	t[1].rx_buf = buf;
+	t[1].len = 3;
+	spi_message_add_tail(&t[1], &m);	
+
+	down(&flash->lock);
+
+	/* Wait till previous write/erase is done. */
+	if (wait_till_ready(flash)) {
+		/* REVISIT status return?? */
+		up(&flash->lock);
+		dev_warn(&flash->spi->dev, "Failed to read JEDEC ID");
+		return 1;
+	}
+	/* Set up the write data buffer. */
+	flash->command[0] = 0x90;
+	flash->command[1] = 0x0;
+	flash->command[2] = 0x0;
+	flash->command[3] = 0x0;
+	spi_sync(flash->spi, &m);
+
+	up(&flash->lock);
+
+	dev_info(&flash->spi->dev, "%10s : %02x %02x %02x\n",
+		 "DID", buf[0], buf[1], buf[2]);
+
+	return 0;
+}
+static int winbond_query_jedec(struct m25p *flash)
+{
+	struct spi_transfer t[2];
+	struct spi_message m;
+	u_char buf[4];
+
+	spi_message_init(&m);
+	memset(t, 0, (sizeof t));
+
+	t[0].tx_buf = flash->command;
+	t[0].len = 1;
+	spi_message_add_tail(&t[0], &m);
+
+	t[1].rx_buf = buf;
+	t[1].len = 3;
+	spi_message_add_tail(&t[1], &m);	
+
+	down(&flash->lock);
+
+	/* Wait till previous write/erase is done. */
+	if (wait_till_ready(flash)) {
+		/* REVISIT status return?? */
+		up(&flash->lock);
+		dev_warn(&flash->spi->dev, "Failed to read JEDEC ID");
+		return 1;
+	}
+	/* Set up the write data buffer. */
+	flash->command[0] = OPCODE_RDID;
+	spi_sync(flash->spi, &m);
+
+	up(&flash->lock);
+
+	dev_info(&flash->spi->dev, "%10s : %02x %02x %02x\n",
+		 "JEDEC ID", buf[0], buf[1], buf[2]);
+
+	return 0;
+}
+
+static int winbond_query_unique_id(struct m25p *flash)
+{
+	struct spi_transfer t[2];
+	struct spi_message m;
+	u_char buf[8];
+
+	spi_message_init(&m);
+	memset(t, 0, (sizeof t));
+
+	t[0].tx_buf = flash->command;
+	t[0].len = 4;
+	spi_message_add_tail(&t[0], &m);
+
+	t[1].rx_buf = buf;
+	t[1].len = 8;
+	spi_message_add_tail(&t[1], &m);	
+
+	down(&flash->lock);
+
+	/* Wait till previous write/erase is done. */
+	if (wait_till_ready(flash)) {
+		/* REVISIT status return?? */
+		up(&flash->lock);
+		dev_warn(&flash->spi->dev, "Failed to read JEDEC ID");
+		return 1;
+	}
+	/* Set up the write data buffer. */
+	flash->command[0] = OPCODE_UNIQUE_ID;
+	flash->command[0] = 0;
+	flash->command[0] = 0;
+	flash->command[0] = 0;
+	
+	spi_sync(flash->spi, &m);
+
+	up(&flash->lock);
+
+	dev_info(&flash->spi->dev, 
+		"%10s : %02x %02x %02x %02x %02x %02x %02x %02x\n",
+		 "UNIQUE ID", 
+		buf[0], buf[1], buf[2], buf[3],
+		buf[4], buf[5], buf[6], buf[7]);
+
+	return 0;
+}
+static void winbond_init(struct m25p *flash)
+{
+	dev_info(&flash->spi->dev, "WINBOND\n");
+	flash->command[0] = OPCODE_CMR;
+	spi_write(flash->spi, flash->command, sizeof(flash->command[0]));
+
+	winbond_query_id(flash);
+	winbond_query_jedec(flash);
+	winbond_query_unique_id(flash);	
+}
 /*
  * MTD implementation
  */
@@ -414,6 +550,7 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "m25p16", 0x14, 0x2015, 64 * 1024, 32 },
 	{ "m25p32", 0x15, 0x2016, 64 * 1024, 64 },
 	{ "m25p64", 0x16, 0x2017, 64 * 1024, 128 },
+	{ "W25Q64", 0x37, 0x38,   64 * 1024, 128 },
 };
 
 /*
@@ -496,6 +633,7 @@ static int __devinit m25p_probe(struct spi_device *spi)
 				flash->mtd.eraseregions[i].numblocks);
 
 
+
 	/* partitions should match sector boundaries; and it may be good to
 	 * use readonly partitions for writeprotected sectors (BP2..BP0).
 	 */
@@ -532,7 +670,15 @@ static int __devinit m25p_probe(struct spi_device *spi)
 		dev_warn(&spi->dev, "ignoring %d default partitions on %s\n",
 				data->nr_parts, data->name);
 
-	return add_mtd_device(&flash->mtd) == 1 ? -ENODEV : 0;
+	if (add_mtd_device(&flash->mtd) == 1){
+		return -ENODEV;
+	}else{
+		if (strncmp(data->type, "W25Q", 4) == 0){
+			winbond_init(flash);
+		}
+		return 0;
+	}
+
 }
 
 

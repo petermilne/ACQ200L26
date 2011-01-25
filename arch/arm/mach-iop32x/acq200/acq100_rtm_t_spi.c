@@ -40,7 +40,10 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/hardware.h>
-
+/*
+#include <asm/mach/flash.h>
+*/
+#include <linux/spi/flash.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/spi_bitbang.h>
 
@@ -67,17 +70,18 @@ struct acq100_rtm_t_spi {
 	struct device		*dev;
 
 	u32 ctrl_mirror;	
+	int sent_reset;
 };
 
 #define _SPI_WRITE (RTMT_REG(RTMT_Q_SPI_DAT))
 #define _SPI_READ  (RTMT_REG(RTMT_Q_SPI_DAT))
-#define _SPI_CTL	  (RTMT_REG(RTMT_Q_SPI_CTL))
+#define _SPI_CTL   (RTMT_REG(RTMT_Q_SPI_CTL))
 
 static inline void rtmt_spi_write_ctl(struct acq100_rtm_t_spi *hw, u32 value)
 {
 	hw->ctrl_mirror = value;
 
-	dbg(2, "\twritel(%p, 0x%08x)", _SPI_CTL, value);
+	dbg(4, "\twritel(0x%08x, %p)", value, _SPI_CTL);
 	writel(hw->ctrl_mirror, _SPI_CTL);
 }
 
@@ -85,36 +89,52 @@ static inline u32 rtmt_spi_read_ctl(void)
 {
 	u32 cc = readl(_SPI_CTL);
 
-	dbg(2, "\treadl(%p) => 0x%08x", _SPI_CTL, cc);
+	dbg(4, "\treadl(%p) => 0x%08x", _SPI_CTL, cc);
 	return cc;
 }
 
+static void rtmt_spi_wait_busy(void)
+{
+	int pollcat = 0;
+
+	dbg(3, "start..");
+	while((rtmt_spi_read_ctl()&RTMT_Q_SPI_BUSY) != 0){
+		yield();
+		++pollcat;
+	}
+	dbg(2, "done in %d", pollcat);
+}
+
+static void rtmt_spi_start(struct acq100_rtm_t_spi *hw, int on)
+{
+	if (on){
+		hw->ctrl_mirror |= RTMT_Q_SPI_CTL_START;
+	}else{
+		hw->ctrl_mirror &= ~RTMT_Q_SPI_CTL_START;
+	}
+	dbg(3, "%08x %s", hw->ctrl_mirror, on? "ON": "OFF");
+	rtmt_spi_write_ctl(hw, hw->ctrl_mirror);
+}
 static inline void rtmt_spi_write(struct acq100_rtm_t_spi *hw, unsigned char cc)
 {
 	dbg(2, "\twritel(%02x, %p)", cc, _SPI_WRITE);
 
 	writel(cc, _SPI_WRITE);
-	rtmt_spi_write_ctl(hw, hw->ctrl_mirror|RTMT_Q_SPI_CTL_START);
-
-	while((rtmt_spi_read_ctl()&RTMT_Q_SPI_BUSY) != 0){
-		yield();
-	}
-	rtmt_spi_write_ctl(hw, hw->ctrl_mirror & ~RTMT_Q_SPI_CTL_START);
-	
+	rtmt_spi_start(hw, 1);
+	rtmt_spi_wait_busy();
+	rtmt_spi_start(hw, 0);
 }
 
 static inline unsigned char rtmt_spi_read(struct acq100_rtm_t_spi *hw)
 {	
 	unsigned char cc;
-	rtmt_spi_write_ctl(hw, hw->ctrl_mirror|RTMT_Q_SPI_CTL_START);
 
-	while((rtmt_spi_read_ctl()&RTMT_Q_SPI_BUSY) != 0){
-		yield();
-	}
+	rtmt_spi_start(hw, 1);
+	rtmt_spi_wait_busy();
+	rtmt_spi_start(hw, 0);
 	cc = readl(_SPI_READ);
-	dbg(2, "\tread(%p) => %02x", _SPI_READ, cc);
+	dbg(2, "\t\tread(%p) => %02x", _SPI_READ, cc);
 
-	rtmt_spi_write_ctl(hw, hw->ctrl_mirror & ~RTMT_Q_SPI_CTL_START);
 	return cc;
 }
 
@@ -221,18 +241,31 @@ static int rtm_t_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 		}
 	}
 
-	dbg(1, "return %d\n\n",hw->count); 
+	dbg(1, "return %d\n",hw->count); 
 	return hw->count;	
 }
 
 
-
+/* arm style
+static struct flash_platform_data rtm_t_flash_data = {
+	.map_name		= "jedec_probe",
+	.width			= 2,
+	.type		        = "m25p64"
+};
+*/
+static struct flash_platform_data rtm_t_flash_data = {
+	.name			= "rtm-t-flash",
+	.type			= "W25Q64"
+};
 static struct spi_board_info rtm_t_spi_devices[] = {
 	{	/* DataFlash chip */
-		.modalias	= "mtd_dataflash",
+//		.modalias	= "mtd_dataflash",
+//		.modalias	= "jedec_probe",
+		.modalias	= "m25p80",
 		.chip_select	= 0,
 		.max_speed_hz	= 15 * 1000 * 1000,
-		.mode = SPI_CS_HIGH 
+		.mode = SPI_CS_HIGH,
+		.platform_data = &rtm_t_flash_data
 	},
 };
 
