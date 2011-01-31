@@ -70,6 +70,9 @@
  * 
  *
  * - extensions: IODD may be applied.
+ * - IO_GAP : inserts a programmable GAP between AI and AO to allow an external
+ *	CPU to process Ai data and output to AO in the same cycle.
+ *	IO_GAP is tunable: 0: disabled, 1..TBLOCK_LEN (6M) delay
  */
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -322,6 +325,7 @@ static struct LlcDevGlobs {
 		} ao32;
 
 		unsigned alt_VI_target;
+		unsigned io_gap;
 
 		struct WDT_CONTROL {
 			unsigned preset;
@@ -1020,6 +1024,18 @@ static void llPreamble2V(void)
 			ai_dmad->DC = DMA_DCR_MEM2MEM;
 		}
 
+	}
+
+	if (dg.settings.io_gap){
+		/* kill time by copying local memory. pick two random tblocks */
+		struct iop321_dma_desc *gap_dmad = acq200_dmad_alloc();
+		gap_dmad->NDA = 0;
+		gap_dmad->PDA = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[5]);
+		gap_dmad->PUAD = dg.settings.PUAD;
+		gap_dmad->LAD = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[6]);
+		gap_dmad->BC = dg.settings.io_gap;
+		gap_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, gap_dmad, "AI");
 	}
 
 	if (dg.settings.AO_src){
@@ -1947,6 +1963,23 @@ static ssize_t show_iodd(
 
 static DEVICE_ATTR(IODD, S_IWUGO|S_IRUGO, show_iodd, set_iodd);
 
+static ssize_t set_io_gap(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.io_gap);
+	return strlen(buf);
+}
+static ssize_t show_io_gap(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.io_gap);
+}
+
+static DEVICE_ATTR(IO_GAP, S_IWUGO|S_IRUGO, show_io_gap, set_io_gap);
 
 
 static ssize_t set_soft_trigger(
@@ -2335,6 +2368,7 @@ static int mk_llc_sysfs(struct device *dev)
 
 	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trigger);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
+	DEVICE_CREATE_FILE(dev, &dev_attr_IO_GAP);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
 	DEVICE_CREATE_FILE(dev, &dev_attr_alt_VI_target);
 	DEVICE_CREATE_FILE(dev, &dev_attr_wdt_bit);
