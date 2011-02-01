@@ -193,6 +193,8 @@
 #define EMPTY1	0xee11ee11
 #define EMPTY2  0x22ee22ee
 
+#define MAGIC1	0xdeadbeef
+#define MAGIC2	0xcafebabe
 
 #define RTDMAC_DATA_FIFO_CNT	0x1000
 #define RTDMAC_DESC_FIFO_CNT	0x1000
@@ -343,6 +345,8 @@ static inline int cable_is_connected(struct RTM_T_DEV *tdev)
 
 int /* __devinit */ rtm_t_uart_init(struct pci_dev *pci_dev, void *mapping);
 void /* __devexit */ rtm_t_uart_remove(struct pci_dev *pci_dev);
+
+#define FPGA_ID	0		/* S6 unique ID TBA */
 
 #endif /* __RTM_T_H__ */
 

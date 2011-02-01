@@ -101,10 +101,73 @@ static void mk_rtm_t_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxH2);
 }
 
+static inline int is_magic(u32 mtest)
+{
+	return mtest == MAGIC1 || mtest == MAGIC2;
+}
+static int rtm_t_present(void)
+{
+	return is_magic(*RTMT_REG(RTMT_Q_MBOX1)) && 
+	       is_magic(*RTMT_REG(RTMT_Q_MBOX2));
+}
+static int _rw_test(u32 tv)
+{
+	u32 rv;
+
+	*RTMT_REG(RTMT_Q_TEST) = tv;
+	rv = *RTMT_REG(RTMT_Q_TEST);
+	if (rv != tv){
+		err("w:%08x r:%08x", tv, rv);		
+	}
+	return rv != tv;
+}
+static int bit_test(void)
+{
+	int rc = 0;
+	rc |= _rw_test(0xdeadbeef);
+	rc |= _rw_test(0x00000000);
+	rc |= _rw_test(0xffffffff);
+	rc |= _rw_test(0xaa55aa55);
+	rc |= _rw_test(0x55aa55aa);
+	rc |= _rw_test(0xcafebabe);
+	return rc;
+}
+
+extern int rtm_t_spi_master_init(struct device *dev);
+
+
 static int rtm_t_probe(struct device *dev)
 {
+	struct platform_device* pd = 
+		container_of(dev, struct platform_device, dev);
+	int rc;
 	info("");
+
+	if (!rtm_t_present()){
+		err("RTM-T not found\n");
+		return -1;
+	}else if (bit_test()){
+		err("BIT test failed");
+		return -1;
+	}else{
+		info("RTM-T found, FPGA version %08x id %08x",
+		     *RTMT_REG(RTMT_C_REVID), FPGA_ID);	
+	}
+
 	mk_rtm_t_sysfs(dev);
+
+	rc = acq100_rtm_t_uart_init();
+	if (rc != 0){
+		goto uart_fail;
+	}
+	rc = rtm_t_spi_master_init(dev);
+
+	acq100_redirect();
+	return rc;
+
+uart_fail:
+	platform_device_unregister(pd);
+
 	return 0;
 }
 
@@ -115,6 +178,7 @@ static void rtm_t_dev_release(struct device * dev)
 
 static int rtm_t_remove(struct device *dev)
 {
+	acq100_rtm_t_uart_exit();
 	return 0;
 }
 
@@ -140,9 +204,9 @@ static struct device_driver rtm_t_driver = {
 };
 
 
-static int all_good;
 
-extern int rtm_t_spi_master_init(struct device *dev);
+
+
 
 static int __init acq100_rtm_t_init(void)
 {
@@ -158,18 +222,9 @@ static int __init acq100_rtm_t_init(void)
 	if (rc != 0){
 		goto device_fail;
 	}
-	rc = acq100_rtm_t_uart_init();
-	if (rc != 0){
-		goto uart_fail;
-	}
-	rc = rtm_t_spi_master_init(&rtm_t_device.dev);
+	
+	return 0;
 
-	acq100_redirect();
-	all_good = 1;		/* force cleanup on module unload */
-	return rc;
-
-uart_fail:
-	platform_device_unregister(&rtm_t_device);
 device_fail:
 	driver_unregister(&rtm_t_driver);
 driver_fail:
@@ -179,12 +234,9 @@ driver_fail:
 static void __exit
 acq100_rtm_t_exit_module(void)
 {
-	if (all_good){
-		acq100_rtm_t_uart_exit();
-		platform_device_unregister(&rtm_t_device);
-		driver_unregister(&rtm_t_driver);
-		acq100_restore();
-	}
+	platform_device_unregister(&rtm_t_device);
+	driver_unregister(&rtm_t_driver);
+	acq100_restore();
 }
 
 module_init(acq100_rtm_t_init);
