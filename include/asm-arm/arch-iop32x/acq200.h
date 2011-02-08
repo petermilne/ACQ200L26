@@ -53,7 +53,7 @@ vaddr      paddr      baddr        descr
 #define ACQ200_UART_LEN     (256)
 #define ACQ200_FPGA_LEN     (0x1000000)
 #define ACQ200_LOCALIO_LEN  (1024)
-#define ACQ200_EXTERNIO_LEN (32768)
+#define ACQ200_EXTERNIO_LEN (0x01000000)
 
 #define ACQ100_FPGA_LEN     (0x1000000)
 #define ACQ100_ETHERNET_LEN (0x100000)
