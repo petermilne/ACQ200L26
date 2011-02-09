@@ -1168,6 +1168,7 @@ struct LLC200_INIT  {
 #define LLCV2_STATUS_BDR    7     /** Ident, default 0xdeadbeef */
 
 
+
 /** LLC SYNC2V - two vector case, standard offsets */
 
 /* offset in Output vector u32[index] */
@@ -1200,11 +1201,12 @@ struct LLC200_INIT  {
 #define LLC_SYNC2V_IN_ITER   (LLCV2_STATUS_BDR+1)  /* [ 8] Iteration */
 #define LLC_SYNC2V_IN_DI32   (LLCV2_STATUS_BDR+2)  /* [ 9] DI32 values */
 #define LLC_SYNC2V_IN_LASTE  (LLCV2_STATUS_BDR+3)  /* [10] ITER last error */
-#define LLC_SYNC2V_IN_TLAT32 (LLCV2_STATUS_BDR+4)  /* [11] SW TLATCH 31:0 [OPT] */
+#define LLC_SYNC2V_IN_TLAT32 (LLCV2_STATUS_BDR+4)  /* [11] SWTLATCH 31:0 [OPT]*/
 #define LLC_SYNC2V_IN_VERID  (LLCV2_STATUS_BDR+5)  /* [12] Version ID */
 #define LLC_SYNC2V_IN_SCOUNT (LLCV2_STATUS_BDR+6)  /* [13] Sample Count */
 #define LLC_SYNC2V_IN_FIFSTA (LLCV2_STATUS_BDR+7)  /* [14] FIFSTAT */
-#define LLC_SYNC2V_IN_LAST   (LLCV2_STATUS_MBOX0+15) /* [15] */
+#define LLC_SYNC2V_IN_DO64   (LLCV2_STATUS_BDR+8)  /* [15] Last DO64 outval */
+#define LLC_SYNC2V_IN_LAST   (LLCV2_STATUS_MBOX0+15) /* [31] */
 #define LLC_SYNC2V_IDLE_PAT 0x2f2fc0de       /* fills remainder */
 
 /** HTM HTM HTM HTM HTM

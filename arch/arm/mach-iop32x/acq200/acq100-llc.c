@@ -73,6 +73,9 @@
  * - IO_GAP : inserts a programmable GAP between AI and AO to allow an external
  *	CPU to process Ai data and output to AO in the same cycle.
  *	IO_GAP is tunable: 0: disabled, 1..TBLOCK_LEN (6M) delay
+ * - DO64_READBACK: insert lower 32 bits AO32#1 DO64 value into  VI
+ *      aim is to provide a tuning aid that enables a host program 
+ *	to confirm that the last VO made the cut on previous cycle
  */
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -158,6 +161,9 @@ int acq100_llc_sync2V = 0;
 #define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
 
 #define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
+
+#define PA_SCRATCH(off_words) \
+	(DG->fpga.regs.pa + ACQ196_LL_AI_SCRATCH_OFF + off_words*sizeof(u32))
 
 module_param(acq100_llc_sync2V, int, 0664);
 
@@ -326,6 +332,7 @@ static struct LlcDevGlobs {
 
 		unsigned alt_VI_target;
 		unsigned io_gap;
+		unsigned do64_readback;
 
 		struct WDT_CONTROL {
 			unsigned preset;
@@ -734,6 +741,17 @@ static void initAIdma_AO32(void)
 		ao_dmad->BC = AO32_VECLEN;
 		ao_dmad->DC = DMA_DCR_PCI_MW;
 		dma_append_chain(&ai_dma, ao_dmad, "AO32");
+	}
+
+	if (dg.settings.do64_readback){
+		struct iop321_dma_desc *do64_dmad = acq200_dmad_alloc();
+		ao_dmad->MM_SRC = 
+			dg.settings.ao32.tmp_pa + AO32_VECLEN-sizeof(u32);
+		ao_dmad->PUAD = dg.settings.PUAD;
+		ao_dmad->MM_DST = PA_SCRATCH(LLC_SYNC2V_IN_DO64);
+		ao_dmad->BC = sizeof(u32);
+		ao_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, do64_dmad, "DORB");
 	}
 
 	dbg(1, "99 slaves %d", ii);
@@ -1981,6 +1999,26 @@ static ssize_t show_io_gap(
 
 static DEVICE_ATTR(IO_GAP, S_IWUGO|S_IRUGO, show_io_gap, set_io_gap);
 
+static ssize_t set_do64_readback(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.do64_readback);
+	return strlen(buf);
+}
+static ssize_t show_do64_readback(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.do64_readback);
+}
+
+static DEVICE_ATTR(DO64_READBACK, S_IWUGO|S_IRUGO, 
+	show_do64_readback, set_do64_readback);
+
+
 
 static ssize_t set_soft_trigger(
 	struct device *dev, 
@@ -2369,6 +2407,7 @@ static int mk_llc_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trigger);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IO_GAP);
+	DEVICE_CREATE_FILE(dev, &dev_attr_DO64_READBACK);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
 	DEVICE_CREATE_FILE(dev, &dev_attr_alt_VI_target);
 	DEVICE_CREATE_FILE(dev, &dev_attr_wdt_bit);
