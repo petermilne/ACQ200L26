@@ -184,7 +184,7 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1075
+#define BUILD 1077
 #define _VERID(build) "$Revision: 1.24 $ build " #build
 
 #define VERID _VERID(BUILD)
@@ -705,10 +705,6 @@ static void initAIdma_AO32(void)
  * THEN do the slaves ... this is going to be a LONG CHAIN
  */
 {
-	int ii;
-	int ao32_offset;	
-	struct iop321_dma_desc *ao_dmad;
-
 	struct iop321_dma_desc *tmp_dma = acq200_dmad_alloc();
 
 	dbg(1, "01");	
@@ -720,41 +716,48 @@ static void initAIdma_AO32(void)
 	tmp_dma->DC = DMA_DCR_PCI_MR;
 	dma_append_chain(&ai_dma, tmp_dma, "aotmp");
 
-	ao_dmad = acq200_dmad_alloc();
-
-	ao_dmad->NDA = 0;
-	ao_dmad->MM_SRC = dg.settings.ao32.tmp_pa;
-	ao_dmad->PUAD = dg.settings.PUAD;
-	ao_dmad->MM_DST = DG->fpga.fifo.pa;
-	ao_dmad->BC = AO_BC;
-	ao_dmad->DC = DMA_DCR_MEM2MEM;
-	dma_append_chain(&ai_dma, ao_dmad, "AO16");
-
-	for (ii = 0, ao32_offset = LLC_SYNC2V_AO32*sizeof(u32); 
-	     ii < dg.settings.ao32.count; ++ii, ao32_offset += AO32_VECLEN){
-
+	{
+		int ii;
+		int ao32_offset;	
+		struct iop321_dma_desc *ao_dmad;	
 		ao_dmad = acq200_dmad_alloc();
-		ao_dmad->NDA = 0;
-		ao_dmad->PDA = dg.settings.ao32.pa[ii];
-		ao_dmad->PUAD = dg.settings.PUAD;
-		ao_dmad->LAD = dg.settings.ao32.tmp_pa + ao32_offset;
-		ao_dmad->BC = AO32_VECLEN;
-		ao_dmad->DC = DMA_DCR_PCI_MW;
-		dma_append_chain(&ai_dma, ao_dmad, "AO32");
-	}
 
+		ao_dmad->NDA = 0;
+		ao_dmad->MM_SRC = dg.settings.ao32.tmp_pa;
+		ao_dmad->PUAD = dg.settings.PUAD;
+		ao_dmad->MM_DST = DG->fpga.fifo.pa;
+		ao_dmad->BC = AO_BC;
+		ao_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, ao_dmad, "AO16");
+
+		for (ii = 0, ao32_offset = LLC_SYNC2V_AO32*sizeof(u32); 
+		     ii < dg.settings.ao32.count; ++ii, 
+					ao32_offset += AO32_VECLEN){
+
+			ao_dmad = acq200_dmad_alloc();
+			ao_dmad->NDA = 0;
+			ao_dmad->PDA = dg.settings.ao32.pa[ii];
+			ao_dmad->PUAD = dg.settings.PUAD;
+			ao_dmad->LAD = dg.settings.ao32.tmp_pa + ao32_offset;
+			ao_dmad->BC = AO32_VECLEN;
+			ao_dmad->DC = DMA_DCR_PCI_MW;
+			dma_append_chain(&ai_dma, ao_dmad, "AO32");
+		}
+		dbg(1, "75 slaves %d", ii);
+	}
 	if (dg.settings.do64_readback){
 		struct iop321_dma_desc *do64_dmad = acq200_dmad_alloc();
-		ao_dmad->MM_SRC = 
+		do64_dmad->NDA = 0;
+		do64_dmad->MM_SRC = 
 			dg.settings.ao32.tmp_pa + AO32_VECLEN-sizeof(u32);
-		ao_dmad->PUAD = dg.settings.PUAD;
-		ao_dmad->MM_DST = PA_SCRATCH(LLC_SYNC2V_IN_DO64);
-		ao_dmad->BC = sizeof(u32);
-		ao_dmad->DC = DMA_DCR_MEM2MEM;
+		do64_dmad->PUAD = dg.settings.PUAD;
+		do64_dmad->MM_DST = PA_SCRATCH(LLC_SYNC2V_IN_DO64);
+		do64_dmad->BC = sizeof(u32);
+		do64_dmad->DC = DMA_DCR_MEM2MEM;
 		dma_append_chain(&ai_dma, do64_dmad, "DORB");
 	}
 
-	dbg(1, "99 slaves %d", ii);
+	dbg(1, "99");
 }
 
 static void initAIdma_AltVI2(void)
