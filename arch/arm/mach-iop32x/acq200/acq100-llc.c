@@ -76,6 +76,7 @@
  * - DO64_READBACK: insert lower 32 bits AO32#1 DO64 value into  VI
  *      aim is to provide a tuning aid that enables a host program 
  *	to confirm that the last VO made the cut on previous cycle
+ *   Value == 1 : use DMA, Value == 2 : use PIO
  */
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -159,7 +160,7 @@ int acq100_llc_sync2V = 0;
 #define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DI32]
 #endif
 #define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
-
+#define I_SCRATCH_DORB  ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DO64]
 #define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
 
 #define PA_SCRATCH(off_words) \
@@ -745,7 +746,7 @@ static void initAIdma_AO32(void)
 		}
 		dbg(1, "75 slaves %d", ii);
 	}
-	if (dg.settings.do64_readback){
+	if (dg.settings.do64_readback == 1){
 		struct iop321_dma_desc *do64_dmad = acq200_dmad_alloc();
 		do64_dmad->NDA = 0;
 		do64_dmad->MM_SRC = 
@@ -1580,7 +1581,7 @@ static void llc_loop_sync2V(int entry_code)
  * - Check mailboxes
  * -Check for overrun
  *
-*/
+ */
 {
 	u32 csr = 0;
 	int decim_count = 1;
@@ -1614,7 +1615,7 @@ static void llc_loop_sync2V(int entry_code)
 /* we assume it doesn't matter if this stuff makes this transfer or not.. 
  * We set CLKDLY short to give time for something useful ..
  */
-	hot_start:
+		hot_start:
 			DMAC_GO(ai_dma, fifstat);
 			/* @critical ENDS */
 
@@ -1654,6 +1655,12 @@ static void llc_loop_sync2V(int entry_code)
 
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
 				setDO32(O_SCRATCH_DO32);
+			}
+			if (dg.settings.do64_readback == 2){
+				u32* va = (u32*)((void*)dg.settings.ao32.tmp+AO32_VECLEN);
+				unsigned pa = dg.settings.ao32.tmp_pa+AO32_VECLEN-sizeof(u32);
+				dma_sync_single_for_cpu(NULL, pa, sizeof(u32), DMA_FROM_DEVICE); 
+				I_SCRATCH_DORB = va[-1];
 			}
 
 			/** Interrupt on DMA DONE */
@@ -1756,7 +1763,7 @@ static void llc_loop_sync2V(int entry_code)
 		}
 	}
 
- quit:
+quit:
 	wdt_cleanup();
 
 	if (snack_on_quit){
@@ -1796,13 +1803,13 @@ onFifoNotEmpty: {
 
 		if (OVERRUN(fifstat)){
 			REPORT_ERROR(
-			"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
-			fifstat, fifstat2, tcycle);
+				"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
+				fifstat, fifstat2, tcycle);
 		}
 		if (AIFIFO_NOT_EMPTY(fifstat2)){
 			REPORT_ERROR(
-			"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
-			fifstat, fifstat2, tcycle);
+				"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
+				fifstat, fifstat2, tcycle);
 		}
 		goto quit;
 	}
