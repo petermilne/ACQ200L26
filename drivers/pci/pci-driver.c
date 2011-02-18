@@ -551,6 +551,7 @@ struct bus_type pci_bus_type = {
 	.resume		= pci_device_resume,
 	.shutdown	= pci_device_shutdown,
 	.dev_attrs	= pci_dev_attrs,
+	.bus_attrs	= pci_bus_attrs,
 };
 
 static int __init pci_driver_init(void)
