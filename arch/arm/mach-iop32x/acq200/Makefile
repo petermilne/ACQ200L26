@@ -10,7 +10,8 @@ CONFIG_ARCH_DTACQ_ACQ216x=m
 CONFIG_ARCH_DTACQ_WAV232=m
 CONFIG_ARCH_DTACQ_ACQ196=m
 CONFIG_ARCH_DTACQ_ACQ196m=m
-CONFIG_ARCH_DTACQ_ACQ196f=m
+#CONFIG_ARCH_DTACQ_ACQ196f=m
+CONFIG_ARCH_DTACQ_ACQ196t=m
 CONFIG_ARCH_DTACQ_ACQ196c=m
 CONFIG_ARCH_DTACQ_ACQ196h=m
 CONFIG_ARCH_DTACQ_ACQ132=m
@@ -87,6 +88,8 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ196) += acq196.o
 obj-$(CONFIG_ARCH_DTACQ_ACQ196m) += acq196m.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ196f) += acq196f.o
+
+obj-$(CONFIG_ARCH_DTACQ_ACQ196t) += acq196t.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ196c) += acq196c.o
 
@@ -208,6 +211,10 @@ acq196c-objs := acq196-fifo-c.o acq196-fiq-c.o \
 
 acq196f-objs := acq196-fifo-f.o acq196-fiq-f.o \
 	acq196-fifo-procfs-f.o acq196-offset.o acq196-AO.o \
+	$(ACQ2XX_FIFO_COMMON)
+
+acq196t-objs := acq196-fifo-t.o acq196-fiq-t.o \
+	acq196-fifo-procfs-t.o acq196-offset.o acq196-AO.o \
 	$(ACQ2XX_FIFO_COMMON)
 
 acq196h-objs := acq196-fifo-h.o acq196-fiq-h.o \

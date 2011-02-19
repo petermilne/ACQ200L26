@@ -41,10 +41,18 @@
 #warning DMA_BLOCK_LEN set to 64 for overlapped HAWG
 #define ISR_ADDS_ENDSTOP 1
 #elif defined(ACQ196F)
+/* OBSOLETE */
 #warning DMA_BLOCK_LEN set to 1024 for FIR
 #define DMA_BLOCK_LEN 1024
 /* #define DMA_BLOCK_LEN 1024 */
 #define ISR_ADDS_ENDSTOP 0
+
+#elif defined(ACQ196T)
+#warning "BUILDING ACQ196T"
+
+#define DMA_BLOCK_LEN	(96*2*4)
+#define ISR_ADDS_ENDSTOP 0
+
 #else
 #define DMA_BLOCK_LEN 1024
 #define ISR_ADDS_ENDSTOP 1
