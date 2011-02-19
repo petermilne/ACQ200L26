@@ -22,7 +22,9 @@
 #ifndef __U32_RINGBUFFER_H__
 #define __U32_RINGBUFFER_H__ 1
 
-
+#include <asm-arm/arch-iop32x/iop321.h>
+#include <asm-arm/arch-iop32x/iop321-dma.h>
+#include "acq200-dmac.h"
 
 struct u32_ringbuffer {
 	unsigned short iput;
@@ -133,4 +135,87 @@ static inline void u32rb_destroy(struct u32_ringbuffer* rb)
 	rb->iput = rb->iget;
 	kfree(rb->buffer);
 }
+
+
+#define RBMASK         (RBLEN-1)
+#define RB_IS_EMPTY( rb ) ((rb).iput==(rb).iget)
+#define RB_INCR( ii )  (((ii)+1)&RBMASK)
+#define RB_IS_FULL( rb )  (RB_INCR((rb).iput)==(rb).iget)
+
+#define RB_WILL_BE_EMPTY(rb) ((rb).iput==RB_INCR((rb).iget))
+
+/* next is an approximation - nput, nget will overflow */
+#define RB_ELEMENT_COUNT(rb) ((rb).nput - (rb).nget)
+
+#define RBLEN          0x4000
+
+
+#define CHECK_TIDES(rb)					\
+do {							\
+	unsigned short tide = rb->nput - rb->nget;	\
+	if (tide > rb->hitide){				\
+		rb->hitide = tide;			\
+	}else if (tide < rb->lotide){			\
+		rb->lotide = tide;			\
+	}						\
+} while(0)
+
+#define INIT_TIDES(rb)					\
+do {							\
+	rb->hitide = rb->lotide = rb->nput - rb->nget;	\
+} while(0)
+
+static inline int rb_put( 
+	struct acq200_dma_ring_buffer *rb, 
+	struct iop321_dma_desc *buf )
+{
+	if ( !RB_IS_FULL( *rb ) ){
+		rb->buffers[rb->iput] = buf;
+		rb->iput = RB_INCR(rb->iput);
+		rb->nput++;
+		CHECK_TIDES(rb);
+		return 1;
+	}else{
+		rb->lotide = 0;
+		return 0;
+	}
+}
+
+
+static inline int rb_get( 
+	struct acq200_dma_ring_buffer* rb, 
+	struct iop321_dma_desc** pbuf )
+{
+	if ( !RB_IS_EMPTY( *rb ) ){
+		CHECK_TIDES(rb);
+		*pbuf = rb->buffers[rb->iget];
+		rb->iget = RB_INCR( rb->iget );
+		rb->nget++;
+		return 1;
+	}else{
+		rb->lotide = 0;
+		return 0;
+	}
+}
+
+
+static inline struct iop321_dma_desc* rb_get_buf(
+	struct acq200_dma_ring_buffer* rb
+	)
+{
+	struct iop321_dma_desc* pbuf = 0;
+
+	if ( !RB_IS_EMPTY( *rb ) ){
+		CHECK_TIDES(rb);
+		pbuf = rb->buffers[rb->iget];
+		rb->iget = RB_INCR( rb->iget );
+		rb->nget++;
+	}else{
+		rb->lotide = 0;
+	}
+	
+	return pbuf;
+}
+
+
 #endif /* __U32_RINGBUFFER_H__ */

@@ -5,9 +5,12 @@ static void init_control_target(void);
 
 
 #define DTACQ_MACH_DRIVER_INIT(dev) init_control_target()
+#define DEVICE_CREATE_PROC_ENTRIES(root) pbc_create_proc_entries(root)
 
 #define ACQ196T
 #include "acq196-fifo.c"
+
+#include "prebuiltChainUtils.h"
 
 int control_wanted = 0;
 module_param(control_wanted, int, 0644);
@@ -21,21 +24,35 @@ module_param(control_block, int, 0644);
 int control_tbix = -1;
 module_param(control_tbix, int, 0444);
 
+int control_numblocks = 0;
+module_param(control_numblocks, int, 0444);
 static struct pci_mapping control_target;
 
+struct PrebuiltChain* pb_chains;
+
+static void* control_va(int iblock)
+{
+	return control_target.va + iblock*control_block;
+}
+
+static u32 control_pa(int iblock)
+{
+	return control_target.pa + iblock*control_block;
+}
 
 static void fill_control_target(void)
 {
 	int ib;
 	unsigned off;
-	void* va = control_target.va;
 
 	info("len:%d pa:0x%08x va:%p", 
 	     control_target.len, control_target.pa, control_target.va);
 
 	for (ib = off = 0; off < control_size; ib++, off += control_block){
-		memset(va + off, ib, control_block);
+		memset(control_va(ib), ib, control_block);
 	}
+
+	control_numblocks = ib;
 }
 
 static void init_control_target(void)
@@ -60,127 +77,64 @@ static void init_control_target(void)
 }
 
 
-static void init_endstops_control_target(void)
+static void _init_endstops_control_target(void)
 /** init endstops, including control_target chains */
 {
-#if 0
-	struct CONTROL_TARGET* ct = &DMC_WO->control_target;
+	int iblock;
 
-	int modulo = max(ct->stride, ct->data_blocks);
-	int numstops = 1024/2;    /** 50msec buffer */
-	int istop = 0;
-	int iblock = 0;
-
-	while((numstops % modulo) != 0){
-		++numstops;
-	}
-
-	numstops *= 2;           /** guarantee 2 buffer op returns to start */
-
-	dbg(1, "stride %d blocks %d modulo %d numstops %d",
-	    ct->stride, ct->data_blocks, modulo, numstops);
-
-	init_endstops(numstops);
+	init_endstops(control_numblocks);
 
 	/** now build numstops chains
          *  - 0..data_blocks with increasing target offset
          *  - data_blocks..stride : unchanged.
 	 */
 
-	if (numstops > S_pbstore.count){
-		if (S_pbstore.chains){
-			kfree(S_pbstore.chains);
-		}
-		S_pbstore.chains = kmalloc(numstops*PBC_SZ, GFP_KERNEL);
-		if (!S_pbstore.chains){
-			err("FAILED to allocate PBC %d", numstops*PBC_SZ);
+	if (pb_chains == 0){
+		pb_chains = kmalloc(control_numblocks*PBC_SZ, GFP_KERNEL);
+	}
+
+	for (iblock = 0; iblock < control_numblocks; ++iblock){
+		struct PrebuiltChain *pbc = &pb_chains[iblock];
+		struct iop321_dma_desc* endstop;
+		int ichain = 0;
+
+		memset(pbc, 0, sizeof(struct PrebuiltChain));
+
+		if (!rb_get(&IPC->endstops, &endstop)){
+			err("ENDSTOP STARVED");
+			finish_with_engines(- __LINE__);
 			return;
 		}
-		S_pbstore.count = numstops;
-	}
-
-	nsample = 0;
-
-	for (nsample = 0; istop < numstops; nsample++){
-		for (iblock = 0; iblock < modulo; ++iblock, ++istop){
-			struct PrebuiltChain *pbc = S_pbstore.chains+istop;
-			struct iop321_dma_desc* endstop;
-			int ichain = 0;
-
-			memset(pbc, 0, sizeof(struct PrebuiltChain));
-
-			dbg(3, "istop:%3d iblock:%d", istop, iblock);
-
-			if (!rb_get(&IPC->endstops, &endstop)){
-				err("ENDSTOP STARVED");
-				finish_with_engines(- __LINE__);
-				return;
-			}
-			if (isPBChainDesc(endstop)){
-				err("Already prebuilt");
-				finish_with_engines(- __LINE__);
-				return;
-			}
-
-			/** this idents container of desc */
-			pbc->desc.clidat = pbc;
-			
-			if (iblock < ct->data_blocks){
-				if (iblock == ct->data_blocks - 1){
-					MK_CAPCOM_TO_LOCAL(pbc, ichain);
-					MK_CAPCOM_TEST(pbc, ichain);
-				}
-				MK_FIFO_TO_LOCAL(pbc, ichain);
-				if (LOCAL_TO_HOST_ENABLED){
-					MK_LOCAL_TO_HOST(pbc, ichain, iblock);
-					pbc->insert = 
-						prebuilt_insert_local_host;
-				}else{
-					pbc->insert=
-					 prebuilt_insert_local_host_nodata;
-				}
-				if (CAPCOM_TO_HOST_ENABLED &&
-				    iblock == ct->data_blocks - 1){
-					MK_CAPCOM_TO_HOST(pbc, ichain);
-				}				
-				if (ct->iodd){
-					MK_IODD(pbx, ichain);
-				}
-
-			}else{
-				MK_FIFO_TO_LOCAL(pbc, ichain);
-				pbc->insert = prebuilt_insert_local;
-			}
-			MK_ENDSTOP(pbc, ichain, endstop);
-			pbc->length = ichain;
-
-			rb_put(&IPC->endstops, &pbc->desc);
+		if (isPBChainDesc(endstop)){
+			err("Already prebuilt");
+			finish_with_engines(- __LINE__);
+			return;
 		}
+
+		/** this idents container of desc */
+		pbc->desc.clidat = pbc;
+
+		MK_FIFO_TO_LOCAL(pbc, ichain);
+		MK_LOCAL_TO_LOCAL(pbc, ichain, control_pa(iblock));
+		MK_ENDSTOP(pbc, ichain, endstop);
+		pbc->length = ichain;
+		pbc->insert = prebuilt_insert_local;
+		rb_put(&IPC->endstops, &pbc->desc);			
 	}
 
-	DG->put_max_empties = numstops/2;
-	DG->empty_fill_threshold = numstops/2;
-#else
-	if (control_wanted){
-		;
-	}else{
-		init_endstops(INIT_ENDSTOPS);
-	}
-#endif
+	DG->put_max_empties = control_numblocks/2;
+	DG->empty_fill_threshold = control_numblocks/2;
 }
 
-/*
-	if (DMC_WO->control_target.pa_data || 
-	    DMC_WO->control_target.pa_status ){
-#if ISR_ADDS_ENDSTOP 
-		err("ISR_ADDS_ENDSTOP set - can't do this, revert to regular");
-		init_endstops(INIT_ENDSTOPS);
-#else
-		init_endstops_control_target();
-#endif
+static void init_endstops_control_target(void)
+/** init endstops, including control_target chains */
+{
+	if (control_wanted){
+		_init_endstops_control_target();
 		DMC_WO->handleEmpties = dmc_handle_empties_prebuilt;
 	}else{
 		init_endstops(INIT_ENDSTOPS);
-		DMC_WO->handleEmpties = dmc_handle_empties_default;
+		
 	}
-*/
+}
+

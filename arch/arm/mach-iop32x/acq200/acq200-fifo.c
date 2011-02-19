@@ -18,12 +18,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#include "acq200_minors.h"
-
-
-#include <linux/poll.h>
-
-#include "acq200-rb.h"
 
 /** @file acq200-fifo.c
  *
@@ -49,23 +43,30 @@
  * We Q endstops for unique ident of last data transferred.
  */
 
+
+
 #include <asm/arch/iop321-dma.h>
 #include <asm/arch/iop321-irqs.h>
 #include <asm/arch/acqX00-irq.h>
+#include <asm-arm/arch-iop32x/acq200.h>
+
+#include <linux/dma-mapping.h>
+#include <linux/kdev_t.h>
+#include <linux/moduleparam.h>
+#include <linux/workqueue.h>
+#include <linux/poll.h>
+
+#include "acq200_minors.h"
+#include "acq200-rb.h"
+
 
 #include "acqX00-port.h"
 
 #include "acq200-fifo-tblock.h"
 #include "acq200-stream-api.h"
 
-#include <linux/dma-mapping.h>
-#include <linux/kdev_t.h>
+#include "prebuiltChainUtils.h"
 
-
-#include <asm-arm/arch-iop32x/acq200.h>
-
-#include <linux/moduleparam.h>
-#include <linux/workqueue.h>
 
 
 #define VERID \
