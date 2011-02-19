@@ -35,7 +35,6 @@ static void wav232_destroyCapdef(struct CAPDEF *capdef);
 #define DTACQ_MACH_DESTROY_CAPDEF wav232_destroyCapdef
 #define DTACQ_MACH_DRIVER_INIT(dev)   acq200_wavegen_driver_init(dev)
 #define DTACQ_MACH_DRIVER_REMOVE(dev) acq200_wavegen_driver_remove(dev)
-#define DTACQ_MACH_ON_SET_MODE(mode)
 
 static void load_dmac_chain( int entries );
 

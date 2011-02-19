@@ -80,10 +80,6 @@ module_param(icr_hot_en_count, int, 0600);
 #define DAC_INTEN ACQ100_ICR_DACEN
 
 
-#define DTACQ_MACH_DRIVER_INIT(dev)
-#define DTACQ_MACH_DRIVER_REMOVE(dev)
-#define DTACQ_MACH_ON_SET_MODE(mode)
-
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
 
 
@@ -638,7 +634,11 @@ static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file)
 	enable_regular_operation();
 
 	clear_buffers();
+#ifdef ACQ196T
+	init_endstops_control_target();
+#else
 	init_endstops(INIT_ENDSTOPS);
+#endif
 
 	fifo_open( PCI_DMA_FROMDEVICE );
 

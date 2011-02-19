@@ -107,7 +107,6 @@ static void acq216_event_adjust(
 #define DTACQ_MACH_DESTROY_CAPDEF acq216_destroyCapdef
 #define DTACQ_MACH_DRIVER_INIT(dev) acq216_driverInit(dev)
 #define DTACQ_MACH_DRIVER_REMOVE(dev) acq216_driverRemove(dev)
-#define DTACQ_MACH_ON_SET_MODE(mode)
 
 #undef DTACQ_MACH_EVENT_ADJUST
 #define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last) \

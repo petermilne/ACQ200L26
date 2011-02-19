@@ -99,6 +99,17 @@ module_param(verid, charp, 0444);
 extern void acq200_set_user_led(int led4, int on);
 
 
+#ifndef DTACQ_MACH_DRIVER_INIT
+#define DTACQ_MACH_DRIVER_INIT(dev)
+#endif
+#ifndef DTACQ_MACH_DRIVER_REMOVE
+#define DTACQ_MACH_DRIVER_REMOVE(dev)
+#endif
+#ifndef DTACQ_MACH_ON_SET_MODE
+#define DTACQ_MACH_ON_SET_MODE(mode)
+#endif
+
+
 int acq200_timeout = 10000;
 
 int acq200_fifo_debug = 0;
