@@ -1173,9 +1173,7 @@ static void bda_release_tblock(void)
 #endif
 
 #ifndef WAV232
-
-#ifdef ACQ216
-static void dmc_handle_empties_prebuilt(struct DMC_WORK_ORDER *wo)
+void dmc_handle_empties_prebuilt(struct DMC_WORK_ORDER *wo)
 {
 	int nput = 0;
 	unsigned empty_offset;
@@ -1231,7 +1229,6 @@ static void dmc_handle_empties_prebuilt(struct DMC_WORK_ORDER *wo)
 		finish_with_engines(-__LINE__);
 	}
 }
-#endif /* ACQ216 */
 #endif
 
 static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
