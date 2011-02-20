@@ -75,6 +75,10 @@ int dma_yield;
 module_param(dma_yield, int, 0644);
 MODULE_PARM_DESC(dma_yield, "dma busy count");
 
+int dma_maxticks;
+module_param(dma_maxticks, int, 0644);
+MODULE_PARM_DESC(dma_maxticks, "max DMA wait (20nsec tick)");
+
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
@@ -247,14 +251,24 @@ void prebuiltChainHandler(struct PrebuiltChain* pbc)
 	}else{
 		int iblock = pbc->iblock;
 		u32 stat;
+		u32 gtsr1 = *IOP321_GTSR;
+		u32 gtsr2;
 
 		while (!DMA_DONE( GL.chains[iblock], stat)){
 			++dma_yield;
 			yield();
 		}
+		gtsr2 = *IOP321_GTSR;
 		DMA_ARM(GL.chains[iblock]);
 		DMA_FIRE(GL.chains[iblock]);
 		++dma_triggers;
+
+		if (likely(gtsr2 > gtsr1)){
+			u32 delta = gtsr2 - gtsr1;
+			if (delta > dma_maxticks){
+				dma_maxticks = delta;
+			}
+		}
 	}
 }
 
