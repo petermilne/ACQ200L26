@@ -82,6 +82,7 @@ static void _init_endstops_control_target(void)
 {
 	int iblock;
 
+	DG->eoc_int_modulo_mask = 0;
 	init_endstops(control_numblocks);
 
 	/** now build numstops chains

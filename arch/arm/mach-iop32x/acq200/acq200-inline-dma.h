@@ -32,7 +32,7 @@ struct DmaChannel {
 	volatile u32* regs;
 	int nchain;
 	int id;
-	const char* description[16];      /* for diags only */
+	const char* description[MAXCHAIN];      /* for diags only */
 	struct iop321_dma_desc* dmad[MAXCHAIN];
 };
 
