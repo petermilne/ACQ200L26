@@ -138,3 +138,5 @@ static void init_endstops_control_target(void)
 	}
 }
 
+EXPORT_SYMBOL_GPL(control_block);
+EXPORT_SYMBOL_GPL(control_numblocks);

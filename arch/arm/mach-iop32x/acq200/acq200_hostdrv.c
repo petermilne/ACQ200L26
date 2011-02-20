@@ -53,6 +53,7 @@ char acq200__driver_string[] = "D-TACQ intelligent data acquisition device";
 char acq200__driver_version[] = "B1000";
 char acq200__copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 int idx;
+
 struct Acq200Device* acq200_devices[MAXDEV];
 
 #define PCI_BA_CSR  0 /* surely there's an official def ?? WORKTODO */
