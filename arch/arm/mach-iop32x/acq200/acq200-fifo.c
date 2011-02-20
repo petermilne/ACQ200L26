@@ -218,6 +218,7 @@ static struct DMC0 {
 	struct task_struct* task;
 	unsigned long v;
 	wait_queue_head_t waitq;
+	void (* pbc_client)(struct PrebuiltChain* pbc);
 } dmc0;
 
 #define DMC0_RUN_REQUEST 0
@@ -938,6 +939,9 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 			}
 #endif
 /** @todo - surely a DMAD leak if multiple elements in chain? */
+			if (dmc0.pbc_client){
+				dmc0.pbc_client(pbc);
+			}
 			pbuf = pbc->the_chain[pbc->fifo_to_local];
 			pbc->the_chain[pbc->fifo_to_local] = 0;
 			rb_put(&IPC->endstops, &pbc->desc);
@@ -4201,6 +4205,11 @@ int acq200_bits(void)
 }
 #endif
 
+void acq200_registerPrebuiltClient(void (* client)(struct PrebuiltChain* pbc))
+{
+	dmc0.pbc_client = client;
+}
+
 EXPORT_SYMBOL_GPL(enable_acq);
 EXPORT_SYMBOL_GPL(disable_acq);
 EXPORT_SYMBOL_GPL(acq200_check_entire_es);
@@ -4219,6 +4228,7 @@ EXPORT_SYMBOL_GPL(acq200_del_end_of_shot_hook);
 EXPORT_SYMBOL_GPL(acq200_add_ext_phase_handler);
 EXPORT_SYMBOL_GPL(acq200_del_ext_phase_handler);
 EXPORT_SYMBOL_GPL(acq200_stateListenerMakeStatecode);
+EXPORT_SYMBOL_GPL(acq200_registerPrebuiltClient);
 
 
 EXPORT_SYMBOL_GPL(DMC_WO);

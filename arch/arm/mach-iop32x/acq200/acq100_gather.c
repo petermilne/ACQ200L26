@@ -59,23 +59,33 @@
 #define MAXCHAIN	(MAXDEV+4)
 #include "acq200-inline-dma.h"
 
-
-
-extern int control_block;
-extern int control_numblocks;
-
-extern struct proc_dir_entry* proc_acq200;
+#define EXCLUDE_PBC_INLINES
+#include "prebuiltChainUtils.h"
 
 
 int caplen = (3*96*sizeof(short));	/* actual capture length to copy */
 module_param(caplen, int, 0644);
 MODULE_PARM_DESC(caplen, "actual capture length bytes to copy");
 
+int dma_triggers;
+module_param(dma_triggers, int, 0644);
+MODULE_PARM_DESC(dma_triggers, "number of dma so far");
+
+int dma_yield;
+module_param(dma_yield, int, 0644);
+MODULE_PARM_DESC(dma_yield, "dma busy count");
+
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1001";
+char acq100_gather_driver_version[] = "B1002";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
+
+
+extern int control_block;
+extern int control_numblocks;
+
+extern struct proc_dir_entry* proc_acq200;
 
 
 
@@ -91,7 +101,7 @@ struct Globals {
 	struct Region dest;
 	int is;
 
-	struct DmaChannel** chains;	/* control_numblocks chains */
+	struct DmaChannel* chains;	/* control_numblocks chains */
 }
 	GL;
 
@@ -166,11 +176,10 @@ void make_chains(void)
 {
 	int chn;
 	GL.chains = kzalloc(
-		control_numblocks*sizeof(struct DmaChannel*), GFP_KERNEL);
+		control_numblocks*sizeof(struct DmaChannel), GFP_KERNEL);
 
 	for (chn = 0; chn < control_numblocks; ++chn){
-		GL.chains[chn] = kzalloc(sizeof(struct DmaChannel), GFP_KERNEL);
-		make_chain(GL.chains[chn], chn);
+		make_chain(&GL.chains[chn], chn);
 	}
 }
 
@@ -179,10 +188,8 @@ void free_chains(void)
 	int chn;
 
 	for (chn = 0; chn < control_numblocks; ++chn){
-		struct DmaChannel* dmac = GL.chains[chn];
-		GL.chains[chn] = 0;
+		struct DmaChannel* dmac = &GL.chains[chn];
 		dma_cleanup(dmac);
-		kfree(dmac);
 	}
 
 	kfree(GL.chains);
@@ -215,7 +222,7 @@ int proc_dump_chain(char *buf, char **start, off_t offset, int len,
 	if (eof){
 		*eof = 1;
 	}
-	return print_chain(GL.chains[(int)data], buf);
+	return print_chain(&GL.chains[(int)data], buf);
 }
 
 void create_proc_entries(void)
@@ -230,10 +237,30 @@ void create_proc_entries(void)
 			name, S_IRUGO, gather, proc_dump_chain,	(void*)ic);
 	}
 }
+
+#define IN_RANGE(xx, ll, rr) ((xx)>=(ll)&&(xx)<=(rr))
+
+void prebuiltChainHandler(struct PrebuiltChain* pbc)
+{
+	if (!IN_RANGE(pbc->iblock, 0, control_numblocks-1)){
+		err("pbc not in range .. discard");
+	}else{
+		int iblock = pbc->iblock;
+		u32 stat;
+
+		while (!DMA_DONE( GL.chains[iblock], stat)){
+			++dma_yield;
+			yield();
+		}
+		DMA_ARM(GL.chains[iblock]);
+		DMA_FIRE(GL.chains[iblock]);
+		++dma_triggers;
+	}
+}
+
 void hookup(void)
 {
-	info("STUB: WORKTODO");
-
+	acq200_registerPrebuiltClient(prebuiltChainHandler);
 }
 int acq100_gather_init_module(void)
 {

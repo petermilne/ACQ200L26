@@ -15,6 +15,7 @@ struct PrebuiltChain {
 		struct PrebuiltChain *_this, 
 		struct iop321_dma_desc* _new);
 	char id[MAXPREBUILT];
+	unsigned iblock;
 };
 
 
@@ -93,4 +94,5 @@ void prebuilt_insert_local_host_nodata(
 	struct iop321_dma_desc* _new);
 
 
+void acq200_registerPrebuiltClient(void (* client)(struct PrebuiltChain* pbc));
 #endif

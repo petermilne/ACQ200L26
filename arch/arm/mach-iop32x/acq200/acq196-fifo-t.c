@@ -114,6 +114,7 @@ static void _init_endstops_control_target(void)
 
 		/** this idents container of desc */
 		pbc->desc.clidat = pbc;
+		pbc->iblock = iblock;
 
 		MK_FIFO_TO_LOCAL(pbc, ichain);
 		MK_LOCAL_TO_LOCAL(pbc, ichain, control_pa(iblock));
