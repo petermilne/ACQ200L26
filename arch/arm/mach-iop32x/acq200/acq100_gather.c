@@ -44,12 +44,18 @@
 #include <linux/module.h>
 #endif
 
+#include "acq200-common.h"
+
 #include <asm-arm/arch-iop32x/iop321.h>
 #include <asm-arm/arch-iop32x/iop321-dma.h>
 #include "acq200-dmac.h"
 #include "acq200_debug.h"
 
 #include "acq200_hostdrv.h"
+
+/* from acq196-fifo-t.c */
+extern struct pci_mapping acq196t_t2;
+#define TSP(tx, block) ((tx).pa + (block)*sizeof(u32))
 
 #define MAXDEV	16		/* including self */
 
@@ -62,6 +68,7 @@
 #define EXCLUDE_PBC_INLINES
 #include "prebuiltChainUtils.h"
 
+#include "acq100_rtm_t.h"
 
 int caplen = (3*96*sizeof(short));	/* actual capture length to copy */
 module_param(caplen, int, 0644);
@@ -79,6 +86,10 @@ int dma_maxticks;
 module_param(dma_maxticks, int, 0644);
 MODULE_PARM_DESC(dma_maxticks, "max DMA wait (20nsec tick)");
 
+int target_rtm_t = 1;
+module_param(target_rtm_t, int, 0444);
+MODULE_PARM_DESC(target_rtm_t, "1: send data to RTM-T (else lbuf)");
+
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
@@ -90,6 +101,7 @@ extern int control_block;
 extern int control_numblocks;
 
 extern struct proc_dir_entry* proc_acq200;
+
 
 
 
@@ -149,16 +161,35 @@ void get_regions(void)
 
 	}		
 
-	/** @@todo dest is local .. want rtm-t */
-	addDest(*IOP321_IATVR2 + control_block * control_numblocks,
-		GL.is * control_block * control_numblocks, 
-		"local", DMA_DCR_MEM2MEM);
+	if (target_rtm_t){
+		addDest(RTMT_IOPFIFO_PA, 0x400, "rtm-t", DMA_DCR_MEM2MEM);
+	}else{
+		addDest(*IOP321_IATVR2 + control_block * control_numblocks,
+			GL.is * control_block * control_numblocks, 
+			"local", DMA_DCR_MEM2MEM);
+	}
 }
 
+
+void append_timestamper(struct DmaChannel* dmac, int cblock)
+{
+	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+	
+	dmad->MM_SRC = IOP321_REG_PA(IOP321_GTSR);
+	dmad->PUAD = 0;
+	dmad->MM_DST = TSP(acq196t_t2, cblock);
+	dmad->BC = sizeof(u32);
+	dmad->DC = DMA_DCR_MEM2MEM;
+	dma_append_chain(dmac, dmad, "t2");
+}
 void make_chain(struct DmaChannel* dmac, int cblock)
 {
 	int isrc;
-	u32 lad = GL.dest.pa + cblock*GL.is*caplen;
+	u32 lad = GL.dest.pa;
+
+	if (!target_rtm_t){
+		lad += cblock*GL.is*caplen;
+	}
 
 	dmac->regs = IOP321_DMA1_CCR;
 	dmac->id = 1;
@@ -174,6 +205,8 @@ void make_chain(struct DmaChannel* dmac, int cblock)
 		dmad->DC = region->dc;
 		dma_append_chain(dmac, dmad, region->name);
 	}
+
+	append_timestamper(dmac, cblock);
 }
 
 void make_chains(void)

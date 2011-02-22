@@ -24,6 +24,10 @@
 #define DIO_REG_TYPE (volatile u32*)
 #define RTMT_REG(offset) (DIO_REG_TYPE((unsigned)ACQ200_EXTERNIO+(offset)))
 
+#define RTMT_IOPFIFO_VA	 (DIO_REG_TYPE((unsigned)ACQ200_EXTERNIO+(0x1000)))
+#define RTMT_IOPFIFO_PA  (ACQ200_EXTERNIO_P+0x1000)
+
+#define RTMT_IOPFIFO_LEN	0x400	/* longest contiguous PBI block */
 
 
 /* {R: read, H: host write, Q: acQ write }	*/

@@ -1473,6 +1473,10 @@ static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 
 	self->flags = flags;
 
+#if defined (ACQ196T)
+# warning building ACQ196T low latency special 
+	wake_dmc0();
+#endif
 #if defined(ACQ216) || defined(ACQ196)
 #if defined(ACQ196)
 	if (!DG->slow_clock)

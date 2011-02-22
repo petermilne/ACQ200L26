@@ -10,6 +10,7 @@ static void init_control_target(void);
 #define ACQ196T
 #include "acq196-fifo.c"
 
+#include "acq100_rtm_t.h"
 #include "prebuiltChainUtils.h"
 
 int control_wanted = 0;
@@ -26,7 +27,17 @@ module_param(control_tbix, int, 0444);
 
 int control_numblocks = 0;
 module_param(control_numblocks, int, 0444);
+
+
+
 static struct pci_mapping control_target;
+static struct pci_mapping t0;		/* times at start */
+static struct pci_mapping t1;		/* times at end   */
+struct pci_mapping acq196t_t2;		/* times at end of chain 2 */
+#define t2 acq196t_t2
+
+#define TS(tx, block) (((u32*)((tx).va))[block])
+#define TSP(tx, block) ((tx).pa + (block)*sizeof(u32))
 
 struct PrebuiltChain* pb_chains;
 
@@ -55,6 +66,67 @@ static void fill_control_target(void)
 	control_numblocks = ib;
 }
 
+
+static void init_timestamps(struct pci_mapping* map)
+{
+	map->len = control_numblocks*sizeof(u32);
+	map->va = kzalloc(map->len, GFP_KERNEL);
+	
+	map->pa = dma_map_single(DG->dev, map->va, map->len, DMA_FROM_DEVICE);	
+}
+
+
+u32 getusecs(u32 t0, u32 t1)
+{
+	u32 usecs;
+
+	if (t1 > t0){
+		usecs = (t1 - t0)/50;
+		if (usecs > 100000){
+			usecs = 0;
+		}
+	}else{
+		usecs = 0;
+	}
+	return usecs;
+}
+
+int proc_dump_timing(char *buf, char **start, off_t offset, int len,
+                int* eof, void* data )
+{
+	int ib;
+	int nb = 0;
+	if (eof){
+		*eof = 1;
+	}
+	dma_sync_single_for_cpu(DG->dev, t0.pa, t0.len, DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(DG->dev, t1.pa, t1.len, DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(DG->dev, t2.pa, t2.len, DMA_FROM_DEVICE);
+
+	for (ib = 0; ib < control_numblocks; ++ib){
+		unsigned gtsr0 = TS(t0, ib);
+		unsigned gtsr1 = TS(t1, ib);
+		unsigned gtsr2 = TS(t2, ib);
+
+		nb += snprintf(buf+nb, len - nb, 
+			"[%02d] %08x %08x %08x %d %d usecs\n",
+			       ib, gtsr0, gtsr1, gtsr2, 
+			       getusecs(gtsr0, gtsr1),
+			       getusecs(gtsr0, gtsr2));
+		if (len - nb == 0){
+			break;
+		}		
+	}
+
+	return nb;
+}
+
+
+static void acq196_t_create_proc_entries(void)
+{
+	create_proc_read_entry(
+		"fifo-t-timing",  S_IRUGO, proc_acq200, proc_dump_timing, 0);
+}
 static void init_control_target(void)
 {
 	TBLE* control_mem = acq200_reserveFreeTblock();
@@ -62,18 +134,26 @@ static void init_control_target(void)
 	void *va_block = VA_TBLOCK(control_mem->tblock);
 	u32 pa_block = PA_TBLOCK(control_mem->tblock);
 
+	control_numblocks = control_size/control_block;
+
 	assert(control_mem != 0);
 
 	control_target.len = control_size;
 	control_target.pa = (pa_block + control_size-1) & mask;
-	control_target.va = (void*)((u32)(va_block + control_size-1) & mask);
+	control_target.va = 
+		(void*)((u32)(va_block + control_size-1) & mask);
 	control_tbix = control_mem->tblock->iblock;
+	fill_control_target();
 
 	*IOP321_IALR2 = mask;
-	*IOP321_IATVR2 = control_target.pa;
+	*IOP321_IATVR2 = pa_block;
 
 	info("IATVR2:0x%08x IALR2:0x%08x", *IOP321_IATVR2, *IOP321_IALR2);
-	fill_control_target();
+
+	init_timestamps(&t0);
+	init_timestamps(&t1);
+	init_timestamps(&t2);
+	acq196_t_create_proc_entries();	
 }
 
 
@@ -115,10 +195,12 @@ static void _init_endstops_control_target(void)
 		/** this idents container of desc */
 		pbc->desc.clidat = pbc;
 		pbc->iblock = iblock;
-
+		
+		MK_GTSR_SNAP(pbc, ichain, TSP(t0, iblock));
 		MK_FIFO_TO_LOCAL(pbc, ichain);
 		MK_LOCAL_TO_LOCAL(pbc, ichain, control_pa(iblock));
 		MK_ENDSTOP(pbc, ichain, endstop);
+
 		pbc->length = ichain;
 		pbc->insert = prebuilt_insert_local;
 		rb_put(&IPC->endstops, &pbc->desc);			
@@ -140,5 +222,6 @@ static void init_endstops_control_target(void)
 	}
 }
 
+EXPORT_SYMBOL_GPL(acq196t_t2);
 EXPORT_SYMBOL_GPL(control_block);
 EXPORT_SYMBOL_GPL(control_numblocks);

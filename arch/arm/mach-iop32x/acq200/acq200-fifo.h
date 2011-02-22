@@ -22,6 +22,7 @@
 #ifndef __ACQ200_FIFO_H__
 #define __ACQ200_FIFO_H__
 
+#include "acq200-common.h"
 
 #define FIQDEBUG 0
 #define ACQ200_FIFO_H_VERSION 5
@@ -457,11 +458,6 @@ void acq200_transform_destroy(void);
 
 #define CDOG_MAX_JIFFIES  500   /* 5secs 1k/64bytes = 16 => 4Hz min rate */
 
-struct pci_mapping {
-	int len;
-	unsigned pa;
-	void* va;
-};
 
 
 struct ArgBlock {

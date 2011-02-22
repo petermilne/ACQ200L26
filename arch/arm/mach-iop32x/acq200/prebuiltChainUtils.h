@@ -52,6 +52,20 @@ static inline void mk_fifo_to_local(
 	pbc->id[ichain] = 'F';
 }
 
+static inline void mk_gtsr_to_local(
+	struct PrebuiltChain *pbc, 
+	int ichain, 
+	u32 pa)
+{
+	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+	mk_link(pbc, ichain, dmad, 'G');
+
+	dmad->MM_SRC = IOP321_REG_PA(IOP321_GTSR);
+	dmad->PUAD = 0;
+	dmad->MM_DST = pa;
+	dmad->BC = sizeof(u32);
+	dmad->DC = DMA_DCR_MEM2MEM;
+}
 static inline void mk_local_to_local(
 	struct PrebuiltChain *pbc, 
 	int ichain, 
@@ -67,6 +81,7 @@ static inline void mk_local_to_local(
 	dmad->BC = DMA_BLOCK_LEN;
 	dmad->DC = DMA_DCR_MEM2MEM;	
 }
+
 static inline void mk_endstop(
 	struct PrebuiltChain *pbc, int ichain, 
 	struct iop321_dma_desc* endstop)
@@ -74,10 +89,11 @@ static inline void mk_endstop(
 	mk_link(pbc, ichain, endstop, 'E');
 }
 
-
-#define MK_FIFO_TO_LOCAL(pbc, ichain)		mk_fifo_to_local(pbc, ichain++)
-#define MK_LOCAL_TO_LOCAL(pbc, ichain, pa) mk_local_to_local(pbc, ichain++, pa)
-#define MK_ENDSTOP(pbc, ichain, es)		mk_endstop(pbc, ichain++, es)
+#define MK_GTSR_SNAP(pbc, ichain, pa)	mk_gtsr_to_local(pbc, ichain++, pa);
+#define MK_FIFO_TO_LOCAL(pbc, ichain)	mk_fifo_to_local(pbc, ichain++)
+#define MK_LOCAL_TO_LOCAL(pbc, ichain, pa) \
+					mk_local_to_local(pbc, ichain++, pa)
+#define MK_ENDSTOP(pbc, ichain, es)	mk_endstop(pbc, ichain++, es)
 
 #endif
 
