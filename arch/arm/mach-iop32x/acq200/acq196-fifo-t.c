@@ -130,6 +130,7 @@ static void acq196_t_create_proc_entries(void)
 static void init_control_target(void)
 {
 	TBLE* control_mem = acq200_reserveFreeTblock();
+	/* round it all up to the nearest control_size boundary */
 	u32 mask = ~(control_size-1);
 	void *va_block = VA_TBLOCK(control_mem->tblock);
 	u32 pa_block = PA_TBLOCK(control_mem->tblock);
@@ -146,7 +147,7 @@ static void init_control_target(void)
 	fill_control_target();
 
 	*IOP321_IALR2 = mask;
-	*IOP321_IATVR2 = pa_block;
+	*IOP321_IATVR2 = control_target.pa;
 
 	info("IATVR2:0x%08x IALR2:0x%08x", *IOP321_IATVR2, *IOP321_IALR2);
 
