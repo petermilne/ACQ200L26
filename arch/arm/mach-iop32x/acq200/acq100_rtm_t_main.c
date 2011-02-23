@@ -36,15 +36,18 @@
 
 #include "acq100_rtm_t.h"
 
-#define REVID	"acq100_rtm_t B1001"
+#define REVID	"acq100_rtm_t B1002"
 
 int rtm_t_debug;
 module_param(rtm_t_debug, int , 0644);
 
+int rtm_t_masters_data = 1;
+module_param(rtm_t_masters_data, int, 0444);
+MODULE_PARM_DESC(rtm_t_masters_data, "1: normal RTM-T, 0: IOP push");
+
 
 static void __init acq100_redirect(void)
 {
-
 	struct resource mumem;
 
 	acq200_get_mumem_resource(&mumem);
@@ -52,8 +55,10 @@ static void __init acq100_redirect(void)
 	*ACQ196_SYSCON_DAC |= ACQ196_SYSCON_DAC_RTM_T;
 	info("set fifo.pa to %x, set SYSCON_DAC_RTM", DG->fpga.fifo.pa);
 }
+
 static void __exit acq100_restore(void)
 {
+
 	DG->fpga.fifo.pa = ACQ200_FPGA_P+ACQ196_FIFO_OFFSET;
 	*ACQ196_SYSCON_DAC &= ~ACQ196_SYSCON_DAC_RTM_T;
 	info("restore fifo.pa to %x", DG->fpga.fifo.pa);
@@ -93,12 +98,29 @@ MBOX_KNOB(Q2, RTMT_Q_MBOX2, S_IRUGO|S_IWUGO);
 MBOX_KNOB(H1, RTMT_H_MBOX1, S_IRUGO);
 MBOX_KNOB(H2, RTMT_H_MBOX2, S_IRUGO);
 
+static ssize_t show_cable_connected(
+	struct device * dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+	struct RTM_T_DEV* tdev = rtm_t_lookupDev(dev);
+	if (tdev){
+		return sprintf(buf, "%d\n", cable_is_connected(tdev));
+	}else{
+		return -ENODEV;
+	}
+}
+
+static DEVICE_ATTR(cable_connected, S_IRUGO, show_cable_connected, 0);
+  
 static void mk_rtm_t_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxQ1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxQ2);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxH1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxH2);
+
+	DEVICE_CREATE_FILE(dev, &dev_attr_cable_connected);	
 }
 
 static inline int is_magic(u32 mtest)
@@ -162,7 +184,9 @@ static int rtm_t_probe(struct device *dev)
 	}
 	rc = rtm_t_spi_master_init(dev);
 
-	acq100_redirect();
+	if (rtm_t_masters_data){
+		acq100_redirect();
+	}
 	return rc;
 
 uart_fail:
@@ -174,6 +198,9 @@ uart_fail:
 static void rtm_t_dev_release(struct device * dev)
 {
 	info("");
+	if (rtm_t_masters_data){
+		acq100_restore();
+	}
 }
 
 static int rtm_t_remove(struct device *dev)
@@ -236,7 +263,7 @@ acq100_rtm_t_exit_module(void)
 {
 	platform_device_unregister(&rtm_t_device);
 	driver_unregister(&rtm_t_driver);
-	acq100_restore();
+
 }
 
 module_init(acq100_rtm_t_init);

@@ -346,6 +346,24 @@ static inline int cable_is_connected(struct RTM_T_DEV *tdev)
 int /* __devinit */ rtm_t_uart_init(struct pci_dev *pci_dev, void *mapping);
 void /* __devexit */ rtm_t_uart_remove(struct pci_dev *pci_dev);
 
+static inline int rtm_t_request_dual(void)
+{
+	int pollcat = 0;
+
+	while (pollcat++ < 10){
+		*RTMT_REG(RTMT_D_FCR) |= RTMT_D_FCR_WANTIT;
+		if ((*RTMT_REG(RTMT_D_FCR)&RTMT_D_FCR_HASIT) == 0){
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
+static inline void rtm_t_relinquish_dual(void)
+{
+	*RTMT_REG(RTMT_D_FCR) &= ~RTMT_D_FCR_WANTIT;	
+}
 #define FPGA_ID	0		/* S6 unique ID TBA */
 
 #endif /* __RTM_T_H__ */
