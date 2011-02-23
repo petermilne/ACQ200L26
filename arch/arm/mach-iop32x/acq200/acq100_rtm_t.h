@@ -34,7 +34,24 @@
 
 #define RTMT_REG_REVID_SIG	0xaa010000 /* {R} */
 
+static inline int rtm_t_request_dual(void)
+{
+	int pollcat = 0;
 
+	while (pollcat++ < 10){
+		*RTMT_REG(RTMT_D_FCR) |= RTMT_D_FCR_WANTIT;
+		if ((*RTMT_REG(RTMT_D_FCR)&RTMT_D_FCR_HASIT) == 0){
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
+static inline void rtm_t_relinquish_dual(void)
+{
+	*RTMT_REG(RTMT_D_FCR) &= ~RTMT_D_FCR_WANTIT;	
+}
 
 
 
