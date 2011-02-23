@@ -115,6 +115,7 @@ struct Region {
 struct Globals {
 	struct Region sources[MAXDEV];
 	struct Region dest;
+	struct pci_mapping padding;
 	int is;
 
 	struct DmaChannel* chains;	/* control_numblocks chains */
@@ -167,10 +168,41 @@ void get_regions(void)
 		addDest(*IOP321_IATVR2 + control_block * control_numblocks,
 			GL.is * control_block * control_numblocks, 
 			"local", DMA_DCR_MEM2MEM);
-	}
+	}	
 }
 
 
+void append_padding_limit(struct DmaChannel* dmac, int cblock, int nbytes)
+{
+/** target_rtm_t==0 case isn't quite right, but it's not important */
+	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+
+	dmad->MM_SRC = GL.padding.pa;
+	dmad->PUAD = 0;
+	dmad->MM_DST =	GL.dest.pa;
+	dmad->BC = nbytes;
+	dmad->DC = DMA_DCR_MEM2MEM;
+	dma_append_chain(dmac, dmad, "pad");
+}
+void append_padding(struct DmaChannel* dmac, int cblock, int nbytes)
+{
+	int nb = 0;
+
+	GL.padding.len = min(nbytes, 0x400);
+	GL.padding.va = kmalloc(GL.padding.len, GFP_KERNEL);
+	GL.padding.pa = dma_map_single(
+		0, GL.padding.va, GL.padding.len, DMA_TO_DEVICE);
+	
+	memset(GL.padding.va, 0x99, GL.padding.len);
+	dma_sync_single_for_device(
+		0, GL.padding.pa, GL.padding.len, DMA_TO_DEVICE);
+
+	while (nb < nbytes){
+		int max1k = min(nbytes-nb, 0x400);
+		append_padding_limit(dmac, cblock, max1k);
+		nb += max1k;
+	} 
+}
 void append_timestamper(struct DmaChannel* dmac, int cblock)
 {
 	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
@@ -182,10 +214,22 @@ void append_timestamper(struct DmaChannel* dmac, int cblock)
 	dmad->DC = DMA_DCR_MEM2MEM;
 	dma_append_chain(dmac, dmad, "t2");
 }
+
+int next_power2(int nbytes)
+{
+	int cursor = 0x1;
+
+	for ( ; cursor < nbytes; cursor <<= 1){
+		;
+	}
+	return cursor;
+}
+
 void make_chain(struct DmaChannel* dmac, int cblock)
 {
 	int isrc;
 	u32 lad = GL.dest.pa;
+	int nbytes = 0;
 
 	if (!target_rtm_t){
 		lad += cblock*GL.is*caplen;
@@ -204,8 +248,10 @@ void make_chain(struct DmaChannel* dmac, int cblock)
 		dmad->BC = caplen;
 		dmad->DC = region->dc;
 		dma_append_chain(dmac, dmad, region->name);
+		nbytes += caplen;
 	}
 
+	append_padding(dmac, cblock, next_power2(nbytes) - nbytes);
 	append_timestamper(dmac, cblock);
 }
 
@@ -324,7 +370,8 @@ int acq100_gather_init_module(void)
 }
 
 void acq100_gather_exit_module(void)
-{
+{       
+	if (GL.padding.va) kfree(GL.padding.va);	
 	free_chains();
 }
 
