@@ -103,12 +103,8 @@ static ssize_t show_cable_connected(
 	struct device_attribute *attr,
 	char * buf)
 {
-	struct RTM_T_DEV* tdev = rtm_t_lookupDev(dev);
-	if (tdev){
-		return sprintf(buf, "%d\n", cable_is_connected(tdev));
-	}else{
-		return -ENODEV;
-	}
+	return sprintf(buf, "%d\n", 
+		       (*RTMT_REG(RTMT_D_FCR) & RTMT_D_FCR_PCIE_APP_RDY) == 0);
 }
 
 static DEVICE_ATTR(cable_connected, S_IRUGO, show_cable_connected, 0);
