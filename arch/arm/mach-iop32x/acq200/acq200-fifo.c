@@ -184,6 +184,10 @@ int tblock_len = _TBLOCK_LEN;
 module_param(tblock_len, int, 0444);
 MODULE_PARM_DESC(tblock_len, "length of tblock in bytes");
 
+int acq200_maxchan = MAXCHAN;
+module_param(acq200_maxchan, int, 0444);
+MODULE_PARM_DESC(acq200_maxchan, "maximum possible channels this arch");
+
 static char errbuf[128];
 
 static void preEnable(void);   /* call immediately BEFORE trigger en */
@@ -4213,6 +4217,7 @@ void acq200_registerPrebuiltClient(void (* client)(struct PrebuiltChain* pbc))
 {
 	dmc0.pbc_client = client;
 }
+
 
 EXPORT_SYMBOL_GPL(enable_acq);
 EXPORT_SYMBOL_GPL(disable_acq);

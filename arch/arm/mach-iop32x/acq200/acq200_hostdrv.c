@@ -47,6 +47,11 @@
 
 #include "acq200_hostdrv.h"
 
+
+int slots[MAXDEV] = { 0, };
+module_param_array(slots,int,NULL,0444);
+MODULE_PARM_DESC(slots, "maps logical device# to CPCI slot#");
+
 /** Globals .. keep to a minimum! */
 char acq200_driver_name[] = "acq200";
 char acq200__driver_string[] = "D-TACQ intelligent data acquisition device";
@@ -55,6 +60,8 @@ char acq200__copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 int idx;
 
 struct Acq200Device* acq200_devices[MAXDEV];
+
+struct class* acq200_device_class;
 
 #define PCI_BA_CSR  0 /* surely there's an official def ?? WORKTODO */
 #define CSR_SIZE    0x80
@@ -73,7 +80,16 @@ struct Acq200Device* acq200_lookupDevice(struct device *dev)
 	
 	return 0;
 }
+int acq200_get_cpci_slot(struct pci_dev * pci_dev)
+{
+	u32 devfn =  pci_dev->devfn;
+	int slot = -1;
 
+	if (devfn >= 72 && devfn <= 120){
+		slot = 9 - (devfn/8 -8);			
+	}
+	return slot;	
+}
 
 static int acq200_makeIoMapping(
 	struct Acq200Device* device, int bar, const char* ident, int len)
@@ -126,6 +142,8 @@ int acq200_map_pci_ram(struct Acq200Device* device)
 	return rc;
 }
 
+
+
 int acq200_map_pci_memory(struct Acq200Device* device)
 /**
  *  map remote regs area on device load
@@ -164,6 +182,8 @@ static int acq200_device_init(struct Acq200Device* device)
 {
 	return 0;
 }
+
+
 static struct Acq200Device *acq200_device_create(struct pci_dev *pci_dev)
 {
 	struct Acq200Device *device =
@@ -180,6 +200,9 @@ static struct Acq200Device *acq200_device_create(struct pci_dev *pci_dev)
 
 
 	acq200_map_pci_memory(device);
+
+	slots[device->idx] = acq200_get_cpci_slot(device->pci_dev);
+
 	return device;
 }
 static void acq200_device_free(struct Acq200Device *device)
@@ -239,6 +262,8 @@ static struct pci_driver acq200_driver = {
 static int __init acq200_init( void )
 {
 	int rc;
+	acq200_device_class = class_create(THIS_MODULE, "acqX00");
+
 	rc = pci_register_driver(&acq200_driver);
 	dbg(1, "pci_register_driver() returned %d", rc );
 	return 0;

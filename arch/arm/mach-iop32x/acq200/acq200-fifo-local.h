@@ -199,4 +199,5 @@ int acq200_clkCounterMonitor_requestedToStop(void);
 
 extern int (*acq132_set_special_lut)(unsigned mask);
 
+extern int acq200_maxchan;
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

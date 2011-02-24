@@ -651,7 +651,7 @@ extern void acq200_setChannelEnabled(int pchan, int enable)
 {
 	if (!cmap){
 		assert(get_nchan() != 0);
-		cmap = (unsigned char*)kzalloc(get_nchan(), GFP_KERNEL);
+		cmap = (unsigned char*)kzalloc(acq200_maxchan, GFP_KERNEL);
 		assert(cmap != 0);
 	}
 
