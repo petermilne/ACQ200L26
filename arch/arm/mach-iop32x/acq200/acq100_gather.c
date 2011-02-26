@@ -90,10 +90,14 @@ int target_rtm_t = 1;
 module_param(target_rtm_t, int, 0444);
 MODULE_PARM_DESC(target_rtm_t, "1: send data to RTM-T (else lbuf)");
 
+int init_ramp = 0;
+module_param(init_ramp, int, 0644);
+MODULE_PARM_DESC(init_ramp, "!=0 - initial data ramp (shorts) for id");
+
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1002";
+char acq100_gather_driver_version[] = "B1004";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 
 
@@ -101,9 +105,6 @@ extern int control_block;
 extern int control_numblocks;
 
 extern struct proc_dir_entry* proc_acq200;
-
-
-
 
 struct Region {
 	int len;
@@ -116,6 +117,7 @@ struct Globals {
 	struct Region sources[MAXDEV];
 	struct Region dest;
 	struct pci_mapping padding;
+	struct pci_mapping init_ramp;
 	int is;
 
 	struct DmaChannel* chains;	/* control_numblocks chains */
@@ -155,6 +157,9 @@ void get_regions(void)
 		if (device == 0){
 			break;
 		}
+		if (device->ram.pa == 0){
+			continue;	   /* non participating card */
+		}
 		addSource(device->ram.pa, device->ram.len, 
 			  device->ram.name, DMA_DCR_PCI_MR);
 		info("device %s pa: 0x%08lx len: %d",
@@ -171,38 +176,79 @@ void get_regions(void)
 	}	
 }
 
-
-void append_padding_limit(struct DmaChannel* dmac, int cblock, int nbytes)
+u32 dinc(u32 *dest_pa, int nbytes)
+/* target_rtm_t? => FIFO, dont incr, else debug, memory, want addr incr */
+{
+	u32 pa = *dest_pa;
+	if (target_rtm_t == 0){
+		*dest_pa += nbytes;	/* *dest_pa NOT a point, OK to add */
+	}
+	return pa;	
+}
+void append_padding_limit(
+	struct DmaChannel* dmac, int cblock, int nbytes, u32 *dest_pa)
 {
 /** target_rtm_t==0 case isn't quite right, but it's not important */
 	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
 
 	dmad->MM_SRC = GL.padding.pa;
 	dmad->PUAD = 0;
-	dmad->MM_DST =	GL.dest.pa;
+	dmad->MM_DST =	dinc(dest_pa, nbytes);
 	dmad->BC = nbytes;
 	dmad->DC = DMA_DCR_MEM2MEM;
 	dma_append_chain(dmac, dmad, "pad");
 }
-void append_padding(struct DmaChannel* dmac, int cblock, int nbytes)
+
+void make_ramp(struct pci_mapping* map, int len, u16 key)
+{
+	int iramp;
+	short *the_ramp;
+
+	map->len = len;
+	map->va = kmalloc(map->len, GFP_KERNEL);
+	map->pa = dma_map_single(0, map->va, map->len, DMA_TO_DEVICE);
+
+	the_ramp = (short*)map->va;
+
+	for (iramp = 0; iramp != len/2; ++iramp){
+		the_ramp[iramp] = key|iramp;		
+	}
+
+	dma_sync_single_for_device(0, map->pa, map->len, DMA_TO_DEVICE);
+
+}
+int insert_ramp(struct DmaChannel* dmac, u32* dest_pa)
+{
+	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+
+	make_ramp(&GL.init_ramp, init_ramp*sizeof(short), 0x1000);
+
+	dmad->MM_SRC = GL.init_ramp.pa;
+	dmad->PUAD = 0;
+	dmad->MM_DST = dinc(dest_pa, GL.init_ramp.len);
+	dmad->BC = GL.init_ramp.len;
+	dmad->DC = DMA_DCR_MEM2MEM;
+	dma_append_chain(dmac, dmad, "ramp");	
+
+	return GL.init_ramp.len;
+}
+
+
+void append_padding(
+	struct DmaChannel* dmac, int cblock, int nbytes, u32 *dest_pa)
 {
 	int nb = 0;
 
-	GL.padding.len = min(nbytes, 0x400);
-	GL.padding.va = kmalloc(GL.padding.len, GFP_KERNEL);
-	GL.padding.pa = dma_map_single(
-		0, GL.padding.va, GL.padding.len, DMA_TO_DEVICE);
-	
-	memset(GL.padding.va, 0x99, GL.padding.len);
-	dma_sync_single_for_device(
-		0, GL.padding.pa, GL.padding.len, DMA_TO_DEVICE);
+	make_ramp(&GL.padding, min(nbytes, 0x400), 0x9000);
 
 	while (nb < nbytes){
-		int max1k = min(nbytes-nb, 0x400);
-		append_padding_limit(dmac, cblock, max1k);
-		nb += max1k;
+		int maxdma = min(nbytes-nb, 0x400);
+		append_padding_limit(dmac, cblock, maxdma, dest_pa);
+		nb += maxdma;
 	} 
 }
+
+
 void append_timestamper(struct DmaChannel* dmac, int cblock)
 {
 	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
@@ -225,45 +271,48 @@ int next_power2(int nbytes)
 	return cursor;
 }
 
-void make_chain(struct DmaChannel* dmac, int cblock)
+
+void make_chain(struct DmaChannel* dmac, int cblock, u32 *dest_pa)
 {
 	int isrc;
-	u32 lad = GL.dest.pa;
 	int nbytes = 0;
-
-	if (!target_rtm_t){
-		lad += cblock*GL.is*caplen;
-	}
 
 	dmac->regs = IOP321_DMA1_CCR;
 	dmac->id = 1;
 
-	for (isrc = 0; isrc < GL.is; ++isrc, lad += caplen){
+	if (init_ramp > 0){
+		nbytes += insert_ramp(dmac, dest_pa);
+	}
+	for (isrc = 0; isrc < GL.is; ++isrc){
 		struct iop321_dma_desc* dmad = acq200_dmad_alloc();
 		struct Region *region = &GL.sources[isrc];
 		dmad->NDA = 0;
 		dmad->PDA = region->pa + cblock*control_block;
 		dmad->PUAD = 0;
-		dmad->LAD = lad;
+		dmad->LAD = dinc(dest_pa, caplen);
 		dmad->BC = caplen;
 		dmad->DC = region->dc;
 		dma_append_chain(dmac, dmad, region->name);
 		nbytes += caplen;
 	}
 
-	append_padding(dmac, cblock, next_power2(nbytes) - nbytes);
+	append_padding(dmac, cblock, next_power2(nbytes) - nbytes, dest_pa);
 	append_timestamper(dmac, cblock);
 }
 
 void make_chains(void)
 {
 	int chn;
+	u32 dest_pa = GL.dest.pa;
+
 	GL.chains = kzalloc(
 		control_numblocks*sizeof(struct DmaChannel), GFP_KERNEL);
 
 	for (chn = 0; chn < control_numblocks; ++chn){
-		make_chain(&GL.chains[chn], chn);
+		make_chain(&GL.chains[chn], chn, &dest_pa);
 	}
+	info("sizeof of block: %d, total memory size: %d",
+	     (dest_pa - GL.dest.pa)/control_numblocks, dest_pa - GL.dest.pa);
 }
 
 void free_chains(void)
@@ -372,6 +421,7 @@ int acq100_gather_init_module(void)
 void acq100_gather_exit_module(void)
 {       
 	if (GL.padding.va) kfree(GL.padding.va);	
+	if (GL.init_ramp.va) kfree(GL.init_ramp.va);
 	free_chains();
 }
 
