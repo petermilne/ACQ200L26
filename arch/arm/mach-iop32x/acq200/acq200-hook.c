@@ -108,6 +108,7 @@ int store_hook(struct ArgBlock *argBlock, const char* buf, int count)
 {
 	char *base;
 	int argc = 0;
+	int lc = count;
 
 	if (argBlock->base == 0){
 		argBlock->base = kmalloc(PAGE_SIZE, GFP_KERNEL);
@@ -120,14 +121,14 @@ int store_hook(struct ArgBlock *argBlock, const char* buf, int count)
 	}
 #define RUMP (PAGE_SIZE - (MAXARGS*sizeof(char **)) -1)
 
-	count = min((unsigned long)count, RUMP);
-	count = min((size_t)count, strlen(buf));
+	lc = min((unsigned long)lc, RUMP);
+	lc = min((size_t)lc, strlen(buf));
 
-	memcpy(base = (char*)&argBlock->argv[MAXARGS], buf, count);
-	while (count > 1 && base[count-1] == '\n'){
-		--count;
+	memcpy(base = (char*)&argBlock->argv[MAXARGS], buf, lc);
+	while (lc > 1 && base[lc-1] == '\n'){
+		--lc;
 	}
-	base[count] = '\0';
+	base[lc] = '\0';
 	
 	for (argc = 0; argc < MAXARGS &&
 		     ((argBlock->argv[argc] = strsep(&base, " ")) != NULL); 

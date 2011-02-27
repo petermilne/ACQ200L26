@@ -104,8 +104,6 @@ extern struct file_operations acq132_gate_pulse_ops;
 
 static void acq132_mach_on_set_mode(struct CAPDEF* capdef);
 
-#define DTACQ_MACH_DRIVER_INIT(dev)
-#define DTACQ_MACH_DRIVER_REMOVE(dev)
 #define DTACQ_MACH_ON_SET_MODE(capdef) acq132_mach_on_set_mode(capdef)
 
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */

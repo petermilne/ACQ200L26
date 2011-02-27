@@ -111,8 +111,6 @@ void acq164_set_obclock(int FDW, int RDW, int R, int Sx);
 
 static void acq164_mach_on_set_mode(struct CAPDEF* capdef);
 
-#define DTACQ_MACH_DRIVER_INIT(dev)
-#define DTACQ_MACH_DRIVER_REMOVE(dev)
 #define DTACQ_MACH_ON_SET_MODE(capdef) acq164_mach_on_set_mode(capdef)
 
 static void init_endstops( int count );   /* @@todo SHOULD BE IN HEADER */
@@ -1018,6 +1016,7 @@ static void acq164_set_defaults(void)
 {
 	info("setIntClkHz %d", ACQ164_BEST_CLK);
 	acq200_setIntClkHz(ACQ164_BEST_CLK);
+	*ACQ164_SYSCON |= ACQ164_SYSCON_CLKDIV;
 }
 
 

@@ -39,6 +39,7 @@
 #include "acq200-fifo-top.h"
 #include "acq200-fifo-local.h"
 
+#include "prebuiltChainUtils.h"
 
 #define AICHAN_DEFAULT 16
 
@@ -107,7 +108,6 @@ static void acq216_event_adjust(
 #define DTACQ_MACH_DESTROY_CAPDEF acq216_destroyCapdef
 #define DTACQ_MACH_DRIVER_INIT(dev) acq216_driverInit(dev)
 #define DTACQ_MACH_DRIVER_REMOVE(dev) acq216_driverRemove(dev)
-#define DTACQ_MACH_ON_SET_MODE(mode)
 
 #undef DTACQ_MACH_EVENT_ADJUST
 #define DTACQ_MACH_EVENT_ADJUST(phase, isearch, first, last) \
@@ -890,31 +890,18 @@ static u32 getStatusPA(void) {
 	return target;
 }
 
-static inline void mk_link(
-	struct PrebuiltChain *pbc, int ichain,
-	struct iop321_dma_desc *dmad
-	)
-{
-	if (ichain && pbc->the_chain[ichain-1]){
-		pbc->the_chain[ichain-1]->NDA = dmad->pa;
-	}
-	dmad->clidat = pbc;
-}
 
 static inline void mk_tlatch_to_local(
 	struct PrebuiltChain *pbc, int ichain)
 {
 	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 
-	mk_link(pbc, ichain, dmad);
-	pbc->the_chain[ichain] = dmad;
+	mk_link(pbc, ichain, dmad, 'T');
 	dmad->PDA = CAPCOM_PDA + 0x8;    /** TLATCH only */
 	dmad->PUAD = 0;
 	dmad->LAD = S_pbstore.capcom_scratchpad.pa;
 	dmad->BC  = 8;
 	dmad->DC = DMA_DCR_FROMDEVICE;
-
-	pbc->id[ichain] = 'T';
 }
 
 
@@ -923,8 +910,7 @@ static inline void mk_capcom_to_local(
 {
 	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
 
-	mk_link(pbc, ichain, dmad);
-	pbc->the_chain[ichain] = dmad;	
+	mk_link(pbc, ichain, dmad, 'x');
 	switch(cd_short_tlatch){
 	case 3:
 		/** read the host by way of a test */
@@ -947,25 +933,15 @@ static inline void mk_capcom_to_local(
 	dmad->LAD = S_pbstore.capcom_scratchpad.pa;
 	dmad->BC  = CAPCOM_LENGTH;
 	dmad->DC = DMA_DCR_FROMDEVICE;
-
-
 }
 
 
-static inline void mk_fifo_to_local(
-	struct PrebuiltChain *pbc, int ichain)
-{
-	pbc->fifo_to_local = ichain;   /* dmad provided later */
-	pbc->the_chain[ichain] = 0;
-
-	pbc->id[ichain] = 'F';
-}
 
 static inline void mk_local_to_host(
 	struct PrebuiltChain *pbc, int ichain, int iblock)
 {
 	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
-	mk_link(pbc, ichain, dmad);
+	mk_link(pbc, ichain, dmad, 'H');
 	pbc->local_to_host = ichain;
 	
 	dmad->PDA = acq216_pci2bus(getDataPA() + iblock*DMA_BLOCK_LEN);
@@ -974,42 +950,30 @@ static inline void mk_local_to_host(
 	dmad->BC  = DMA_BLOCK_LEN;
 //	dmad->DC  = DMA_DCR_TODEVICE+IOP321_DCR_IE; /** count EOT ints. */
 	dmad->DC  = DMA_DCR_TODEVICE;
-
-	pbc->the_chain[ichain] = dmad;
-
-	pbc->id[ichain] = 'H';
 }
 
 static inline void mk_capcom_test_block(struct PrebuiltChain *pbc, int ichain)
 {
 	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
-	mk_link(pbc, ichain, dmad);
+	mk_link(pbc, ichain, dmad, 'G');
 	
 	dmad->PDA = IOP321_REG_PA(IOP321_GTSR);
 	dmad->PUAD = 0;
 	dmad->LAD = S_pbstore.capcom_scratchpad.pa+CAPCOM_LENGTH;
 	dmad->BC = 4;
 	dmad->DC = DMA_DCR_MEM2MEM;
-
-	pbc->the_chain[ichain] = dmad;	
-
-	pbc->id[ichain] = 'G';
 }
 static inline void mk_capcom_to_host(
 	struct PrebuiltChain *pbc, int ichain)
 {
 	struct iop321_dma_desc *dmad = acq200_dmad_alloc();
-	mk_link(pbc, ichain, dmad);
+	mk_link(pbc, ichain, dmad, 'h');
 	
 	dmad->PDA = acq216_pci2bus(getStatusPA());
 	dmad->PUAD = 0;
 	dmad->LAD = S_pbstore.capcom_scratchpad.pa;
 	dmad->BC = CAPCOM_LENGTH+8;
 	dmad->DC = DMA_DCR_TODEVICE;
-
-	pbc->the_chain[ichain] = dmad;
-
-	pbc->id[ichain] = 'h';
 }
 
 
@@ -1020,15 +984,6 @@ static inline void mk_iodd(struct PrebuiltChain *pbc, int ichain)
 }
 
 
-static inline void mk_endstop(
-	struct PrebuiltChain *pbc, int ichain, 
-	struct iop321_dma_desc* endstop)
-{
-	mk_link(pbc, ichain, endstop);
-	pbc->the_chain[ichain] = endstop;
-
-	pbc->id[ichain] = 'E';	
-}
 
 #define MK_CAPCOM_TO_LOCAL(pbc, ichain)				\
 	if (!cdm_capcom_to_local){				\
@@ -1039,7 +994,6 @@ static inline void mk_endstop(
 		}						\
 	}
 
-#define MK_FIFO_TO_LOCAL(pbc, ichain) mk_fifo_to_local(pbc, ichain++)
 
 #define MK_LOCAL_TO_HOST(pbc, ichain, iblock) \
 	if (!cdm_local_to_host){ mk_local_to_host(pbc, ichain++, iblock); }
@@ -1051,7 +1005,6 @@ static inline void mk_endstop(
 #define MK_CAPCOM_TO_HOST(pbc, ichain) \
 	if (!cdm_capcom_host) { mk_capcom_to_host(pbc, ichain++); }
 
-#define MK_ENDSTOP(pbc, ichain, es)     mk_endstop(pbc, ichain++, es)
 #define MK_IODD(pbc, ichain)            info("WORKTODO");
 
 #define CAPCOM_TO_HOST_ENABLED (DMC_WO->control_target.pa_status != 0)
@@ -1059,65 +1012,8 @@ static inline void mk_endstop(
 	(DMC_WO->control_target.pa_data != 0  && !cdm_local_to_host)
 
 
-static void prebuilt_insert_local (
-	struct PrebuiltChain *_this, 
-	struct iop321_dma_desc* _new)
-{
-	int ilocal = _this->fifo_to_local;
-	mk_link(_this, ilocal, _new);
-	_this->the_chain[ilocal] = _new;
-	_new->NDA = _this->the_chain[ilocal+1]->pa;	
-	_new->clidat = _this;                 /* id we are part of a pbc now */
-}
-
-static void prebuilt_insert_local_host(
-	struct PrebuiltChain *_this, 
-	struct iop321_dma_desc* _new)
-{
-	int ilocal = _this->fifo_to_local;
-	mk_link(_this, ilocal, _new);
-	_this->the_chain[ilocal] = _new;
-	_new->NDA = _this->the_chain[ilocal+1]->pa;
-	_this->the_chain[ _this->local_to_host]->LAD = _new->LAD;
-	_new->clidat = _this;                 /* id we are part of a pbc now */
-}
-
-static void prebuilt_insert_local_host_nodata(
-	struct PrebuiltChain *_this, 
-	struct iop321_dma_desc* _new)
-{
-	int ilocal = _this->fifo_to_local;
-	mk_link(_this, ilocal, _new);
-	_this->the_chain[ilocal] = _new;
-	_new->NDA = _this->the_chain[ilocal+1]->pa;
-	_new->clidat = _this;                 /* id we are part of a pbc now */
-}
 
 
-
-const char* acq216_identifyInsert(void* fun)
-{
-#define FUNID(fun) { fun, #fun }
-	struct LUT {
-		void* fun;
-		const char* fname; 
-	} lut[] = {
-		FUNID(prebuilt_insert_local),
-		FUNID(prebuilt_insert_local_host),
-		FUNID(prebuilt_insert_local_host_nodata)
-	};
-#define NLUT (sizeof(lut)/sizeof(struct LUT))
-
-	int ilut;
-
-	for (ilut = 0; ilut != NLUT; ++ilut){
-		if (fun == lut[ilut].fun){
-			return lut[ilut].fname + strlen("prebuilt_insert_");
-		}
-	}
-
-	return "function not identified";
-}
 
 
 static void init_endstops_control_target(void)

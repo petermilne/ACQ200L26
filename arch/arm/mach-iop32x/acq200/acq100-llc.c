@@ -70,6 +70,13 @@
  * 
  *
  * - extensions: IODD may be applied.
+ * - IO_GAP : inserts a programmable GAP between AI and AO to allow an external
+ *	CPU to process Ai data and output to AO in the same cycle.
+ *	IO_GAP is tunable: 0: disabled, 1..TBLOCK_LEN (6M) delay
+ * - DO64_READBACK: insert lower 32 bits AO32#1 DO64 value into  VI
+ *      aim is to provide a tuning aid that enables a host program 
+ *	to confirm that the last VO made the cut on previous cycle
+ *   Value == 1 : use DMA, Value == 2 : use PIO
  */
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
@@ -157,8 +164,11 @@ module_param(sync2v_samples_per_cycle, int, 0644);
 #define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DI32]
 #endif
 #define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
-
+#define I_SCRATCH_DORB  ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DO64]
 #define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
+
+#define PA_SCRATCH(off_words) \
+	(DG->fpga.regs.pa + ACQ196_LL_AI_SCRATCH_OFF + off_words*sizeof(u32))
 
 module_param(acq100_llc_sync2V, int, 0664);
 
@@ -179,7 +189,7 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1075
+#define BUILD 1077
 #define _VERID(build) "$Revision: 1.24 $ build " #build
 
 #define VERID _VERID(BUILD)
@@ -326,6 +336,8 @@ static struct LlcDevGlobs {
 		} ao32;
 
 		unsigned alt_VI_target;
+		unsigned io_gap;
+		unsigned do64_readback;
 
 		struct WDT_CONTROL {
 			unsigned preset;
@@ -698,10 +710,6 @@ static void initAIdma_AO32(void)
  * THEN do the slaves ... this is going to be a LONG CHAIN
  */
 {
-	int ii;
-	int ao32_offset;	
-	struct iop321_dma_desc *ao_dmad;
-
 	struct iop321_dma_desc *tmp_dma = acq200_dmad_alloc();
 
 	dbg(1, "01");	
@@ -713,30 +721,48 @@ static void initAIdma_AO32(void)
 	tmp_dma->DC = DMA_DCR_PCI_MR;
 	dma_append_chain(&ai_dma, tmp_dma, "aotmp");
 
-	ao_dmad = acq200_dmad_alloc();
-
-	ao_dmad->NDA = 0;
-	ao_dmad->MM_SRC = dg.settings.ao32.tmp_pa;
-	ao_dmad->PUAD = dg.settings.PUAD;
-	ao_dmad->MM_DST = DG->fpga.fifo.pa;
-	ao_dmad->BC = AO_BC;
-	ao_dmad->DC = DMA_DCR_MEM2MEM;
-	dma_append_chain(&ai_dma, ao_dmad, "AO16");
-
-	for (ii = 0, ao32_offset = LLC_SYNC2V_AO32*sizeof(u32); 
-	     ii < dg.settings.ao32.count; ++ii, ao32_offset += AO32_VECLEN){
-
+	{
+		int ii;
+		int ao32_offset;	
+		struct iop321_dma_desc *ao_dmad;	
 		ao_dmad = acq200_dmad_alloc();
+
 		ao_dmad->NDA = 0;
-		ao_dmad->PDA = dg.settings.ao32.pa[ii];
+		ao_dmad->MM_SRC = dg.settings.ao32.tmp_pa;
 		ao_dmad->PUAD = dg.settings.PUAD;
-		ao_dmad->LAD = dg.settings.ao32.tmp_pa + ao32_offset;
-		ao_dmad->BC = AO32_VECLEN;
-		ao_dmad->DC = DMA_DCR_PCI_MW;
-		dma_append_chain(&ai_dma, ao_dmad, "AO32");
+		ao_dmad->MM_DST = DG->fpga.fifo.pa;
+		ao_dmad->BC = AO_BC;
+		ao_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, ao_dmad, "AO16");
+
+		for (ii = 0, ao32_offset = LLC_SYNC2V_AO32*sizeof(u32); 
+		     ii < dg.settings.ao32.count; ++ii, 
+					ao32_offset += AO32_VECLEN){
+
+			ao_dmad = acq200_dmad_alloc();
+			ao_dmad->NDA = 0;
+			ao_dmad->PDA = dg.settings.ao32.pa[ii];
+			ao_dmad->PUAD = dg.settings.PUAD;
+			ao_dmad->LAD = dg.settings.ao32.tmp_pa + ao32_offset;
+			ao_dmad->BC = AO32_VECLEN;
+			ao_dmad->DC = DMA_DCR_PCI_MW;
+			dma_append_chain(&ai_dma, ao_dmad, "AO32");
+		}
+		dbg(1, "75 slaves %d", ii);
+	}
+	if (dg.settings.do64_readback == 1){
+		struct iop321_dma_desc *do64_dmad = acq200_dmad_alloc();
+		do64_dmad->NDA = 0;
+		do64_dmad->MM_SRC = 
+			dg.settings.ao32.tmp_pa + AO32_VECLEN-sizeof(u32);
+		do64_dmad->PUAD = dg.settings.PUAD;
+		do64_dmad->MM_DST = PA_SCRATCH(LLC_SYNC2V_IN_DO64);
+		do64_dmad->BC = sizeof(u32);
+		do64_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, do64_dmad, "DORB");
 	}
 
-	dbg(1, "99 slaves %d", ii);
+	dbg(1, "99");
 }
 
 static void initAIdma_AltVI2(void)
@@ -1029,6 +1055,18 @@ static void llPreamble2V(void)
 			ai_dmad->DC = DMA_DCR_MEM2MEM;
 		}
 
+	}
+
+	if (dg.settings.io_gap){
+		/* kill time by copying local memory. pick two random tblocks */
+		struct iop321_dma_desc *gap_dmad = acq200_dmad_alloc();
+		gap_dmad->NDA = 0;
+		gap_dmad->PDA = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[5]);
+		gap_dmad->PUAD = dg.settings.PUAD;
+		gap_dmad->LAD = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[6]);
+		gap_dmad->BC = dg.settings.io_gap;
+		gap_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, gap_dmad, "AI");
 	}
 
 	if (dg.settings.AO_src){
@@ -1571,7 +1609,7 @@ static void llc_loop_sync2V(int entry_code)
  * - Check mailboxes
  * -Check for overrun
  *
-*/
+ */
 {
 	u32 csr = 0;
 	int decim_count = 1;
@@ -1605,7 +1643,7 @@ static void llc_loop_sync2V(int entry_code)
 /* we assume it doesn't matter if this stuff makes this transfer or not.. 
  * We set CLKDLY short to give time for something useful ..
  */
-	hot_start:
+		hot_start:
 			DMAC_GO(ai_dma, fifstat);
 			/* @critical ENDS */
 
@@ -1645,6 +1683,12 @@ static void llc_loop_sync2V(int entry_code)
 
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
 				setDO32(O_SCRATCH_DO32);
+			}
+			if (dg.settings.do64_readback == 2){
+				u32* va = (u32*)((void*)dg.settings.ao32.tmp+AO32_VECLEN);
+				unsigned pa = dg.settings.ao32.tmp_pa+AO32_VECLEN-sizeof(u32);
+				dma_sync_single_for_cpu(NULL, pa, sizeof(u32), DMA_FROM_DEVICE); 
+				I_SCRATCH_DORB = va[-1];
 			}
 
 			/** Interrupt on DMA DONE */
@@ -1747,7 +1791,7 @@ static void llc_loop_sync2V(int entry_code)
 		}
 	}
 
- quit:
+quit:
 	wdt_cleanup();
 
 	if (snack_on_quit){
@@ -1787,13 +1831,13 @@ onFifoNotEmpty: {
 
 		if (OVERRUN(fifstat)){
 			REPORT_ERROR(
-			"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
-			fifstat, fifstat2, tcycle);
+				"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
+				fifstat, fifstat2, tcycle);
 		}
 		if (AIFIFO_NOT_EMPTY(fifstat2)){
 			REPORT_ERROR(
-			"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
-			fifstat, fifstat2, tcycle);
+				"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
+				fifstat, fifstat2, tcycle);
 		}
 		goto quit;
 	}
@@ -1974,6 +2018,43 @@ static ssize_t show_iodd(
 }
 
 static DEVICE_ATTR(IODD, S_IWUGO|S_IRUGO, show_iodd, set_iodd);
+
+static ssize_t set_io_gap(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.io_gap);
+	return strlen(buf);
+}
+static ssize_t show_io_gap(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.io_gap);
+}
+
+static DEVICE_ATTR(IO_GAP, S_IWUGO|S_IRUGO, show_io_gap, set_io_gap);
+
+static ssize_t set_do64_readback(
+	struct device *dev, 
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.do64_readback);
+	return strlen(buf);
+}
+static ssize_t show_do64_readback(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.do64_readback);
+}
+
+static DEVICE_ATTR(DO64_READBACK, S_IWUGO|S_IRUGO, 
+	show_do64_readback, set_do64_readback);
 
 
 
@@ -2363,6 +2444,8 @@ static int mk_llc_sysfs(struct device *dev)
 
 	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trigger);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
+	DEVICE_CREATE_FILE(dev, &dev_attr_IO_GAP);
+	DEVICE_CREATE_FILE(dev, &dev_attr_DO64_READBACK);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
 	DEVICE_CREATE_FILE(dev, &dev_attr_alt_VI_target);
 	DEVICE_CREATE_FILE(dev, &dev_attr_wdt_bit);

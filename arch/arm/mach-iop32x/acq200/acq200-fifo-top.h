@@ -23,6 +23,8 @@
 
 #if defined ACQ196
 
+#define MAXCHAN	96
+
 #if defined ACQ196C
 /* pulls one 96 channel sample per DMA block */
 
@@ -41,10 +43,18 @@
 #warning DMA_BLOCK_LEN set to 64 for overlapped HAWG
 #define ISR_ADDS_ENDSTOP 1
 #elif defined(ACQ196F)
+/* OBSOLETE */
 #warning DMA_BLOCK_LEN set to 1024 for FIR
 #define DMA_BLOCK_LEN 1024
 /* #define DMA_BLOCK_LEN 1024 */
 #define ISR_ADDS_ENDSTOP 0
+
+#elif defined(ACQ196T)
+#warning "BUILDING ACQ196T"
+
+#define DMA_BLOCK_LEN	(96*2*4)
+#define ISR_ADDS_ENDSTOP 0
+
 #else
 #define DMA_BLOCK_LEN 1024
 #define ISR_ADDS_ENDSTOP 1
@@ -88,6 +98,7 @@ extern int acq164_code_max(void);
 
 #elif defined WAV232
 
+#define MAXCHAN	32
 #define DMA_BLOCK_LEN 1024
 #define ISR_ADDS_ENDSTOP 1
 #define FPGA_IS_PCI_DEVICE 1

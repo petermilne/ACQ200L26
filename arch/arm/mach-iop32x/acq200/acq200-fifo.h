@@ -22,6 +22,7 @@
 #ifndef __ACQ200_FIFO_H__
 #define __ACQ200_FIFO_H__
 
+#include "acq200-common.h"
 
 #define FIQDEBUG 0
 #define ACQ200_FIFO_H_VERSION 5
@@ -177,23 +178,6 @@ static inline void sl_init(struct StateListener *sl, int nbuf)
 #define ACQ200_FPGA_FIFO_BAR 1
 
 
-#define MAXPREBUILT 8
-
-struct PrebuiltChain {
-	int length;
-	int fifo_to_local;          /* indexes the_chain */
-	int local_to_host;          /* indexes the_chain */
-	struct iop321_dma_desc* the_chain[MAXPREBUILT];
-	struct iop321_dma_desc desc;            
-	void (* insert)(
-		struct PrebuiltChain *_this, 
-		struct iop321_dma_desc* _new);
-	char id[MAXPREBUILT];
-};
-
-#define getPBChain(dp) (container_of((dp), struct PrebuiltChain, desc))
-#define isPBChainDesc(dp) ((void*)getPBChain(dp) == (dp)->clidat)
-#define PBC_SZ (sizeof(struct PrebuiltChain))
 
 
 struct IPC {
@@ -474,11 +458,6 @@ void acq200_transform_destroy(void);
 
 #define CDOG_MAX_JIFFIES  500   /* 5secs 1k/64bytes = 16 => 4Hz min rate */
 
-struct pci_mapping {
-	int len;
-	unsigned pa;
-	void* va;
-};
 
 
 struct ArgBlock {
@@ -765,84 +744,6 @@ static inline void* va_tblock_tmp(struct DevGlobs* dg )
 }
 
 #define BB_PTR(offset)  (va_buf(DG) + offset)
-
-#define RBLEN          0x4000
-#define RBMASK         (RBLEN-1)
-#define RB_IS_EMPTY( rb ) ((rb).iput==(rb).iget)
-#define RB_INCR( ii )  (((ii)+1)&RBMASK)
-#define RB_IS_FULL( rb )  (RB_INCR((rb).iput)==(rb).iget)
-
-#define RB_WILL_BE_EMPTY(rb) ((rb).iput==RB_INCR((rb).iget))
-
-/* next is an approximation - nput, nget will overflow */
-#define RB_ELEMENT_COUNT(rb) ((rb).nput - (rb).nget)
-
-#define CHECK_TIDES(rb)					\
-do {							\
-	unsigned short tide = rb->nput - rb->nget;	\
-	if (tide > rb->hitide){				\
-		rb->hitide = tide;			\
-	}else if (tide < rb->lotide){			\
-		rb->lotide = tide;			\
-	}						\
-} while(0)
-
-#define INIT_TIDES(rb)					\
-do {							\
-	rb->hitide = rb->lotide = rb->nput - rb->nget;	\
-} while(0)
-
-static inline int rb_put( 
-	struct acq200_dma_ring_buffer *rb, 
-	struct iop321_dma_desc *buf )
-{
-	if ( !RB_IS_FULL( *rb ) ){
-		rb->buffers[rb->iput] = buf;
-		rb->iput = RB_INCR(rb->iput);
-		rb->nput++;
-		CHECK_TIDES(rb);
-		return 1;
-	}else{
-		rb->lotide = 0;
-		return 0;
-	}
-}
-
-
-static inline int rb_get( 
-	struct acq200_dma_ring_buffer* rb, 
-	struct iop321_dma_desc** pbuf )
-{
-	if ( !RB_IS_EMPTY( *rb ) ){
-		CHECK_TIDES(rb);
-		*pbuf = rb->buffers[rb->iget];
-		rb->iget = RB_INCR( rb->iget );
-		rb->nget++;
-		return 1;
-	}else{
-		rb->lotide = 0;
-		return 0;
-	}
-}
-
-
-static inline struct iop321_dma_desc* rb_get_buf(
-	struct acq200_dma_ring_buffer* rb
-	)
-{
-	struct iop321_dma_desc* pbuf = 0;
-
-	if ( !RB_IS_EMPTY( *rb ) ){
-		CHECK_TIDES(rb);
-		pbuf = rb->buffers[rb->iget];
-		rb->iget = RB_INCR( rb->iget );
-		rb->nget++;
-	}else{
-		rb->lotide = 0;
-	}
-	
-	return pbuf;
-}
 
 
 

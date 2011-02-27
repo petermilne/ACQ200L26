@@ -1217,33 +1217,23 @@ static DEVICE_ATTR(dio_raw, S_IRUGO, show_dio_raw, 0);
 static unsigned findTogglingBits(void)
 {
 	unsigned toggling = 0;
-	unsigned c1 = *ACQ200_DIOCON;
+	unsigned c1 = *ACQ200_DIOCON&ACQ200_DIOCON_INPDAT;
 	unsigned c2;
 	unsigned long j1 = jiffies;
 	int npolls = 0;
-	int duffer_report = 0;
        
-	while (ABS(jiffies - j1) < 5){
-		c2 = *ACQ200_DIOCON;
-		if ((c2 & ~ACQ200_DIOCON_INPDAT) != 
-		    (control_mirror & ~ACQ200_DIOCON_INPDAT)){
-			if (!duffer_report++){
-				err("duff diocon ctrl %08x c1 %08x c2 %08x", 
-				    control_mirror, c1, c2);
-			}
-			continue;
-		}
+	while (ABS(jiffies - j1) < 50){
+		c2 = *ACQ200_DIOCON&ACQ200_DIOCON_INPDAT;
 		if (c2 ^ c1){
 			toggling |= (c2 ^ c1)&((1<<MAXDIOBIT)-1);
 		}
 		yield();
 		++npolls;
+		if (ABS(jiffies - j1) > 5 && toggling){
+			break;
+		}
 	}
 
-	if (duffer_report > 1){
-		err("duff diocon occurred %d times out of %d",
-		      duffer_report, npolls);
-	}
 	return toggling;
 
 }

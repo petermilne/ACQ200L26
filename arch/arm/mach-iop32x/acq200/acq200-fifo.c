@@ -18,12 +18,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-#include "acq200_minors.h"
-
-
-#include <linux/poll.h>
-
-#include "acq200-rb.h"
 
 /** @file acq200-fifo.c
  *
@@ -49,23 +43,30 @@
  * We Q endstops for unique ident of last data transferred.
  */
 
+
+
 #include <asm/arch/iop321-dma.h>
 #include <asm/arch/iop321-irqs.h>
 #include <asm/arch/acqX00-irq.h>
+#include <asm-arm/arch-iop32x/acq200.h>
+
+#include <linux/dma-mapping.h>
+#include <linux/kdev_t.h>
+#include <linux/moduleparam.h>
+#include <linux/workqueue.h>
+#include <linux/poll.h>
+
+#include "acq200_minors.h"
+#include "acq200-rb.h"
+
 
 #include "acqX00-port.h"
 
 #include "acq200-fifo-tblock.h"
 #include "acq200-stream-api.h"
 
-#include <linux/dma-mapping.h>
-#include <linux/kdev_t.h>
+#include "prebuiltChainUtils.h"
 
-
-#include <asm-arm/arch-iop32x/acq200.h>
-
-#include <linux/moduleparam.h>
-#include <linux/workqueue.h>
 
 
 #define VERID \
@@ -97,6 +98,17 @@ module_param(verid, charp, 0444);
 #endif
 
 extern void acq200_set_user_led(int led4, int on);
+
+
+#ifndef DTACQ_MACH_DRIVER_INIT
+#define DTACQ_MACH_DRIVER_INIT(dev)
+#endif
+#ifndef DTACQ_MACH_DRIVER_REMOVE
+#define DTACQ_MACH_DRIVER_REMOVE(dev)
+#endif
+#ifndef DTACQ_MACH_ON_SET_MODE
+#define DTACQ_MACH_ON_SET_MODE(mode)
+#endif
 
 
 int acq200_timeout = 10000;
@@ -172,6 +184,10 @@ int tblock_len = _TBLOCK_LEN;
 module_param(tblock_len, int, 0444);
 MODULE_PARM_DESC(tblock_len, "length of tblock in bytes");
 
+int acq200_maxchan = MAXCHAN;
+module_param(acq200_maxchan, int, 0444);
+MODULE_PARM_DESC(acq200_maxchan, "maximum possible channels this arch");
+
 static char errbuf[128];
 
 static void preEnable(void);   /* call immediately BEFORE trigger en */
@@ -206,6 +222,7 @@ static struct DMC0 {
 	struct task_struct* task;
 	unsigned long v;
 	wait_queue_head_t waitq;
+	void (* pbc_client)(struct PrebuiltChain* pbc);
 } dmc0;
 
 #define DMC0_RUN_REQUEST 0
@@ -926,6 +943,9 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 			}
 #endif
 /** @todo - surely a DMAD leak if multiple elements in chain? */
+			if (dmc0.pbc_client){
+				dmc0.pbc_client(pbc);
+			}
 			pbuf = pbc->the_chain[pbc->fifo_to_local];
 			pbc->the_chain[pbc->fifo_to_local] = 0;
 			rb_put(&IPC->endstops, &pbc->desc);
@@ -1173,9 +1193,7 @@ static void bda_release_tblock(void)
 #endif
 
 #ifndef WAV232
-
-#ifdef ACQ216
-static void dmc_handle_empties_prebuilt(struct DMC_WORK_ORDER *wo)
+void dmc_handle_empties_prebuilt(struct DMC_WORK_ORDER *wo)
 {
 	int nput = 0;
 	unsigned empty_offset;
@@ -1231,7 +1249,6 @@ static void dmc_handle_empties_prebuilt(struct DMC_WORK_ORDER *wo)
 		finish_with_engines(-__LINE__);
 	}
 }
-#endif /* ACQ216 */
 #endif
 
 static void dmc_handle_empties_default(struct DMC_WORK_ORDER *wo)
@@ -1460,6 +1477,10 @@ static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 
 	self->flags = flags;
 
+#if defined (ACQ196T)
+# warning building ACQ196T low latency special 
+	wake_dmc0();
+#endif
 #if defined(ACQ216) || defined(ACQ196)
 #if defined(ACQ196)
 	if (!DG->slow_clock)
@@ -4192,6 +4213,12 @@ int acq200_bits(void)
 }
 #endif
 
+void acq200_registerPrebuiltClient(void (* client)(struct PrebuiltChain* pbc))
+{
+	dmc0.pbc_client = client;
+}
+
+
 EXPORT_SYMBOL_GPL(enable_acq);
 EXPORT_SYMBOL_GPL(disable_acq);
 EXPORT_SYMBOL_GPL(acq200_check_entire_es);
@@ -4210,6 +4237,7 @@ EXPORT_SYMBOL_GPL(acq200_del_end_of_shot_hook);
 EXPORT_SYMBOL_GPL(acq200_add_ext_phase_handler);
 EXPORT_SYMBOL_GPL(acq200_del_ext_phase_handler);
 EXPORT_SYMBOL_GPL(acq200_stateListenerMakeStatecode);
+EXPORT_SYMBOL_GPL(acq200_registerPrebuiltClient);
 
 
 EXPORT_SYMBOL_GPL(DMC_WO);

@@ -6,11 +6,11 @@
 
 CONFIG_ARCH_DTACQ_CORE=m
 CONFIG_ARCH_DTACQ_ACQ216=m
-CONFIG_ARCH_DTACQ_ACQ216x=m
 CONFIG_ARCH_DTACQ_WAV232=m
 CONFIG_ARCH_DTACQ_ACQ196=m
 CONFIG_ARCH_DTACQ_ACQ196m=m
-CONFIG_ARCH_DTACQ_ACQ196f=m
+#CONFIG_ARCH_DTACQ_ACQ196f=m
+CONFIG_ARCH_DTACQ_ACQ196t=m
 CONFIG_ARCH_DTACQ_ACQ196c=m
 CONFIG_ARCH_DTACQ_ACQ196h=m
 CONFIG_ARCH_DTACQ_ACQ132=m
@@ -49,6 +49,8 @@ CONFIG_ARCH_DTACQ_DEBUG_ACQ1xx=m
 CONFIG_ARCH_DTACQ_ACQ132_LFP=m
 CONFIG_ARCH_DTACQ_ACQ100_RTM_T=m
 CONFIG_ARCH_DTACQ_ACQ100_SPIFLASH=m
+CONFIG_ACQ200_HOSTDRV=m
+CONFIG_ARCH_DTACQ_ACQ100_GATHER=m
 
 obj-y			:= \
 	acq200-time.o \
@@ -78,8 +80,6 @@ obj-$(CONFIG_ARCH_DTACQ_BRIDGE) += acq200-bridge.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ216) += acq216.o
 
-obj-$(CONFIG_ARCH_DTACQ_ACQ216x) += acq216.o
-
 obj-$(CONFIG_ARCH_DTACQ_WAV232) += wav232.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ196) += acq196.o
@@ -87,6 +87,8 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ196) += acq196.o
 obj-$(CONFIG_ARCH_DTACQ_ACQ196m) += acq196m.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ196f) += acq196f.o
+
+obj-$(CONFIG_ARCH_DTACQ_ACQ196t) += acq196t.o
 
 obj-$(CONFIG_ARCH_DTACQ_ACQ196c) += acq196c.o
 
@@ -166,6 +168,9 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ100_SPIFLASH) += acq100_spiflash.o
 
 obj-$(CONFIG_ARCH_DTACQ_MEAN) += acq200_mean.o
 
+obj-$(CONFIG_ACQ200_HOSTDRV) += acq200_hostdrv.o
+obj-$(CONFIG_ARCH_DTACQ_ACQ100_GATHER) += acq100_gather.o
+
 ACQ2XX_FIFO_COMMONA=\
 	acq200-fifo-tblock.o \
 	acq200-transform.o \
@@ -181,11 +186,8 @@ ACQ2XX_FIFO_COMMON=\
 
 acq216-objs := acq216-fifo.o acq216-fiq.o \
 	acq216-fifo-procfs.o acq2xx-fifo.o acq216-offset.o \
-	$(ACQ2XX_FIFO_COMMON)
-
-acq216x-objs := acq216-fifo-x.o acq216-fiq-x.o \
-	acq216-fifo-procfs.o acq2xx-fifo.o acq216-offset.o \
-	$(ACQ2XX_FIFO_COMMON)
+	$(ACQ2XX_FIFO_COMMON) \
+	prebuiltChainUtils.o
 
 acq196-objs := acq196-fifo.o acq196-fiq.o \
 	acq196-fifo-procfs.o acq196-offset.o acq196-AO.o \
@@ -209,6 +211,11 @@ acq196c-objs := acq196-fifo-c.o acq196-fiq-c.o \
 acq196f-objs := acq196-fifo-f.o acq196-fiq-f.o \
 	acq196-fifo-procfs-f.o acq196-offset.o acq196-AO.o \
 	$(ACQ2XX_FIFO_COMMON)
+
+acq196t-objs := acq196-fifo-t.o acq196-fiq-t.o \
+	acq196-fifo-procfs-t.o acq196-offset.o acq196-AO.o \
+	$(ACQ2XX_FIFO_COMMON) \
+	prebuiltChainUtils.o
 
 acq196h-objs := acq196-fifo-h.o acq196-fiq-h.o \
 	acq196-fifo-procfs.o acq196-offset.o acq196-AO.o \
@@ -239,6 +246,8 @@ acq100_scatter-objs := acq100-scatter.o
 acq100_skel-objs := acq100-skel.o
 
 acq196_mac-objs := acq196-mac.o
+
+acq100_rtm_t-objs := acq100_rtm_t_main.o acq100_rtm_t_uart.o acq100_rtm_t_spi.o
 
 #acq216-fiq.o: acq216-fiq.S
 #wav232-fiq.o: wav232-fiq.S

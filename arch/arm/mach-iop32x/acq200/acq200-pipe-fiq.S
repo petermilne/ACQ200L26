@@ -319,7 +319,7 @@ err_chk:
 	
 #if (CHECK_2B > 0)
 check_2b:
-		DO_CHECK_2B r0, fifcon, add_endstop
+		DO_CHECK_2B r0, fifcon, done_movin
 
 add_2b:
 		add	iblock, iblock, #1
@@ -327,7 +327,7 @@ add_2b:
 		
 		add	getbuf, ipc, #IPC_EMPTIES
 		bl	rb_get		        @ rb_get getbuf, next, r0
-		beq	add_endstop             @ no 2b, but still need endstop
+		beq	done_movin              @ no 2b, but still need endstop
 
 		ldr	r0, [next, #DMA_DESCR_SW_PA]
 		str	r0, [head_va, #DMA_DESCR_NDA]
@@ -335,6 +335,7 @@ add_2b:
 		cmp	iblock, #CHECK_2B
 		blt	add_2b
 #endif /* CHECK_2B */
+done_movin:
 #if (ISR_ADDS_ENDSTOP == 1)
 add_endstop:
 		add	getbuf, ipc, #IPC_ENDSTOPS

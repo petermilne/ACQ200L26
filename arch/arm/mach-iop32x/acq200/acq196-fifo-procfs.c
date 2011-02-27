@@ -45,8 +45,11 @@ static int acq200_proc_dumpregs(
 static void acq196_mk_dev_sysfs(struct device *dev);
 
 #define DEVICE_MK_DEV_SYSFS(dev) acq196_mk_dev_sysfs(dev)
+#ifdef ACQ196T
+#define DEVICE_CREATE_PROC_ENTRIES(root) pbc_create_proc_entries(root)
+#else
 #define DEVICE_CREATE_PROC_ENTRIES(root) 
-
+#endif
 
 
 #include "acq200-fifo-procfs.c"
