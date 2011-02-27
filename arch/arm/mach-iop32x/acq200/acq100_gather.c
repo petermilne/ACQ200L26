@@ -23,6 +23,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -44,6 +45,7 @@
 #include <linux/module.h>
 #endif
 
+#include "acq200.h"
 #include "acq200-common.h"
 
 #include <asm-arm/arch-iop32x/iop321.h>
@@ -97,7 +99,7 @@ MODULE_PARM_DESC(init_ramp, "!=0 - initial data ramp (shorts) for id");
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1004";
+char acq100_gather_driver_version[] = "B1005";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 
 
@@ -372,31 +374,35 @@ void create_proc_entries(void)
 
 #define IN_RANGE(xx, ll, rr) ((xx)>=(ll)&&(xx)<=(rr))
 
+void fire_chain(int iblock)
+{
+	u32 stat;
+	u32 gtsr1 = *IOP321_GTSR;
+	u32 gtsr2;
+
+	while (!DMA_DONE( GL.chains[iblock], stat)){
+		++dma_yield;
+		yield();
+	}
+	gtsr2 = *IOP321_GTSR;
+	DMA_ARM(GL.chains[iblock]);
+	DMA_FIRE(GL.chains[iblock]);
+	++dma_triggers;
+
+	if (likely(gtsr2 > gtsr1)){
+		u32 delta = gtsr2 - gtsr1;
+		if (delta > dma_maxticks){
+			dma_maxticks = delta;
+		}
+	}
+}
+
 void prebuiltChainHandler(struct PrebuiltChain* pbc)
 {
 	if (!IN_RANGE(pbc->iblock, 0, control_numblocks-1)){
 		err("pbc not in range .. discard");
 	}else{
-		int iblock = pbc->iblock;
-		u32 stat;
-		u32 gtsr1 = *IOP321_GTSR;
-		u32 gtsr2;
-
-		while (!DMA_DONE( GL.chains[iblock], stat)){
-			++dma_yield;
-			yield();
-		}
-		gtsr2 = *IOP321_GTSR;
-		DMA_ARM(GL.chains[iblock]);
-		DMA_FIRE(GL.chains[iblock]);
-		++dma_triggers;
-
-		if (likely(gtsr2 > gtsr1)){
-			u32 delta = gtsr2 - gtsr1;
-			if (delta > dma_maxticks){
-				dma_maxticks = delta;
-			}
-		}
+		fire_chain(pbc->iblock);
 	}
 }
 
@@ -404,7 +410,28 @@ void hookup(void)
 {
 	acq200_registerPrebuiltClient(prebuiltChainHandler);
 }
-int acq100_gather_init_module(void)
+
+static ssize_t set_fire(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char* buf,
+	size_t count)
+{
+	int ichain;
+	if (sscanf(buf, "%d", &ichain) == 1 &&
+	    ichain >= 0 && ichain < control_numblocks){
+		fire_chain(ichain);
+	}
+	return count;
+}
+
+static DEVICE_ATTR(fire, S_IWUGO, 0, set_fire);
+
+static int mk_sysfs(struct device *dev)
+{
+	DEVICE_CREATE_FILE(dev, &dev_attr_fire);
+}
+int acq100_gather_probe(struct device *dev)
 {
 	info("%s\n%s\n%s\n%s", 
 	     acq100_gather_driver_name, acq100_gather_driver_string,
@@ -415,14 +442,62 @@ int acq100_gather_init_module(void)
 	hookup();
 
 	create_proc_entries();
+	mk_sysfs(dev);
 	return 0;
 }
 
-void acq100_gather_exit_module(void)
+int acq100_gather_remove(struct device *dev)
 {       
 	if (GL.padding.va) kfree(GL.padding.va);	
 	if (GL.init_ramp.va) kfree(GL.init_ramp.va);
 	free_chains();
+	return 0;
+}
+
+static void acq100_gather_dev_release(struct device * dev)
+{
+	info("not used");
+}
+
+
+static struct device_driver acq100_gather_driver = {
+	.name     = "acq100_gather",
+	.probe    = acq100_gather_probe,
+	.remove   = acq100_gather_remove,
+	.bus	  = &platform_bus_type,	
+};
+
+
+static u64 dma_mask = 0x00000000ffffffff;
+
+static struct platform_device acq100_gather_device = {
+	.name = "acq100_gather",
+	.id   = 0,
+	.dev = {
+		.release    = acq100_gather_dev_release,
+		.dma_mask   = &dma_mask
+	}
+
+};
+
+
+
+static int __init acq100_gather_init_module( void )
+{
+	int rc = driver_register(&acq100_gather_driver);
+	if (rc){
+		return rc;
+	}
+	return platform_device_register(&acq100_gather_device);
+}
+
+
+static void __exit
+acq100_gather_exit_module(void)
+{
+	info("");
+	platform_device_unregister(&acq100_gather_device);
+	driver_unregister(&acq100_gather_driver);
 }
 
 
