@@ -99,9 +99,10 @@ MODULE_PARM_DESC(init_ramp, "!=0 - initial data ramp (shorts) for id");
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1005";
+char acq100_gather_driver_version[] = "B1006";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 
+#define PBI_MAX	0x400		/* max in-order transfer on PBI */
 
 extern int control_block;
 extern int control_numblocks;
@@ -117,7 +118,9 @@ struct Region {
 
 struct Globals {
 	struct Region sources[MAXDEV];
-	struct Region dest;
+	struct Region destLocal;
+	struct Region destRTM;
+	struct Region* dest;
 	struct pci_mapping padding;
 	struct pci_mapping init_ramp;
 	int is;
@@ -134,12 +137,21 @@ static void addSource(unsigned pa, int len, const char* name, unsigned dc)
 	GL.sources[GL.is].dc = dc;
 	++GL.is;
 }
-static void addDest(unsigned pa, int len, const char* name, unsigned dc)
+static void addDestLocal(unsigned pa, int len, const char* name, unsigned dc)
 {
-	GL.dest.pa = pa;
-	GL.dest.len = len;
-	GL.dest.name = name;
-	GL.dest.dc = dc;
+	GL.destLocal.pa = pa;
+	GL.destLocal.len = len;
+	GL.destLocal.name = name;
+	GL.destLocal.dc = dc;
+	GL.dest = &GL.destLocal;
+}
+static void addDestRTM(unsigned pa, int len, const char* name, unsigned dc)
+{
+	GL.destRTM.pa = pa;
+	GL.destRTM.len = len;
+	GL.destRTM.name = name;
+	GL.destRTM.dc = dc;
+	GL.dest = &GL.destRTM;
 }
 
 void get_regions(void)
@@ -169,10 +181,11 @@ void get_regions(void)
 
 	}		
 
-	if (target_rtm_t){
-		addDest(RTMT_IOPFIFO_PA, 0x400, "rtm-t", DMA_DCR_MEM2MEM);
-	}else{
-		addDest(*IOP321_IATVR2 + control_block * control_numblocks,
+	if (target_rtm_t > 0){
+		addDestRTM(RTMT_IOPFIFO_PA, 0x400, "rtm-t", DMA_DCR_MEM2MEM);
+	}
+	if (target_rtm_t == 0 || target_rtm_t == 2){
+		addDestLocal(*IOP321_IATVR2 + control_block * control_numblocks,
 			GL.is * control_block * control_numblocks, 
 			"local", DMA_DCR_MEM2MEM);
 	}	
@@ -182,7 +195,7 @@ u32 dinc(u32 *dest_pa, int nbytes)
 /* target_rtm_t? => FIFO, dont incr, else debug, memory, want addr incr */
 {
 	u32 pa = *dest_pa;
-	if (target_rtm_t == 0){
+	if (target_rtm_t == 0 || target_rtm_t == 2){
 		*dest_pa += nbytes;	/* *dest_pa NOT a point, OK to add */
 	}
 	return pa;	
@@ -241,10 +254,10 @@ void append_padding(
 {
 	int nb = 0;
 
-	make_ramp(&GL.padding, min(nbytes, 0x400), 0x9000);
+	make_ramp(&GL.padding, min(nbytes, PBI_MAX), 0x9000);
 
 	while (nb < nbytes){
-		int maxdma = min(nbytes-nb, 0x400);
+		int maxdma = min(nbytes-nb, PBI_MAX);
 		append_padding_limit(dmac, cblock, maxdma, dest_pa);
 		nb += maxdma;
 	} 
@@ -273,6 +286,28 @@ int next_power2(int nbytes)
 	return cursor;
 }
 
+void append_mem2rtm_limit(
+	struct DmaChannel* dmac, int cblock, int offset, int nbytes)
+{
+	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+	dmad->MM_SRC = GL.destLocal.pa + offset;
+	dmad->PUAD = 0;
+	dmad->MM_DST = GL.destRTM.pa;
+	dmad->BC = nbytes;
+	dmad->DC = DMA_DCR_MEM2MEM;
+	dma_append_chain(dmac, dmad, "mem2rtm");	
+}
+void append_mem2rtm(struct DmaChannel* dmac, int cblock, int len){
+	int offset = 0;
+		
+	while(offset < len){
+		int maxdma = min(len - offset, PBI_MAX);
+
+		append_mem2rtm_limit(dmac, cblock, offset, maxdma);
+		offset += maxdma;	
+	}
+}
+
 
 void make_chain(struct DmaChannel* dmac, int cblock, u32 *dest_pa)
 {
@@ -299,13 +334,17 @@ void make_chain(struct DmaChannel* dmac, int cblock, u32 *dest_pa)
 	}
 
 	append_padding(dmac, cblock, next_power2(nbytes) - nbytes, dest_pa);
+
+	if (target_rtm_t == 2){
+		append_mem2rtm(dmac, cblock, next_power2(nbytes));
+	}
 	append_timestamper(dmac, cblock);
 }
 
 void make_chains(void)
 {
 	int chn;
-	u32 dest_pa = GL.dest.pa;
+	u32 dest_pa = GL.dest->pa;
 
 	GL.chains = kzalloc(
 		control_numblocks*sizeof(struct DmaChannel), GFP_KERNEL);
@@ -314,7 +353,7 @@ void make_chains(void)
 		make_chain(&GL.chains[chn], chn, &dest_pa);
 	}
 	info("sizeof of block: %d, total memory size: %d",
-	     (dest_pa - GL.dest.pa)/control_numblocks, dest_pa - GL.dest.pa);
+	     (dest_pa - GL.dest->pa)/control_numblocks, dest_pa - GL.dest->pa);
 }
 
 void free_chains(void)
@@ -336,12 +375,12 @@ static int print_chain(struct DmaChannel* channel, char* buf)
 	int len = 0;
 	struct iop321_dma_desc* desc = channel->dmad[0];
 	
-	len += sprintf(buf+len, "[ ] %8s %8s %8s %8s %8s %8s\n",
+	len += sprintf(buf+len, "[  ] %8s %8s %8s %8s %8s %8s\n",
 		       "NDA", "PDA", "PUAD", "LAD", "BC", "DC");
 
 	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
 		len += sprintf(buf+len, 
-			       "[%d] %08x %08x %08x %08x %08x %08x %s\n",
+			       "[%2d] %08x %08x %08x %08x %08x %08x %s\n",
 			       ic, 
 			       desc->NDA, desc->PDA, desc->PUAD,
 			       desc->LAD, desc->BC, desc->DC,
@@ -430,6 +469,7 @@ static DEVICE_ATTR(fire, S_IWUGO, 0, set_fire);
 static int mk_sysfs(struct device *dev)
 {
 	DEVICE_CREATE_FILE(dev, &dev_attr_fire);
+	return 0;
 }
 int acq100_gather_probe(struct device *dev)
 {
