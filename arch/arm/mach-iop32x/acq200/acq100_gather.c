@@ -101,11 +101,15 @@ MODULE_PARM_DESC(dbg_use_same_buffer,
 int init_ramp = 0;
 module_param(init_ramp, int, 0644);
 MODULE_PARM_DESC(init_ramp, "!=0 - initial data ramp (shorts) for id");
+	
+int simulated_additional_slaves = 0;
+module_param(simulated_additional_slaves, int, 0444);
+MODULE_PARM_DESC(simulated_additional_slaves, "add loading by repeating slave");
 
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1007";
+char acq100_gather_driver_version[] = "B1008";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 
 #define PBI_MAX	0x400		/* max in-order transfer on PBI */
@@ -160,6 +164,20 @@ static void addDestRTM(unsigned pa, int len, const char* name, unsigned dc)
 	GL.dest = &GL.destRTM;
 }
 
+
+struct Acq200Device *getDevice(int idev)
+{
+	if (simulated_additional_slaves == 0 || idev == 0){
+		return acq200_devices[idev];
+	}else{
+		if (idev < simulated_additional_slaves){
+			return acq200_devices[0];
+		}else{
+			return 0;
+		}
+	}
+}
+
 void get_regions(void)
 {
 	int idev;
@@ -172,7 +190,7 @@ void get_regions(void)
 
 	
 	for (idev = 0; ; ++idev){
-		struct Acq200Device *device = acq200_devices[idev];
+		struct Acq200Device *device = getDevice(idev);
 
 		if (device == 0){
 			break;
@@ -184,7 +202,6 @@ void get_regions(void)
 			  device->ram.name, DMA_DCR_PCI_MR);
 		info("device %s pa: 0x%08lx len: %d",
 		     device->ram.name, device->ram.pa, device->ram.len);
-
 	}		
 
 	if (target_rtm_t > 0){
