@@ -64,7 +64,7 @@ extern struct pci_mapping acq196t_t2;
 #ifdef __ACQ200_INLINE_DMA_H__
 #error FILE ALREADY INCLUDED
 #endif
-#define MAXCHAIN	(MAXDEV+4)
+#define MAXCHAIN	(MAXDEV+16)
 #include "acq200-inline-dma.h"
 
 #define EXCLUDE_PBC_INLINES
@@ -88,9 +88,15 @@ int dma_maxticks;
 module_param(dma_maxticks, int, 0644);
 MODULE_PARM_DESC(dma_maxticks, "max DMA wait (20nsec tick)");
 
-int target_rtm_t = 1;
+int target_rtm_t = 2;
 module_param(target_rtm_t, int, 0444);
-MODULE_PARM_DESC(target_rtm_t, "1: send data to RTM-T (else lbuf)");
+MODULE_PARM_DESC(target_rtm_t, 
+	">= 1: send data to RTM-T 2: use DRAM (else lbuf)");
+
+int dbg_use_same_buffer = 0;
+module_param(dbg_use_same_buffer, int, 0444);
+MODULE_PARM_DESC(dbg_use_same_buffer,
+		 "repeat same data as wire integrity test");
 
 int init_ramp = 0;
 module_param(init_ramp, int, 0644);
@@ -99,7 +105,7 @@ MODULE_PARM_DESC(init_ramp, "!=0 - initial data ramp (shorts) for id");
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1006";
+char acq100_gather_driver_version[] = "B1007";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 
 #define PBI_MAX	0x400		/* max in-order transfer on PBI */
@@ -290,7 +296,9 @@ void append_mem2rtm_limit(
 	struct DmaChannel* dmac, int cblock, int offset, int nbytes)
 {
 	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
-	dmad->MM_SRC = GL.destLocal.pa + offset;
+	int block_off = dbg_use_same_buffer? 0: cblock*next_power2(nbytes);
+
+	dmad->MM_SRC = GL.destLocal.pa + block_off + offset;
 	dmad->PUAD = 0;
 	dmad->MM_DST = GL.destRTM.pa;
 	dmad->BC = nbytes;
