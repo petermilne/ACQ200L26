@@ -310,12 +310,11 @@ int next_power2(int nbytes)
 }
 
 void append_mem2rtm_limit(
-	struct DmaChannel* dmac, int cblock, int offset, int nbytes)
+	struct DmaChannel* dmac, int offset, int nbytes)
 {
 	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
-	int block_off = dbg_use_same_buffer? 0: cblock*next_power2(nbytes);
 
-	dmad->MM_SRC = GL.destLocal.pa + block_off + offset;
+	dmad->MM_SRC = GL.destLocal.pa + offset;
 	dmad->PUAD = 0;
 	dmad->MM_DST = GL.destRTM.pa;
 	dmad->BC = nbytes;
@@ -324,11 +323,12 @@ void append_mem2rtm_limit(
 }
 void append_mem2rtm(struct DmaChannel* dmac, int cblock, int len){
 	int offset = 0;
+	int block_off = dbg_use_same_buffer? 0: cblock*next_power2(len);
 		
 	while(offset < len){
 		int maxdma = min(len - offset, PBI_MAX);
 
-		append_mem2rtm_limit(dmac, cblock, offset, maxdma);
+		append_mem2rtm_limit(dmac, block_off+offset, maxdma);
 		offset += maxdma;	
 	}
 }
