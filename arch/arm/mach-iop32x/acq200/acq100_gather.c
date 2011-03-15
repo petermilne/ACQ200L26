@@ -109,7 +109,7 @@ MODULE_PARM_DESC(simulated_additional_slaves, "add loading by repeating slave");
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
-char acq100_gather_driver_version[] = "B1008";
+char acq100_gather_driver_version[] = "B1009";
 char acq100_gather_copyright[] = "Copyright (c) 2011 D-TACQ Solutions Ltd";
 
 #define PBI_MAX	0x400		/* max in-order transfer on PBI */
