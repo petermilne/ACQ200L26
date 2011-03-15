@@ -401,7 +401,7 @@ static int print_chain(struct DmaChannel* channel, char* buf)
 	struct iop321_dma_desc* desc = channel->dmad[0];
 	
 	len += sprintf(buf+len, "[  ] %8s %8s %8s %8s %8s %8s\n",
-		       "NDA", "PDA", "PUAD", "LAD", "BC", "DC");
+		       "NDA", "PDA/MMSRC", "PUAD", "LAD/MMDST", "BC", "DC");
 
 	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
 		len += sprintf(buf+len, 
