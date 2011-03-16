@@ -494,7 +494,7 @@ ssize_t acq200_fifo_bigbuf_read_bbrp(
 		RETURN(0);
 	}else if (bbrp->status < 0){
 		RETURN(bbrp->status);
-	}else if (channel >= NCHAN ){
+	}else if (!acq200_pchanEnabled(channel)){
 		RETURN(0);
 	}else if ( bbrp->my_samples_reqlen == 0 ){
 		RETURN(0);
