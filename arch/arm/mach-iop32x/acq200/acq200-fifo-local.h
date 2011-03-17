@@ -75,7 +75,7 @@ int acq200_fifo_destroy_AIfs(void);
 
 
 extern int acq200_lookup_pchan(int lchannel);
-
+extern int acq200_lookup_lchan(int pchan);
 
 /**
  *   EVENT_MAGIC - bit pattern to ident ES
@@ -198,6 +198,7 @@ void acq200_stop_clkCounterMonitor(void);
 int acq200_clkCounterMonitor_requestedToStop(void);
 
 extern int (*acq132_set_special_lut)(unsigned mask);
+extern int (*acq132_rewire)(int ch);	/* maps alt front panel to regular */
 
 extern int acq200_maxchan;
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

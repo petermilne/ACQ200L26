@@ -474,5 +474,6 @@ extern int acq132_get_DR(int *nacc, int *shift);
 static inline int acq132_is_DR(void) { return acq132_get_DR(0,0); }
 
 
+
 #endif	/*  __ACQ132_H__ */
 

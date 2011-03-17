@@ -1536,13 +1536,16 @@ static const struct ADC_CHANNEL_LUT {
 
 u32 masks[4] = {};
 
+extern int (*acq132_rewire)(int ch);
+
 void acq132_set_channel_mask(u32 channel_mask)
 {
 	u32 cursor = 1;
-	u32 ch = 1;
+	u32 ch_panel = 1;
 	int dev;
 
-	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
+	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch_panel){
+		int ch = acq132_rewire(ch_panel);
 		int dev = ADC_CHANNEL_LUT[ch].dev;
 		u32 mask = 1 << ((ch-1)&0x03);
 		int shl = ADC_CHANNEL_LUT[ch].side == 'L'?

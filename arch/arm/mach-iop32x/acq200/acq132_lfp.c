@@ -59,6 +59,51 @@ static	int plut[] = {
 };
 #define PLUT_ELEMS (sizeof(plut)/sizeof(int))
 
+/* BANK B A */
+
+static int plut16[] = {
+	[ 1] =  7 /*  9 */, [ 2] = 23 /* 25 */,
+	[ 3] =  8 /* 10 */, [ 4] = 24 /* 26 */,
+	[ 5] =  5 /* 11 */, [ 6] = 21 /* 27 */,
+	[ 7] =  6 /* 12 */, [ 8] = 22 /* 28 */,
+	[ 9] =  3 /* 13 */, [10] = 19 /* 29 */,
+	[11] =  4 /* 14 */, [12] = 20 /* 30 */,
+	[13] =  1 /* 15 */, [14] = 17 /* 31 */,
+	[15] =  2 /* 16 */, [16] = 18 /* 32 */
+};
+
+/* BANK A */
+static int plut8[] = {
+	[ 1] =  3 /* 13 */, [ 2] = 19 /* 29 */,
+	[ 3] =  4 /* 14 */, [ 4] = 20 /* 30 */,
+	[ 5] =  1 /* 15 */, [ 6] = 17 /* 31 */,
+	[ 7] =  2 /* 16 */, [ 8] = 18 /* 32 */
+};
+
+static int lfp_lookup(int ch)
+{
+	int ii;
+
+	for (ii = 1; ii < PLUT_ELEMS; ++ii){
+		if (plut[ii] == ch){
+			return ii;
+		}
+	}
+	return 0;
+}
+
+extern const int acq132_default_plut[];
+
+int acq132_lfp_rewire(int ch) {
+/* index logical (user) channel order 1:32
+ * value physical (rewired) channel order 1:32
+ * lookup value in plut, get ix, get lchan from acq200_lookup_lchan
+ */
+	int ch2 = acq132_default_plut[lfp_lookup(ch)];
+	dbg(1, "ch %02d -> %02d", ch, ch2);
+	return ch2;
+}
+
 static int acq132_lfp_set_special_lut(unsigned mask)
 {
 	static const int lut11[] = {
@@ -76,6 +121,12 @@ static int acq132_lfp_set_special_lut(unsigned mask)
 	case 0x00110011:
 		acq200_setChannelLut(lut11, 4);
 		break;
+	case 0x000f000f:
+		acq200_setChannelLut(plut8, 8);
+		break;
+	case 0x00ff00ff:
+		acq200_setChannelLut(plut16, 16);
+		break;
 	default:
 		acq200_setChannelLut(plut, PLUT_ELEMS);
 		break;
@@ -89,6 +140,7 @@ static int __init acq132_lfp_init(void)
 	info("lfp setting custom channel LUT");	
 	acq200_setChannelLut(plut, PLUT_ELEMS);
 	acq132_set_special_lut = acq132_lfp_set_special_lut;
+	acq132_rewire = acq132_lfp_rewire;
 	return 0;
 }
 

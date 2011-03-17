@@ -46,7 +46,7 @@ static const int MAP[NCHIPSBLOCK+1][NDACSCHIP+1] = {
 };
 
 
-static	const int __plut[] = {
+const int acq132_default_plut[] = {
 /* index: memory order 1:32 
  * value: nameplate order 1:32 
  */
@@ -67,9 +67,12 @@ static	const int __plut[] = {
 	[29] = 15, [30] = 31,
 	[31] = 16, [32] = 32
 };
-#define __PLUT_ELEMS (sizeof(__plut)/sizeof(int))
 
-static const int *plut = __plut;
+static const int *__plut = acq132_default_plut;
+
+#define __PLUT_ELEMS (sizeof(acq132_default_plut)/sizeof(int))
+
+static const int *plut = acq132_default_plut;
 static int nlut = __PLUT_ELEMS;
 
 
@@ -111,4 +114,8 @@ static inline unsigned short *key2offset(int ikey)
 }
 
 #include "acq100-offset-inc.c"
+
+EXPORT_SYMBOL_GPL(acq200_lookup_lchan);
+EXPORT_SYMBOL_GPL(acq132_default_plut);
+
 /* EOF */

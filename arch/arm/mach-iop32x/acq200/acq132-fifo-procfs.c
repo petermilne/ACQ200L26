@@ -1126,6 +1126,12 @@ static int acq132_regular_set_special_lut(unsigned mask)
 int (*acq132_set_special_lut)(unsigned mask) = 
 		acq132_regular_set_special_lut;
 
+int acq132_no_rewire(int ch) {
+	return ch;
+}
+
+int (*acq132_rewire)(int ch) = acq132_no_rewire;
+
 void acq200_setChannelMask(unsigned mask)
 {
 	unsigned mm;
@@ -1353,3 +1359,4 @@ static void acq132_create_proc_entries(struct proc_dir_entry* root)
 }
 
 EXPORT_SYMBOL_GPL(acq132_set_special_lut);
+EXPORT_SYMBOL_GPL(acq132_rewire);
