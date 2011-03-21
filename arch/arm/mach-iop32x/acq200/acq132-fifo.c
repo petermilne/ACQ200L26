@@ -1538,6 +1538,45 @@ u32 masks[4] = {};
 
 extern int (*acq132_rewire)(int ch);
 
+static u32 fix_adc_cmask_dev(u32 mask, int shl)
+{
+	unsigned anibble = (mask >> shl) & 0x0f;
+	switch(anibble){
+	case 0:
+		return mask;	/* used later to select inactive */
+	case 0x8: case 0x4: case 0x2: case 0x1:
+		anibble = 0x1;
+		break;
+	case 0xc: case 0xa: case 0x5: case 0x3:
+		anibble = 0x5;
+		break;
+	default:
+		anibble = 0xf;
+		break;
+	}
+	mask &= ~(0x0f << shl);
+	mask |= anibble << shl;	
+
+	return mask;
+}
+
+static void fix_adc_cmask(void)
+/* only 0xf, 0x5, 0x1 are valid patterns */
+{
+	int dev;
+
+	for (dev = BANK_A; dev <= BANK_D; ++dev){
+		u32 before = masks[dev];
+
+		masks[dev] = 
+			fix_adc_cmask_dev(masks[dev], ACQ132_ADC_CTRL_LMSHFT);
+		masks[dev] = 
+			fix_adc_cmask_dev(masks[dev], ACQ132_ADC_CTRL_RMSHFT);
+
+		dbg(1, "[%d] before:%08x after:%08x", dev, before, masks[dev]);
+	}
+}
+
 void acq132_set_channel_mask(u32 channel_mask)
 {
 	u32 cursor = 1;
@@ -1562,6 +1601,8 @@ void acq132_set_channel_mask(u32 channel_mask)
 		    ch, (channel_mask&cursor)? "SET": "CLR",
 		    mask << shl, dev, masks[dev]);
 	}	
+
+	fix_adc_cmask();
 
 	acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET, 
 			   ACQ132_ADC_CTRL_CMASK|ACQ132_ADC_CTRL_ACQEN);
