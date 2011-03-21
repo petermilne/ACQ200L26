@@ -80,6 +80,34 @@ static int plut8[] = {
 	[ 7] =  2 /* 16 */, [ 8] = 18 /* 32 */
 };
 
+/* Bank D C B A */
+static int plut55555555[] = {
+	[ 1] = 15 /*  1 */, [ 2] = 31 /* 17 */,
+	[ 3] = 13 /*  3 */, [ 4] = 29 /* 19 */,
+	[ 5] = 11 /*  5 */, [ 6] = 27 /* 21 */,
+	[ 7] =  9 /*  7 */, [ 8] = 25 /* 23 */,
+	[ 9] =  7 /*  9 */, [10] = 23 /* 25 */,
+	[11] =  5 /* 11 */, [12] = 21 /* 27 */,
+	[13] =  3 /* 13 */, [14] = 19 /* 29 */,
+	[15] =  1 /* 15 */, [16] = 17 /* 31 */,
+};
+
+/* Bank D C B A */
+static int plut11111111[] = {
+	[ 1] = 13 /*  3 */, [ 2] = 29 /* 19 */,
+	[ 3] =  9 /*  7 */, [ 4] = 25 /* 23 */,
+	[ 5] =  5 /* 11 */, [ 6] = 21 /* 27 */,
+	[ 7] =  1 /* 15 */, [ 8] = 17 /* 31 */,
+};
+
+static const int lut11[] = {
+/* index: memory order 1:32 
+ * value: nameplate order 1:32 
+ */
+	[ 1] =  15, [ 2] = 31,
+	[ 3] =  11, [ 4] = 27,
+};
+
 static int lfp_lookup(int ch)
 {
 	int ii;
@@ -106,14 +134,6 @@ int acq132_lfp_rewire(int ch) {
 
 static int acq132_lfp_set_special_lut(unsigned mask)
 {
-	static const int lut11[] = {
-/* index: memory order 1:32 
- * value: nameplate order 1:32 
- */
-	[ 1] =  15, [ 2] = 31,
-	[ 3] =  11, [ 4] = 27,
-	};
-
 	switch(mask){
 	case 0x00010001:
 		acq200_setChannelLut(lut11, 2);
@@ -126,6 +146,12 @@ static int acq132_lfp_set_special_lut(unsigned mask)
 		break;
 	case 0x00ff00ff:
 		acq200_setChannelLut(plut16, 16);
+		break;
+	case 0x55555555:
+		acq200_setChannelLut(plut55555555, 16);
+		break;
+	case 0x11111111:
+		acq200_setChannelLut(plut11111111, 8);
 		break;
 	default:
 		acq200_setChannelLut(plut, PLUT_ELEMS);
