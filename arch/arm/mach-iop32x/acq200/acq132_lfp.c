@@ -35,8 +35,9 @@
 #include "acq200-fifo-local.h"
 #include "acq200-fifo.h"
 
+#include "acq132.h"
 
-static	int plut[] = {
+static const int acq132_lfp_plut[] = {
 /* index: memory order 1:32 
  * value: nameplate order 1:32 
  */
@@ -61,7 +62,7 @@ static	int plut[] = {
 
 /* BANK B A */
 
-static int plut16[] = {
+static const int acq132_lfp_plut16[] = {
 	[ 1] =  7 /*  9 */, [ 2] = 23 /* 25 */,
 	[ 3] =  8 /* 10 */, [ 4] = 24 /* 26 */,
 	[ 5] =  5 /* 11 */, [ 6] = 21 /* 27 */,
@@ -73,7 +74,7 @@ static int plut16[] = {
 };
 
 /* BANK A */
-static int plut8[] = {
+static const int acq132_lfp_plut8[] = {
 	[ 1] =  3 /* 13 */, [ 2] = 19 /* 29 */,
 	[ 3] =  4 /* 14 */, [ 4] = 20 /* 30 */,
 	[ 5] =  1 /* 15 */, [ 6] = 17 /* 31 */,
@@ -81,7 +82,7 @@ static int plut8[] = {
 };
 
 /* Bank D C B A */
-static int plut55555555[] = {
+static const int acq132_lfp_plut55555555[] = {
 	[ 1] = 15 /*  1 */, [ 2] = 31 /* 17 */,
 	[ 3] = 13 /*  3 */, [ 4] = 29 /* 19 */,
 	[ 5] = 11 /*  5 */, [ 6] = 27 /* 21 */,
@@ -92,15 +93,19 @@ static int plut55555555[] = {
 	[15] =  1 /* 15 */, [16] = 17 /* 31 */,
 };
 
-/* Bank D C B A */
-static int plut11111111[] = {
-	[ 1] = 13 /*  3 */, [ 2] = 29 /* 19 */,
-	[ 3] =  9 /*  7 */, [ 4] = 25 /* 23 */,
-	[ 5] =  5 /* 11 */, [ 6] = 21 /* 27 */,
-	[ 7] =  1 /* 15 */, [ 8] = 17 /* 31 */,
+/* Bank ABCD */
+static const int acq132_lfp_plut11111111[] = {
+	[ 1] =  1 /* 15 */, [ 2] = 17 /* 31 */,
+	[ 3] =  5 /* 11 */, [ 4] = 21 /* 27 */,
+	[ 5] =  9 /*  7 */, [ 6] = 25 /* 23 */,
+	[ 7] = 13 /*  3 */, [ 8] = 29 /* 19 */,
+
+
+
 };
 
-static const int lut11[] = {
+/* Bank ABCD */
+static const int acq132_lfp_plut11[] = {
 /* index: memory order 1:32 
  * value: nameplate order 1:32 
  */
@@ -108,65 +113,28 @@ static const int lut11[] = {
 	[ 3] =  11, [ 4] = 27,
 };
 
-static int lfp_lookup(int ch)
-{
-	int ii;
 
-	for (ii = 1; ii < PLUT_ELEMS; ++ii){
-		if (plut[ii] == ch){
-			return ii;
-		}
-	}
-	return 0;
-}
+static const struct Acq132ChannelLUT acq132_lfp_luts[] = {
+	{	0xffffffff, 32, acq132_lfp_plut,		"DCBA"	},
+	{	0x00ff00ff, 16, acq132_lfp_plut16,		"BA"	},
+	{	0x000f000f,  8, acq132_lfp_plut8,		"A"	},
+	{	0x55555555, 16, acq132_lfp_plut55555555,	"DCBA"	},
+	{	0x11111111,  8, acq132_lfp_plut11111111,	"ABCD"	},
+	{	0x00110011,  4, acq132_lfp_plut11111111,	"AB"	},
+	{	0x00010001,  2, acq132_lfp_plut11111111,	"A"	},
+};
 
-extern const int acq132_default_plut[];
-
-int acq132_lfp_rewire(int ch) {
-/* index logical (user) channel order 1:32
- * value physical (rewired) channel order 1:32
- * lookup value in plut, get ix, get lchan from acq200_lookup_lchan
- */
-	int ch2 = acq132_default_plut[lfp_lookup(ch)];
-	dbg(1, "ch %02d -> %02d", ch, ch2);
-	return ch2;
-}
-
-static int acq132_lfp_set_special_lut(unsigned mask)
-{
-	switch(mask){
-	case 0x00010001:
-		acq200_setChannelLut(lut11, 2);
-		break;
-	case 0x00110011:
-		acq200_setChannelLut(lut11, 4);
-		break;
-	case 0x000f000f:
-		acq200_setChannelLut(plut8, 8);
-		break;
-	case 0x00ff00ff:
-		acq200_setChannelLut(plut16, 16);
-		break;
-	case 0x55555555:
-		acq200_setChannelLut(plut55555555, 16);
-		break;
-	case 0x11111111:
-		acq200_setChannelLut(plut11111111, 8);
-		break;
-	default:
-		acq200_setChannelLut(plut, PLUT_ELEMS);
-		break;
-	}
-	return 0;
-}
+static struct Acq132ChannelLUT_Collection acq132_lfp_LUTs = {
+	.model = "acq132-lfp",
+	.nmasks = sizeof(acq132_lfp_luts)/sizeof(struct Acq132ChannelLUT),
+	.luts = acq132_lfp_luts
+};
 
 
 static int __init acq132_lfp_init(void)
 {
 	info("lfp setting custom channel LUT");	
-	acq200_setChannelLut(plut, PLUT_ELEMS);
-	acq132_set_special_lut = acq132_lfp_set_special_lut;
-	acq132_rewire = acq132_lfp_rewire;
+	acq132_setChannelLUTs(&acq132_lfp_LUTs);
 	return 0;
 }
 
@@ -177,7 +145,7 @@ static void __exit
 acq132_lfp_exit_module(void)
 {
 	info("lfp restoring default channel LUT");
-	acq200_setChannelLut(0, 0);
+	acq132_setChannelLUTs(0);
 }
 
 module_init(acq132_lfp_init);

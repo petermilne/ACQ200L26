@@ -197,8 +197,5 @@ void acq200_start_clkCounterMonitor(void);
 void acq200_stop_clkCounterMonitor(void);
 int acq200_clkCounterMonitor_requestedToStop(void);
 
-extern int (*acq132_set_special_lut)(unsigned mask);
-extern int (*acq132_rewire)(int ch);	/* maps alt front panel to regular */
-
 extern int acq200_maxchan;
 #endif /* __ACQ200_FIFO_LOCAL_H__ */

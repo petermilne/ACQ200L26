@@ -1403,8 +1403,6 @@ static int __init acq132_fifo_init( void )
 		err("driver_register() failed");
 	}else if ((rc = platform_device_register(&acq132_fpga_device)) !=0){
 		err("platform_device_register() failed");
-	}else if ((rc = acq100_offset_fs_create(&acq132_fpga_device.dev)) !=0){
-		err("failed to register offset_fs");
 	}else if ((rc = acq196_AO_fs_create(&acq132_fpga_device.dev)) != 0){
 		err("failed to register AO fs");
 	}else{
@@ -1426,7 +1424,6 @@ acq132_fifo_exit_module(void)
 
 
 	acq196_AO_fs_remove();
-	acq100_offset_fs_remove();
 	dbg(1, "rm_sysfs()" );
 	rm_sysfs(&acq132_fpga_driver);
 	dbg(1, "platform_device_unregister()");
@@ -1475,6 +1472,7 @@ void acq132_setScanList(int scanlen, u32 scanlist)
 	*ACQ132_SCAN_LIST_LEN = scanlen - 1;
 }
 
+
 static void acq132_setDefaultScanlist(u32 masks[])
 {
 	int dev;
@@ -1497,7 +1495,7 @@ static const struct ADC_CHANNEL_LUT {
 	int dev;
 	int side;
 	u32 range_mask;
-	u32 cmask;
+	u32 afpga_cmask;
 } ADC_CHANNEL_LUT[] = {
 	[ 0] = {},
 	[ 1] = { BANK_D, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
@@ -1534,92 +1532,58 @@ static const struct ADC_CHANNEL_LUT {
 	[32] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4, MASK_4 }
 };
 
-u32 masks[4] = {};
+/* mask is maintained in fpga format, so l_mask, fpga_mask is the same ..*/
+union {
+	u32 l_masks[4];
+	u32 fpga_masks[4];
+} 
+	GL;
 
-extern int (*acq132_rewire)(int ch);
 
-static u32 fix_adc_cmask_dev(u32 mask, int shl)
-{
-	unsigned anibble = (mask >> shl) & 0x0f;
-	switch(anibble){
-	case 0:
-		return mask;	/* used later to select inactive */
-	case 0x8: case 0x4: case 0x2: case 0x1:
-		anibble = 0x1;
-		break;
-	case 0xc: case 0xa: case 0x5: case 0x3:
-		anibble = 0x5;
-		break;
-	default:
-		anibble = 0xf;
-		break;
-	}
-	mask &= ~(0x0f << shl);
-	mask |= anibble << shl;	
-
-	return mask;
-}
-
-static void fix_adc_cmask(void)
-/* only 0xf, 0x5, 0x1 are valid patterns */
-{
-	int dev;
-
-	for (dev = BANK_A; dev <= BANK_D; ++dev){
-		u32 before = masks[dev];
-
-		masks[dev] = 
-			fix_adc_cmask_dev(masks[dev], ACQ132_ADC_CTRL_LMSHFT);
-		masks[dev] = 
-			fix_adc_cmask_dev(masks[dev], ACQ132_ADC_CTRL_RMSHFT);
-
-		dbg(1, "[%d] before:%08x after:%08x", dev, before, masks[dev]);
-	}
-}
 
 void acq132_set_channel_mask(u32 channel_mask)
+/* channel_mask is "normalized" */
 {
 	u32 cursor = 1;
-	u32 ch_panel = 1;
+	u32 ch = 1;
 	int dev;
 
-	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch_panel){
-		int ch = acq132_rewire(ch_panel);
+	dbg(1, "normalized mask: %08x", channel_mask);
+
+	memset(&GL.l_masks, 0, sizeof(GL.l_masks));
+
+	for (cursor = 0x1; cursor != 0; cursor <<= 1, ++ch){
 		int dev = ADC_CHANNEL_LUT[ch].dev;
-		u32 mask = 1 << ((ch-1)&0x03);
+		u32 mask = ADC_CHANNEL_LUT[ch].afpga_cmask;
 		int shl = ADC_CHANNEL_LUT[ch].side == 'L'?
-			ACQ132_ADC_CTRL_LMSHFT:
-			ACQ132_ADC_CTRL_RMSHFT;
+			ACQ132_ADC_CTRL_LMSHFT:	ACQ132_ADC_CTRL_RMSHFT;
 
 		if ((channel_mask&cursor) != 0){
-			masks[dev] |= (mask << shl);
-		}else{
-			masks[dev] &= ~(mask << shl);
+			GL.l_masks[dev] |= (mask << shl);
 		}
 
 		dbg(2, "ch %d %s mask %08x masks[%d] %08x",
 		    ch, (channel_mask&cursor)? "SET": "CLR",
-		    mask << shl, dev, masks[dev]);
+		    mask << shl, dev, GL.l_masks[dev]);
 	}	
-
-	fix_adc_cmask();
 
 	acq132_adc_clr_all(ACQ132_ADC_CTRL_OFFSET, 
 			   ACQ132_ADC_CTRL_CMASK|ACQ132_ADC_CTRL_ACQEN);
 
 	for (dev = BANK_A; dev <= BANK_D; ++dev){
-		if (masks[dev] != 0){			
+		if (GL.l_masks[dev] != 0){			
 			u32 rv = *ACQ132_ADC_CTRL(dev);
 
-			dbg(1, "dev %d CTRL = %08x", dev, masks[dev]);
+			dbg(1, "dev %d CTRL = %08x", dev, GL.fpga_masks[dev]);
 			
-			rv |=  masks[dev] | ACQ132_ADC_CTRL_ACQEN;
+			rv |=  GL.fpga_masks[dev] | ACQ132_ADC_CTRL_ACQEN;
 			*ACQ132_ADC_CTRL(dev) = rv;
 		}
 	}
-
+#if 0
 	/* set scanlist ... users may override afterwards ... */
-	acq132_setDefaultScanlist(masks);	      
+	acq132_setDefaultScanlist(GL.l_masks);	      
+#endif
 }
 
 static int __getChannelsInMaskSide(
@@ -1636,15 +1600,15 @@ static int __getChannelsInMaskSide(
 		*cix = ch_index + 1;
 		break;
 	case MASK_2:
-		if (pch->cmask == MASK_2 ||
-		    pch->cmask == MASK_1   ){
+		if (pch->afpga_cmask == MASK_2 ||
+		    pch->afpga_cmask == MASK_1   ){
 			channels[ch_index + 2] = ic;
 			channels[ch_index] = ic;
 			*cix = ch_index + 1;
 		}
 		break;
 	case MASK_1:
-		if (pch->cmask == MASK_1){
+		if (pch->afpga_cmask == MASK_1){
 			channels[ch_index + 3] =			
 			channels[ch_index + 2] =
 			channels[ch_index + 1] =
@@ -1667,7 +1631,7 @@ static int __getChannelsInMaskSide(
 int getChannelsInMask(int bank, ChannelBank channels)
 /* identify channels enabled in bank, filling id in channels[], return n */
 {
-	u32 mask = masks[bank];
+	u32 mask = GL.l_masks[bank];
 	u32 keyl = NORMALISE_MASK(mask, ACQ132_ADC_CTRL_LMSHFT);
 	u32 keyr = NORMALISE_MASK(mask, ACQ132_ADC_CTRL_RMSHFT);
 	int ic;
@@ -1676,7 +1640,8 @@ int getChannelsInMask(int bank, ChannelBank channels)
 	int qc;
 	
 	dbg(2, "masks: A:%08x B:%08x C:%08x D:%08x : [%d] %08x",
-	    masks[0], masks[1], masks[2], masks[3], bank, masks[bank]);
+	    GL.l_masks[0], GL.l_masks[1], GL.l_masks[2], 
+			GL.l_masks[3], bank, GL.l_masks[bank]);
 
 	memset(channels, 0, sizeof(channels));
 

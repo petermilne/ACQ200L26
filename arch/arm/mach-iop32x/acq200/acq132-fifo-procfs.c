@@ -542,9 +542,6 @@ OSAM_PAIR(D);
 	} while(0)
 
 
-#define TO_SX(c) ((c)-'A')
-#define FROM_SX(sx) (((sx)&0x3)+'A')
-#define IS_SX(c) ((c) >= 'A' && (c) <= 'D')
 
 static ssize_t show_scanlist(
 	struct device * dev, 
@@ -570,29 +567,14 @@ static ssize_t store_scanlist(
 	struct device_attribute *attr,
 	const char * buf, size_t count)
 {
-	int iscan;
-	int maxscan = min((int)strlen(buf), ACQ132_SCAN_MAX);
-	u32 scan_def = 0;
 	int ok = 0;
 
-	while(isspace(buf[maxscan-1])){
-		--maxscan;
-	}
-	for (iscan = 0; iscan < maxscan; ++iscan){
-		if (IS_SX(buf[iscan])){
-       			scan_def |= TO_SX(buf[iscan]) << 2*iscan;
-			ok = 1;
-		}else{
-			err("\"%s\" char %d valid scan codes: A,B,C,D",
-			    buf, iscan);
-			ok = 0;
-			break;
-		}		
-	}
+	ok = acq132_store_scanlist(buf);
+
 	if (ok){
-		acq132_setScanList(iscan, scan_def);
 		return strlen(buf);
 	}else{
+		err("\"%s\" valid scan codes: A,B,C,D", buf);
 		return -EINVAL;
 	}
 }
@@ -1036,139 +1018,12 @@ static void acq132_mk_dev_sysfs(struct device *dev)
 
 
 
-int count_bits(unsigned mask) {
-	int ibit;
-	int count = 0;
-
-	for (ibit = 0; ibit < 32; ++ibit){
-		if (mask & (1<<ibit)){
-			++count;
-		}
-	}
-	return count;
-}
-static int isValidMask(unsigned mm, int shr)
-{
-	unsigned left =  (mm&0xffff0000) >> (shr + 16);
-	unsigned right = (mm&0x0000ffff) >> shr;
-
-	dbg(2, "mm: %08x shr:%d left:%08x right:%08x", 
-	    mm, shr, left, right);
-
-	if (left != right){
-		dbg(1, "%x ! = %x\n", left<<16, right);
-		return 0;
-	}
-	switch(left){
-	case MASK_1:
-	case MASK_2:
-	case MASK_4:
-		dbg(2, "return IS_VALID");
-		return 1;
-	default:
-		dbg(1, "%x not valid\n", left);
-		return 0;
-	}
-}
-
-
-/*
-Valid Channel Masks
-
-11111111111111111111111111111111
-11110000000000001111000000000000
-10100000000000001010000000000000
-00010000000000000001000000000000
-00001111000000000000111100000000
-00001010000000000000101000000000
-00000001000000000000000100000000
-00000000111100000000000011110000
-00000000101000000000000010100000
-00000000000100000000000000010000
-00000000000011110000000000001111
-00000000000010100000000000001010
-00000000000000010000000000000001
-
-... and of course any combo between columns 
-eg
-
-10100000000000001010000000000000
-00001010000000000000101000000000
-
-10101010000000001010101000000000
-*/
-
-
-static int acq132_regular_set_special_lut(unsigned mask)
-{
-	static const int lut11[] = {
-/* index: memory order 1:32 
- * value: nameplate order 1:32 
- */
-	[ 1] =  1, [ 2] = 17,
-	[ 3] =  5, [ 4] = 21,
-	};
-
-	switch(mask){
-	case 0x00010001:
-		acq200_setChannelLut(lut11, 2);
-		break;
-	case 0x00110011:
-		acq200_setChannelLut(lut11, 4);
-		break;
-	default:
-		acq200_setChannelLut(0, 0);
-		break;
-	}
-	return 0;
-}
-
-int (*acq132_set_special_lut)(unsigned mask) = 
-		acq132_regular_set_special_lut;
-
-int acq132_no_rewire(int ch) {
-	return ch;
-}
-
-int (*acq132_rewire)(int ch) = acq132_no_rewire;
-
 void acq200_setChannelMask(unsigned mask)
 {
-	unsigned mm;
-	int lchan;
-	unsigned vmask = 0;
-
-	dbg(1, "mask:%08x", mask);
-
-	if ((mm = mask&MASK_D) != 0 && isValidMask(mm, 12)){
-		vmask |= mm;
-	}
-	if ((mm = mask&MASK_C) != 0 && isValidMask(mm, 8)){
-		vmask |= mm;
-	}       
-	if ((mm = mask&MASK_B) != 0 && isValidMask(mm, 4)){
-		vmask |= mm;
-	}
-	if ((mm = mask&MASK_A) != 0 && isValidMask(mm, 0)){
-		vmask |= mm;
-	}
-
-	dbg(1, "mask %08x vmask %08x %s", mask, vmask, mask==vmask?"OK":"ERR");
-
-	if (vmask == mask){
-		CAPDEF->channel_mask = vmask;
-		acq132_set_channel_mask(vmask);
-
-		acq132_set_special_lut(vmask);
-
-		for (lchan = mm = 1; mm; mm<<=1, lchan++){
-			acq200_setChannelEnabled(
-				acq200_lookup_pchan(lchan), (mm&vmask) != 0);
-		}
-
-		CAPDEF_set_nchan(count_bits(vmask));
+	if (acq132_setChannelMask(mask) >= 0){
+		dbg(1, "mask %08x %s", mask, "VALID");
 	}else{
-		err("mask not valid: 0x%08x good=0x%08x", mask, vmask);
+		err("mask not valid: 0x%08x", mask);
 	}
 }
 
@@ -1358,5 +1213,3 @@ static void acq132_create_proc_entries(struct proc_dir_entry* root)
 	}
 }
 
-EXPORT_SYMBOL_GPL(acq132_set_special_lut);
-EXPORT_SYMBOL_GPL(acq132_rewire);

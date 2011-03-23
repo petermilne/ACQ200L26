@@ -474,6 +474,32 @@ extern int acq132_get_DR(int *nacc, int *shift);
 static inline int acq132_is_DR(void) { return acq132_get_DR(0,0); }
 
 
+struct Acq132ChannelLUT {
+	unsigned mask;
+	int nlut;
+	const int *plut; 
+	/**< index: memory order 1:32, value: nameplate order 1:32 */
+	const char* scanlist;
+};
+
+struct Acq132ChannelLUT_Collection {
+	char *model;
+	int nmasks;
+	struct Acq132ChannelLUT *luts;
+};
+
+int acq132_setChannelMask(unsigned mask);
+/* returns >= 0 if OK */
+
+extern void acq132_setChannelLUTs(struct Acq132ChannelLUT_Collection* luts);
+
+int acq132_rewire(int ch);	/* accounts for any non-standard wiring */
+int acq132_store_scanlist(const char* sl_def);
+
+/* SCANLIST defined as ABCD */
+#define TO_SX(c) ((c)-'A')
+#define FROM_SX(sx) (((sx)&0x3)+'A')
+#define IS_SX(c) ((c) >= 'A' && (c) <= 'D')
 
 #endif	/*  __ACQ132_H__ */
 

@@ -96,6 +96,9 @@ module_param_array(acq132_es_dec_cnt, int, NULL, 0444);
 int acq132_es[MAX_ES_TEST];
 module_param_array(acq132_es, int, NULL, 0444);
 
+int store_half = 0;
+module_param(store_half, int, 0644);
+
 #define TIMEBASE_ENCODE_GATE_PULSE_INDEX_MOD256 0
 #define TIMEBASE_ENCODE_GATE_PULSE		1
 
@@ -598,14 +601,37 @@ int acq132_transform_row_es1pQ(
 #endif
 #endif
 
+		if (tosam < 20){
 		/* ROW_CHAN == 2 */
-		to[0*channel_sam + tosam] = buf & 0x0000ffff;
-		to[1*channel_sam + tosam] = buf >> 16;
+			TBG(4, "to[0*%d + %d] = [%04lx, %04lx] %p", 
+			    channel_sam, tosam, 
+				buf & 0x0000ffff, buf>>16, full-1);
+		}
+
+		if (likely(store_half == 0)){
+			to[0*channel_sam + tosam] = buf & 0x0000ffff;
+			to[1*channel_sam + tosam] = buf >> 16;
+		}else if (store_half < 0){
+			to[0*channel_sam + tosam] = buf & 0x0000ffff;
+			if (store_half < -1){
+				to[1*channel_sam + tosam] = tosam;
+			}
+			if (tosam < 20){
+				if (store_half < -10){
+					to[0*channel_sam + tosam] = tosam;
+				}
+			}
+		}else if (store_half >= 0){
+			to[1*channel_sam + tosam] = buf >> 16;
+			if (store_half > 1){
+				to[0*channel_sam + tosam] = tosam;
+			}
+		}
 
 		++tosam;		
 	}
 
-	TBG(3, "99");	
+	TBG(3, "99 returns %d", tosam);	
 	return tosam;
 }
 
@@ -631,7 +657,10 @@ static void acq132_transform_unblocked(
 		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
 	}
 
-	TBG(1, "nsamples:%d", nsamples);
+	TBG(1, "nsamples:%d to:[%03d] %p  from:[%03d] %p", 
+	    nsamples, 
+	    TBLOCK_INDEX((void*)to - va_buf(DG)), to,
+	    TBLOCK_INDEX((void*)from - va_buf(DG)), from);
 
 #ifdef DEBUGGING
 	to1 = to;
@@ -656,12 +685,18 @@ static void acq132_transform_unblocked(
 	TBG(1, "99");
 }
 
+static void ident_memset(void* buf, int value, int len)
+{
+	dbg(1, "buf:%p %02d : %d", buf, value, len);
+	memset(buf, value, len);
+}
 static void acq132_transform_unblocked1pQ(
 	short *to, short *from, int nsamples, int ROWS)
 {
 /* keep a stash of NSCAN to vectors */
 #define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 	int row_off[MAX_ROWS];
+	int channel_sam = nsamples/ROWS;
 	int row;
 
 	if (ROWS > MAX_ROWS){
@@ -671,30 +706,47 @@ static void acq132_transform_unblocked1pQ(
 
 	G_rows = ROWS;
 
-	for (row = 0; row < ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
+	TBG(1, "to:%p [%03d] from: %p [%03d] nsamples:%d ROWS:%d",
+	    to, TBLOCK_INDEX((void*)to - va_buf(DG)),
+	    from, TBLOCK_INDEX((void*)from - va_buf(DG)),
+	    nsamples, ROWS);
+
+	if (acq132_transform_debug){
+		TBG(1, "nulling to:%p len:%d", to, TBLOCK_LEN(DG));
+		memset(to, 0, TBLOCK_LEN(DG));
 	}
 
-	TBG(1, "nsamples:%d", nsamples);
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
+		TBG(2, "row_off[%d] = %d", row, row_off[row]);
+	}
 
-#ifdef DEBUGGING
-	to1 = to;
-	to2 = to+nsamples*ROWS*ROW_CHAN4;
-	TBG(1, "to   %p to %p", to1, to2);
-	from1 = from;
-	from2 = from+nsamples*ROWS*ROW_CHAN4;
-	TBG(1, "from %p to %p", from1, from2);
-#endif
+	if (acq132_transform_debug > 1){
+		int ch_len = nsamples * sizeof(short);
+		TBG(1, "IDENTIFYING to:%p len:%d chlen:%d", 
+		    to, TBLOCK_LEN(DG), ch_len);
+		
+		for (row = 0; row < ROWS; ++row){
+			ident_memset(to + row_off[row], 2*row, ch_len);
+			ident_memset(to + row_off[row]+nsamples, 
+							2*row+1, ch_len);
+		}
+	}
 
+	TBG(1, "nsamples:%d ROWS:%d", nsamples, ROWS);
 
 	for (row = 0; row < ROWS; ++row){
+
+		TBG(2, "to:%p + row_off[%d] %p, from %p", 
+		    to, row, to + row_off[row], from);
+
 		row_off[row] += acq132_transform_row_es1pQ(
 			to + row_off[row], 
 			from, 
 			nsamples,
 			nsamples
 			);
-		from += nsamples*ROW_CHAN4;
+		from += nsamples;
 	}
 
 	TBG(1, "99");
@@ -707,8 +759,8 @@ static void* acq132_deblock(short * const from, int nwords, int ROWS)
 	int row_off[MAX_ROWS];
 	int row;
 
-	dbg(1, "00 block: %03d", TBLOCK_INDEX(frm-BB_PTR(0)));
-	dbg(1, "00 ROWS: %d", ROWS);
+	dbg(1, "00 block: %03d ROWS:%d", TBLOCK_INDEX(frm-BB_PTR(0)), ROWS);
+	dbg(1, "to block %03d, to:%p", g_esm.es_deblock->tblock->iblock, to);
 
 	for (row = 0; row != ROWS; ++row){
 		row_off[row] = DQ_ROW_OFF(row, ROWS);	
