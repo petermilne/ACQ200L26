@@ -1134,8 +1134,6 @@ static int __init acq164_fifo_init( void )
 		err("driver_register() failed");
 	}else if ((rc = platform_device_register(&acq164_fpga_device)) !=0){
 		err("platform_device_register() failed");
-	}else if ((rc = acq100_offset_fs_create(&acq164_fpga_device.dev)) !=0){
-		err("failed to register offset_fs");
 	}else if ((rc = acq196_AO_fs_create(&acq164_fpga_device.dev)) != 0){
 		err("failed to register AO fs");
 	}else{
@@ -1157,7 +1155,6 @@ acq164_fifo_exit_module(void)
 
 
 	acq196_AO_fs_remove();
-	acq100_offset_fs_remove();
 	dbg(1, "rm_sysfs()" );
 	rm_sysfs(&acq164_fpga_driver);
 	dbg(1, "platform_device_unregister()");
