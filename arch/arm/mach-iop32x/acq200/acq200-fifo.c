@@ -2428,6 +2428,15 @@ static int _oneshot_wait_for_done(void)
 			     ntimeout==1?"TIMEOUT":"",
 			     wo->error? "WO_ERROR":"" );
 		}
+#ifdef ACQ196 
+		/* handles case where there is AO FAWG but no AI */
+		if (CAPDEF->demand_len == 0 && acq196_AO_FAWG_is_stopped()){
+			finish_with_engines(__LINE__);
+			dbg(2, "60: no AI, AO_FAWG done");
+			info("60: no AI, AO_FAWG done");
+			return 0;
+		}
+#endif
 		if ( ntimeout || DG->finished_with_engines || wo->error ){
 			dbg(2, "98");
 			return 0;

@@ -23,4 +23,5 @@
 int acq196_AO_fs_create(struct device* device);
 void acq196_AO_fs_remove(void);
 
+int acq196_AO_FAWG_is_stopped(void);
 #endif /* _ACQ196_AO_H_ */

@@ -1650,3 +1650,8 @@ void acq196_AO_fs_remove(void)
 	delete_sawg();
 	kfree(AOG);
 }
+
+int acq196_AO_FAWG_is_stopped(void)
+{
+	return AOG->sawg.please_stop;
+}
