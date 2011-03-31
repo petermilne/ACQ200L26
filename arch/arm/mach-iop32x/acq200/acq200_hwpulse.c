@@ -245,7 +245,7 @@ static int _commitPulseTrig(struct Signal *signal)
 
 	reg |= signal->DIx <<  ACQ196_PGCSS_TRIGSEL_SHL;
 	if (signal->rising){
-		reg |= ACQ196_PGCSS_TRIGSEL;
+		reg |= ACQ196_PGCSS_TRIGRISING;
 	}
 
 	*ACQ196_PGCSS = reg;
@@ -343,6 +343,21 @@ static ssize_t store_pulse_def(
 static DEVICE_ATTR(pulse_def, S_IRUGO|S_IWUGO,
 		   show_pulse_def, store_pulse_def);
 
+static ssize_t store_commit_immediate(
+	struct device * dev, 
+	struct device_attribute *attr,
+	const char * buf, 
+	size_t count)
+{
+	int enable = buf[0] == '1';
+
+	hwpulse_stop();
+	if (enable){
+		hwpulse_start();
+	}
+	return strlen(buf);
+}
+static DEVICE_ATTR(commit_immediate, S_IWUGO, 0, store_commit_immediate);
 
 static ssize_t show_version(
 	struct device *dev,
@@ -367,6 +382,7 @@ static int mk_pulse_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_pulse_def);
 	DEVICE_CREATE_FILE(dev, &dev_attr_trig);
 	DEVICE_CREATE_FILE(dev, &dev_attr_genDO);
+	DEVICE_CREATE_FILE(dev, &dev_attr_commit_immediate);
 	return 0;
 }
 
