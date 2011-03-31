@@ -1058,7 +1058,7 @@ static void dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 
 #ifndef WAV232
 
-
+#define BADP(p) ((unsigned)(p) < PAGE_OFFSET)
 
 unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 {
@@ -1078,6 +1078,19 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 				TBLE_LIST_ENTRY(free_blocks->next);
 			unsigned long flags;
 
+			if (BADP(tble->list.next)){
+				err("%s %d", __FILE__, __LINE__);
+				return ~1;
+			}else if (BADP(tble->list.prev)){
+				err("%s %d", __FILE__, __LINE__);
+				return ~1;				
+			}else if (BADP(empty_tblocks->prev)){
+				err("%s %d", __FILE__, __LINE__);
+				return ~1;				
+			}else if (BADP(empty_tblocks->next)){
+				err("%s %d", __FILE__, __LINE__);
+				return ~1;
+			}
 			spin_lock_irqsave(&bb->tb_list_lock, flags);
 			list_move_tail(free_blocks->next, empty_tblocks);
 			spin_unlock_irqrestore(&bb->tb_list_lock, flags);
@@ -1721,12 +1734,19 @@ static struct Phase* onPIT_repeater(
 	struct Phase *phase, u32 status, u32* offset)
 {
 	struct list_head *clients = &DG->tbc_event.list;
+	struct list_head *empties = &DG->bigbuf.empty_tblocks;
 	int tbix = getTblockFromOffset(*offset);
 
 	dbg(1, "phase %s offset %u TBLOCK %u", phase->name, *offset, tbix);
 
+	if (list_empty(empties)){
+		err("no empties");
+		return phase;
+	}
+
 	spin_lock(&DG->tbc_event.lock);
 
+	
 	if (!list_empty(clients)){
 		unsigned pss = getPhaseSampleStart();
 		struct list_head* pool = &DG->bigbuf.pool_tblocks;
@@ -1736,8 +1756,7 @@ static struct Phase* onPIT_repeater(
 		TBLE* tble_m1;		/* previous tblock */
 		int found_self = 0;
 		struct TBLOCK *prev_tb = 0;
-		TBLE* next_tble = list_entry(
-			DG->bigbuf.empty_tblocks.next, TBLE, list);
+		TBLE* next_tble = list_first_entry(empties, TBLE, list);
 		struct TBLOCK *next_tb = next_tble->tblock;
 		
 		/** @@todo - get prev TB from phase, get next TB. */
