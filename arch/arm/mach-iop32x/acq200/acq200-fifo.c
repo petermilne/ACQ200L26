@@ -624,17 +624,8 @@ static int woOnRefill(
 }
 
 static unsigned getPhaseSampleStart(void) 
-/**< returns start sample in phase. is this really accurate? */
 {
-	long spb = DMA_BLOCK_LEN/sample_size();
-	unsigned pss = DG->stats.refill_blocks*spb - DMC_WO->pit_count;
-	/* round down to beginning of TBLOCK */
-	unsigned sptb = TBLOCK_LEN(DG)/sample_size();
-
-	pss /= sptb;
-	pss *= sptb;
-
-	return pss;
+	return DG->stats.tblocks_filled * DG->stats.samples_per_tblock;
 }
 
 #ifndef WAV232
@@ -719,6 +710,7 @@ static struct TblockListElement* dmc_phase_add_tblock(
 		}else{
 			++phase->tblock_count;
 		}
+		++DG->stats.tblocks_filled;
 		return tle;
 	}
 }
@@ -1901,6 +1893,8 @@ static void init_phases(void)
 	if (DG->ext_phase && DG->ext_phase->init){
 		DG->ext_phase->init();
 	}
+
+	DG->stats.samples_per_tblock = TBLOCK_LEN(DG)/sample_size();
 	dbg(3,"DMC_WO %p now0 %p", DMC_WO, DMC_WO->now);
 }
 

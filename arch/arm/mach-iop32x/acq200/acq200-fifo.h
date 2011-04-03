@@ -549,6 +549,8 @@ struct DevGlobs {
 		struct BDA bda_times;		
 
 		unsigned long total_soft_fifo_count;
+		unsigned long tblocks_filled;
+		unsigned samples_per_tblock;
 	} stats;
 	int shot;
 	
