@@ -488,6 +488,16 @@ struct Acq132ChannelLUT_Collection {
 	struct Acq132ChannelLUT *luts;
 };
 
+
+struct ADC_CHANNEL_LUT {
+	int dev;
+	int side;
+	u32 range_mask;
+	u32 afpga_cmask;
+};
+
+extern const struct ADC_CHANNEL_LUT* ADC_CHANNEL_LUT;
+
 int acq132_setChannelMask(unsigned mask);
 /* returns >= 0 if OK */
 

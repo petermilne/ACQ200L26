@@ -1491,12 +1491,7 @@ static void acq132_setDefaultScanlist(u32 masks[])
 }
 
 
-static const struct ADC_CHANNEL_LUT {
-	int dev;
-	int side;
-	u32 range_mask;
-	u32 afpga_cmask;
-} ADC_CHANNEL_LUT[] = {
+static const struct ADC_CHANNEL_LUT DEFAULT_ADC_CHANNEL_LUT[] = {
 	[ 0] = {},
 	[ 1] = { BANK_D, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
 	[ 2] = { BANK_D, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
@@ -1531,6 +1526,8 @@ static const struct ADC_CHANNEL_LUT {
 	[31] = { BANK_A, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
 	[32] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4, MASK_4 }
 };
+
+const struct ADC_CHANNEL_LUT* ADC_CHANNEL_LUT = DEFAULT_ADC_CHANNEL_LUT;
 
 /* mask is maintained in fpga format, so l_mask, fpga_mask is the same ..*/
 union {
@@ -1816,6 +1813,7 @@ module_exit(acq132_fifo_exit_module);
 
 EXPORT_SYMBOL_GPL(acq200_setIntClkHz);
 EXPORT_SYMBOL_GPL(acq200_setChannelMask);
+EXPORT_SYMBOL_GPL(ADC_CHANNEL_LUT);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");

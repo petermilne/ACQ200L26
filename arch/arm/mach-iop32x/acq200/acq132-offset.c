@@ -194,6 +194,7 @@ int acq132_setChannelMask(unsigned mask)
 int acq132_rewire(int ch)
 /* normalizes ch to regular wiring */
 {
+#ifdef PGMCOMOUT
 	if (plut == acq132_default_plut){
 		return ch;
 	}else{
@@ -203,6 +204,9 @@ int acq132_rewire(int ch)
 		dbg(1, "%02d => %02d [pchan=%d]", ch, ch2, pchan);
 		return ch2;
 	}
+#else
+	return ch;
+#endif
 }
 
 
