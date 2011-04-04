@@ -1444,7 +1444,7 @@ u32 acq200_get_fifsta(void) {
 	return *FIFSTAT;
 }
 
-#ifdef ACQ196
+#if defined(ACQ196) || defined(ACQ132)
 static void run_dmc_early_action(u32 fifstat)
 /** executes at interrupt priority. We assume client list is short! - 
  * also, that the early_actions() can be called from interrupt state.
@@ -1468,12 +1468,14 @@ static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 {
 	u32 fifsta = *FIFSTAT;
 
+/** @@todo .. log EVENT here? */
+
 #ifdef ACQ216
 	if (live_one_frame_per_dcb){
 		repeating_gate_action(fifsta);
 	}
 #endif
-#ifdef ACQ196
+#if defined(ACQ196) || defined(ACQ132)
 	run_dmc_early_action(fifsta);
 #endif
 

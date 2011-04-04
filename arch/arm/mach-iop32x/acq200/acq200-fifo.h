@@ -588,6 +588,8 @@ struct DevGlobs {
 			unsigned t_flags;
 			GetChannelData getChannelData;
 		} tblocks;
+		short *tblock_offset_lut;	/* [offset] -> TBIX */
+		unsigned *tblock_event_table;	/* [TBIX] -> EVENT/NO EVENT */
 	} bigbuf;
 
 	struct PIT_STORE {
@@ -652,6 +654,7 @@ struct DevGlobs {
 
 	unsigned (*getChannelNumSamples)(int pchan);
 };
+
 
 static inline void initLockedList(struct LockedList *rc)
 {
@@ -1210,4 +1213,18 @@ void acq200_fifo_bigbuf_fops_init(void);
 
 int acq200_bits(void);
 
+/* works for TBLOCK_LEN >= 1MB */
+#define TBLOCK_EVENT_ORDER		20
+#define TBLOCK_EVENT_BLOCKSIZE		(1 << TBLOCK_EVENT_ORDER)
+#define TBLOCK_EVENT_HASH(offset)	((offset)>>TBLOCK_EVENT_ORDER)
+/* TBLOCK EVENT table .. 
+ * 0 => no event
+ * OFFSET != 0 => offset of first event
+ * COUNT : total num events in tblock
+ */
+#define TBLOCK_EVENT_OFFSET(tbe)	((tbe)&0x00ffffff)
+#define TBLOCK_EVENT_COUNT(tbe) \
+	(TBLOCK_EVENT_OFFSET(tbe)? 1+((tbe)>>24): 0)
+
+#define TBLOCK_EVENT_SZ		(sizeof(unsigned)*TBLOCK_LEN(DG))
 #endif /* ACQ200_FIFO_H__ */

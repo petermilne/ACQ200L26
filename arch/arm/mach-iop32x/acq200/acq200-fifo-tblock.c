@@ -48,6 +48,7 @@ module_param(fix_event_share_tblock, int, 0644);
 
 #define DBG if (acq200_tblock_debug) dbg
 
+void clear_tblock_event_table(void);
 
 int tblock_raw_extractor(
 	struct TBLOCK *this,
@@ -277,18 +278,18 @@ static void build_tblock_list(void)
 		tbl->blocklen = kernel_blocklen;
 	}
 
-	if (tbl->blocklen == 0){
+	if (DG->bigbuf.tblocks.blocklen == 0){
 		err("BLOCKLEN == 0");
 	}
-	tbl->nblocks = len_buf(DG)/tbl->blocklen;
-	if (tbl->nblocks > ABS_MAX_TBLOCKS){
-		tbl->nblocks = ABS_MAX_TBLOCKS;	
+	MAX_TBLOCK = len_buf(DG)/DG->bigbuf.tblocks.blocklen;
+	if (MAX_TBLOCK > ABS_MAX_TBLOCKS){
+		MAX_TBLOCK = ABS_MAX_TBLOCKS;	
 	}
-	tbl->the_tblocks = 
-		kmalloc(sizeof(struct TBLOCK)*tbl->nblocks, GFP_KERNEL);
+	DG->bigbuf.tblocks.the_tblocks = 
+		kmalloc(sizeof(struct TBLOCK)*MAX_TBLOCK, GFP_KERNEL);
 
-	DBG(1, "kmalloc(%d) => %p", sizeof(struct TBLOCK) * tbl->nblocks,
-	    tbl->the_tblocks );
+	DBG(1, "kmalloc(%d) => %p", sizeof(struct TBLOCK) * MAX_TBLOCK,
+					    DG->bigbuf.tblocks.the_tblocks );
 	acq200_init_tblock_list();
 }
 
@@ -324,7 +325,6 @@ void acq200_empties_release_tblocks(void)
 
 void acq200_sort_free_tblocks(void)
 {
-#define MAXTB DG->bigbuf.tblocks.nblocks
 	LIST_HEAD(free_tmp);
 	struct list_head *free_tblocks = &DG->bigbuf.free_tblocks;
 	struct TblockListElement* tle;
@@ -339,8 +339,8 @@ void acq200_sort_free_tblocks(void)
 	while(!list_empty(&free_tmp)){
 		int search_before = ib_search;
 
-		if (ib_search >= MAXTB){
-			err("searching beyond the last tblock %d", MAXTB);
+		if (ib_search >= MAX_TBLOCK){
+			err("searching beyond the last tblock %d", MAX_TBLOCK);
 			return;
 		}
 
@@ -351,7 +351,7 @@ void acq200_sort_free_tblocks(void)
 			}
 		}
 		
-		if (ib_search == search_before && ib_search < MAXTB){
+		if (ib_search == search_before && ib_search < MAX_TBLOCK){
 			err("Missing block %d", ib_search++);
 		}		
 	}
@@ -394,6 +394,8 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 	}
 }
+
+
 void acq200_phase_release_tblocks(struct Phase* phase)
 {
 	struct TblockListElement* tle;
@@ -406,9 +408,40 @@ void acq200_phase_release_tblocks(struct Phase* phase)
 	list_for_each_entry_safe(tle, tmp, &phase->tblocks, list){ 
 		acq200_phase_release_tblock_entry(tle);
 	}
+
+	clear_tblock_event_table();
 }
 
+void build_tblock_offset_lut(void)
+{
+	int maxlut = len_buf(DG) >> TBLOCK_EVENT_ORDER;
+	int il;
+	short* tblock_offset_lut;
 
+	if (TBLOCK_LEN(DG) < TBLOCK_EVENT_BLOCKSIZE){
+		err("TBLOCK too small for offset lut");
+		return;
+	}
+	info("lut length: %d", maxlut);
+
+	tblock_offset_lut = kmalloc(sizeof(short)*maxlut, GFP_KERNEL);
+	
+	for (il = 0; il < maxlut; ++il){
+		tblock_offset_lut[il] = TBLOCK_INDEX(il*TBLOCK_EVENT_BLOCKSIZE);
+	}
+
+	DG->bigbuf.tblock_offset_lut = tblock_offset_lut;
+}
+
+void build_tblock_event_table(void)
+{
+	DG->bigbuf.tblock_event_table = kzalloc(TBLOCK_EVENT_SZ, GFP_KERNEL);
+}
+
+void clear_tblock_event_table(void)
+{
+	memset(DG->bigbuf.tblock_event_table, 0, TBLOCK_EVENT_SZ);
+}
 void acq200_tblock_init_top(void)
 {
 	struct BIGBUF *bb = &DG->bigbuf;
@@ -440,7 +473,9 @@ void acq200_tblock_init_top(void)
 		memset(tle, 0, sizeof(struct TblockListElement));
 
 		list_add_tail(&tle->list, &bb->pool_tblocks);
-	}	
+	}
+	build_tblock_offset_lut();
+	build_tblock_event_table();	
 }
 
 

@@ -171,8 +171,7 @@ short* from2;
 /* cursor: encode as TBLOCK{31:24}, OFFSET{23:0} */
 
 
-#define MAXTBLOCKS (DG->bigbuf.tblocks.nblocks)
-#define TBLOCKCHSZ (MAXTBLOCKS * sizeof(ChannelData))
+#define TBLOCKCHSZ (MAXTBLOCK * sizeof(ChannelData))
 #define NOTINMASK 0xffffffff
 
 typedef unsigned ChannelData[MAXCHAN];

@@ -1383,6 +1383,10 @@ static int __init acq132_fifo_init( void )
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	DMC_WO->handleEmpties = dmc_handle_empties_acq132;
 	init_phases();
+	if (CAPDEF->mode == M_SOFT_CONTINUOUS){
+		/** @todo add DCB early client */
+		/** @todo configure early DMC client for onPIT_repeater */
+	}
 
 	acq200_debug = acq200_fifo_debug;
 
