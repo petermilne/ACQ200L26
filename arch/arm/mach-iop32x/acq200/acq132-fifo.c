@@ -74,6 +74,9 @@ module_param(use_lo_ics, int, 0600);
 int DR_with_ES = 0;
 module_param(DR_with_ES, int, 0644);
 
+int early_event_checking = 1;
+module_param(early_event_checking, int, 0644);
+
 /* acq132-transform.c */
 extern void acq132_register_transformers(void);
 extern struct file_operations acq132_timebase_ops;
@@ -965,6 +968,95 @@ static int fifo_read_init_action(void)
 	return 0;
 }
 
+
+void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
+{
+	struct iop321_dma_desc* latest_desc;
+	unsigned bb_offset;
+	short tbix;
+	unsigned *tblock_event_entry;
+	unsigned tbe;
+
+	/* event is AT least at this point, if not further. */
+	latest_desc = active->buffers[active->iget];
+	bb_offset = latest_desc->LAD - pa_buf(DG);
+
+	tbix = DG->bigbuf.tblock_offset_lut[TBLOCK_EVENT_HASH(bb_offset)];
+	tblock_event_entry = DG->bigbuf.tblock_event_table+tbix;
+
+	if ((tbe = *tblock_event_entry) != 0){
+		unsigned ec = TBLOCK_EVENT_COUNT(tbe) + 1;
+		tbe = TBLOCK_EVENT_OFFSET(tbe) | MAKE_TBLOCK_EVENT_COUNT(ec);
+
+		dbg(1, "multiple events! [%d] = %08x was %08x", 
+		    tbix, tbe, *tblock_event_entry);
+
+		*tblock_event_entry = tbe;
+	}else{
+		unsigned tb_offset = 
+			bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset;
+		*tblock_event_entry = TBLOCK_EVENT_OFFSET(tb_offset);
+
+		if (TBLOCK_EVENT_OFFSET(tb_offset) != 
+		    bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset){
+			err("[%d] bb_offset 0x%08x tblock: 0x%08x",
+			    tbix, bb_offset, 
+			    DG->bigbuf.tblocks.the_tblocks[tbix].offset);
+		}
+	}		       
+}
+
+void acq132_event_dcb_action(struct DataConsumerBuffer* dcb, u32 fifstat)
+/* runs at INTERRUPT PRIORITY */
+{
+	int adc_ev = fifstat&ACQ132_FIFSTAT_ADC_EV;
+
+
+	if (adc_ev){
+		struct acq200_dma_ring_buffer* active = &DG->ipc->active;
+
+		*FIFSTAT = ACQ132_FIFSTAT_ADC_EV;
+		if (RB_IS_EMPTY(*active)){
+			err("unexpected empty rb");
+			return;			/* ERROR */
+		}else{
+			acq132_dcb_act_on_event(active);
+		}
+	}
+}
+static void _configure_early_event_dcb_client(int enable)
+{
+	static struct DataConsumerBuffer* event_dcb;
+	static int init_done;
+
+	if (!init_done){
+		event_dcb = acq200_createDCB();
+		INIT_LIST_HEAD(&event_dcb->list);
+		init_done = 1;
+	}
+
+	if (enable && !event_dcb->early_action){
+		event_dcb->early_action = acq132_event_dcb_action;
+	}
+	if (enable){
+		acq200_addDataConsumer(event_dcb);
+	}else{
+		acq200_removeDataConsumer(event_dcb);
+	}	
+}
+static int configure_early_event_dcb_client(int enable)
+{
+	if (TBLOCK_LEN(DG) < TBLOCK_EVENT_BLOCKSIZE){
+		err("TBLOCK too small for offset lut");
+		return -1;
+	}
+	if (early_event_checking){
+		_configure_early_event_dcb_client(enable);
+		return enable;
+	}else{
+		return -1;
+	}
+}
 static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file)
 {
 	int rc;
@@ -988,6 +1080,14 @@ static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file)
 #endif
 
 	init_phases();
+
+	if (CAPDEF->mode == M_SOFT_CONTINUOUS){
+		DMC_WO->early_event_checking = 
+			configure_early_event_dcb_client(1) > 0;
+	}else{
+		configure_early_event_dcb_client(0);
+		DMC_WO->early_event_checking = 0;
+	}
 
 	dbg(1, "calling fifo_read_init_action()");
 	rc = fifo_read_init_action();
@@ -1383,11 +1483,6 @@ static int __init acq132_fifo_init( void )
 	DG->bigbuf.tblocks.transform = acq200_getTransformer(2)->transform;
 	DMC_WO->handleEmpties = dmc_handle_empties_acq132;
 	init_phases();
-	if (CAPDEF->mode == M_SOFT_CONTINUOUS){
-		/** @todo add DCB early client */
-		/** @todo configure early DMC client for onPIT_repeater */
-	}
-
 	acq200_debug = acq200_fifo_debug;
 
 	info(ACQ132_VERID);

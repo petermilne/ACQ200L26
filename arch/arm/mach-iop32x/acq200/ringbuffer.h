@@ -140,6 +140,7 @@ static inline void u32rb_destroy(struct u32_ringbuffer* rb)
 #define RBMASK         (RBLEN-1)
 #define RB_IS_EMPTY( rb ) ((rb).iput==(rb).iget)
 #define RB_INCR( ii )  (((ii)+1)&RBMASK)
+#define RB_DECR( ii )  ((ii)-1 >= 0? (ii)-1: RBMASK)
 #define RB_IS_FULL( rb )  (RB_INCR((rb).iput)==(rb).iget)
 
 #define RB_WILL_BE_EMPTY(rb) ((rb).iput==RB_INCR((rb).iget))

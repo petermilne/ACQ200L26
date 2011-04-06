@@ -64,7 +64,28 @@ int debug_tbstat_ev = 0;
 module_param(debug_tbstat_ev, int, 0644);
 MODULE_PARM_DESC(debug_tbstat_ev, "turn on tbstat debugs");
 
+int tblock_ev_noclear = 0;
+module_param(tblock_ev_noclear, int, 0644);
+MODULE_PARM_DESC(tblock_ev_noclear, "DEBUG ONLY");
+
 extern int acq200_tblock_debug;		/* @@todo desperate debug measure */
+
+struct FunctionBuf {
+	char *p_start;
+	char *p_end;
+};
+static ssize_t format__read(struct file *filp, char *buf,
+			    size_t count, loff_t *offset);
+
+
+#define FB(filp) ((struct FunctionBuf *)filp->private_data)
+#define SET_FB(filp, fb) (filp->private_data = fb)
+
+struct FunctionBuf fb_format;
+
+#define FB_LIMIT 32768
+
+
 
 void acq200_initDCI(struct file *file, int lchannel)
 {
@@ -1601,6 +1622,27 @@ static ssize_t status_tb_read (
 #define BORDERLINE	0x100000
 #define TB_NOT_BORDERLINE	999
 
+
+static int readClearEvCount(int tbix)
+{
+	if (tbix == TB_NOT_BORDERLINE){
+		return 0;
+	}else{
+		unsigned *pstat = &DG->bigbuf.tblock_event_table[tbix];
+		unsigned stat = *pstat;
+
+		dbg(1, "[%d] = 0x%08x %d %06x",
+		    tbix, stat, TBLOCK_EVENT_COUNT(stat), 
+		    TBLOCK_EVENT_OFFSET(stat));
+
+		if (!tblock_ev_noclear){
+			*pstat = 0;		
+		}
+
+		return TBLOCK_EVENT_COUNT(stat);
+	}
+}
+
 static ssize_t status_tb_evread (
 	struct file *file, char *buf, size_t len, loff_t *offset)
 /** output last tblock as string data.
@@ -1631,6 +1673,7 @@ static ssize_t status_tb_evread (
 	}else{
 		int tb_prev = TB_NOT_BORDERLINE;
 		int tb_next = TB_NOT_BORDERLINE;
+		int ev_count[3] = {};
 
 		TBLE *tble_prev = list_entry(tle->neighbours.prev, TBLE, list);
 		TBLE *tble_next = list_entry(tle->neighbours.next, TBLE, list);
@@ -1654,12 +1697,20 @@ static ssize_t status_tb_evread (
 				list_move_tail(&tble_next->list,DCI_LIST(file));
 			}
 		}
+
+		if (DMC_WO->early_event_checking){
+			ev_count[0] = readClearEvCount(tb_prev);
+			ev_count[1] = readClearEvCount(tle->tblock->iblock);
+			ev_count[2] = readClearEvCount(tb_next);
+		}
 		list_add_tail(&tle->list, DCI_LIST(file));
 		rc = snprintf(lbuf, min(sizeof(lbuf), len),
-			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x\n",
+		"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x ecount=%d,%d,%d\n",
 				tb_prev, tle->tblock->iblock, tb_next,
 				tle->phase_sample_start,
-				tle->event_offset);
+			      tle->event_offset,
+			      ev_count[0], ev_count[1], ev_count[2]);
+		DG->stats.event0_count += ev_count[0]+ev_count[1]+ev_count[2];
 	}
 	tbc->c.tle = tle;
 
@@ -1775,8 +1826,8 @@ static ssize_t status2_tb_read (
 #define TD_SZ  (sizeof(struct tree_descr))
 
 /** files: head, channels * n, xxl, xxp, xx, tail */
-/* the add a bit more for specials ... */
-#define NODE_HEADROOM	10	
+/* then add a bit more for specials ... */
+#define NODE_HEADROOM	12
 #define MY_NODES(nc)    (1+(nc)+NODE_HEADROOM+1)
 #define MY_FILES_SZ(nc) (MY_NODES(nc)*TD_SZ)
 #define MY_IDENTS_SZ(nc) (MY_NODES(nc)*sizeof(short))
@@ -1929,19 +1980,6 @@ out:
 }
 /** crib ends */
 
-struct FunctionBuf {
-	char *p_start;
-	char *p_end;
-};
-
-
-
-#define FB(filp) ((struct FunctionBuf *)filp->private_data)
-#define SET_FB(filp, fb) (filp->private_data = fb)
-
-struct FunctionBuf fb_format;
-
-#define FB_LIMIT 32768
 
 
 static inline size_t fbLen(struct FunctionBuf* fb)
@@ -2098,6 +2136,51 @@ static int AI_fs_fill_super (
 }
 
 
+static int dma_tblock_struct_open(
+	struct inode *inode, struct file *file,	char *begin, int len)
+{
+	struct FunctionBuf* fb = 
+		kmalloc(sizeof(struct FunctionBuf), GFP_KERNEL);
+	
+	fb->p_start = begin;
+	fb->p_end   = begin + len;
+	SET_FB(file, fb);
+	return 0;
+}
+
+static int dma_tblock_offset_open (struct inode *inode, struct file *file)
+{	
+	if (DG->bigbuf.tblock_offset_lut){
+		return dma_tblock_struct_open(
+			inode, file, 
+			(char*)DG->bigbuf.tblock_offset_lut, 
+			DG->bigbuf.tblock_offset_lut_len*sizeof(short));
+	}else{
+		return -1;
+	}			
+}
+
+static int dma_tblock_event_open (struct inode *inode, struct file *file)
+{
+	if (DG->bigbuf.tblock_event_table){
+		return dma_tblock_struct_open(
+			inode, file,
+			(char*)DG->bigbuf.tblock_event_table,
+			TBLOCK_EVENT_SZ);
+	}else{
+		return -1;
+	}
+}
+
+
+
+static int dma_tblock_struct_release (struct inode *inode, struct file *file)
+{
+	kfree(file->private_data);
+	return 0;
+}
+ 
+
 static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 {
 	static struct file_operations dma_ch_ops = {
@@ -2141,6 +2224,17 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
+
+	static struct file_operations dma_tblock_event_ops = {
+		.open = dma_tblock_event_open,
+		.read  = format__read,
+		.release = dma_tblock_struct_release
+	};
+	static struct file_operations dma_tblock_offset_ops = {
+		.open = dma_tblock_offset_open,
+		.read = format__read,
+		.release = dma_tblock_struct_release
+	};	
 	static struct tree_descr front = {
 		NULL, NULL, 0
 	};
@@ -2194,6 +2288,13 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.ops = &dma_tbstat_ev_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
+	src.name = "tblock_offset_lut";
+	src.ops = &dma_tblock_offset_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
+	src.name = "tblock_event_table";
+	src.ops = &dma_tblock_event_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
 	tcount = updateFiles(&S_DFD, &backstop, 0, tcount);
 	return simple_fill_super(sb, DMAFS_MAGIC, S_DFD.files);
@@ -2303,8 +2404,19 @@ int acq200_fifo_destroy_AIfs(void)
 
 int acq200_addDataConsumer(struct DataConsumerBuffer *dcb)
 {
+	struct DataConsumerBuffer *test;
+
 	spin_lock(&DG->dcb.clients.lock);
+	
+	/* refuse to add twice .. */
+	list_for_each_entry(test, &DG->dcb.clients.list, list){
+		if (test == dcb){
+			goto unlock;
+		}
+	}
 	list_add_tail(&dcb->list, &DG->dcb.clients.list);
+
+unlock:
 	spin_unlock(&DG->dcb.clients.lock);
 	return 0;
 }

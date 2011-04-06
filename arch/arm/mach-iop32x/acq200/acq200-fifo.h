@@ -363,6 +363,7 @@ struct DMC_WORK_ORDER {
 	} control_target;
 
 	struct LockedList stateListeners;
+	int early_event_checking;
 };
 
 
@@ -589,6 +590,7 @@ struct DevGlobs {
 			GetChannelData getChannelData;
 		} tblocks;
 		short *tblock_offset_lut;	/* [offset] -> TBIX */
+		int tblock_offset_lut_len;
 		unsigned *tblock_event_table;	/* [TBIX] -> EVENT/NO EVENT */
 	} bigbuf;
 
@@ -1223,8 +1225,13 @@ int acq200_bits(void);
  * COUNT : total num events in tblock
  */
 #define TBLOCK_EVENT_OFFSET(tbe)	((tbe)&0x00ffffff)
+#define TBLOCK_EVENT_COUNT_SHL		24
 #define TBLOCK_EVENT_COUNT(tbe) \
-	(TBLOCK_EVENT_OFFSET(tbe)? 1+((tbe)>>24): 0)
+	(TBLOCK_EVENT_OFFSET(tbe)? 1+((tbe)>>TBLOCK_EVENT_COUNT_SHL): 0)
 
-#define TBLOCK_EVENT_SZ		(sizeof(unsigned)*TBLOCK_LEN(DG))
+#define MAKE_TBLOCK_EVENT_COUNT(cnt) \
+	((cnt)>1? ((cnt)-1) << TBLOCK_EVENT_COUNT_SHL: 0)
+
+
+#define TBLOCK_EVENT_SZ		(sizeof(unsigned)*MAX_TBLOCK)
 #endif /* ACQ200_FIFO_H__ */

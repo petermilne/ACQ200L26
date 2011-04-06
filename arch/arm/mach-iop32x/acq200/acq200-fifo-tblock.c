@@ -431,6 +431,7 @@ void build_tblock_offset_lut(void)
 	}
 
 	DG->bigbuf.tblock_offset_lut = tblock_offset_lut;
+	DG->bigbuf.tblock_offset_lut_len = maxlut;
 }
 
 void build_tblock_event_table(void)
@@ -440,7 +441,9 @@ void build_tblock_event_table(void)
 
 void clear_tblock_event_table(void)
 {
-	memset(DG->bigbuf.tblock_event_table, 0, TBLOCK_EVENT_SZ);
+	if (DG->bigbuf.tblock_event_table){
+		memset(DG->bigbuf.tblock_event_table, 0, TBLOCK_EVENT_SZ);
+	}
 }
 void acq200_tblock_init_top(void)
 {

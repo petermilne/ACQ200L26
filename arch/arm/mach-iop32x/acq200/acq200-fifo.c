@@ -556,12 +556,36 @@ static inline void sccInit(
 }
 
 
+int getEvStat(u32 *fifstat, unsigned *offset)
+/* waits till the end of the TBLOCK before reporting */
+{
+	int key1 = TBLOCK_EVENT_HASH(*offset);
+	int key2 = key1+1;
+	int tbix = DG->bigbuf.tblock_offset_lut[key1];
+
+	*fifstat = 0;
+
+	if (key2 >= DG->bigbuf.tblock_offset_lut_len ||
+	    tbix != DG->bigbuf.tblock_offset_lut[key2] ){
+	
+		unsigned tboff = *offset & (TBLOCK_EVENT_BLOCKSIZE-1);
+
+		if (tboff + DMA_BLOCK_LEN >= TBLOCK_EVENT_BLOCKSIZE){
+			unsigned ev_stat = DG->bigbuf.tblock_event_table[tbix];
+			return ev_stat;
+		}		
+	}
+	
+	return 0;
+}
+
 static int woOnRefill(
 	struct DMC_WORK_ORDER *wo, u32* fifstat, unsigned* offset )
 /* returns 1 on phase change or END_OF_PHASE */
 {
 #define END_OF_PHASE 1
 	struct Phase* phase = wo->now;
+	unsigned ev_stat;
 
 	dbg(3, "wo %p phase %p act %d demand %d",
 	    wo, phase, 
@@ -601,7 +625,12 @@ static int woOnRefill(
 	}
 	phase->end_off = *offset + DMA_BLOCK_LEN;
 
-	if (*fifstat){
+	if (wo->early_event_checking){
+		if ((ev_stat = getEvStat(fifstat, offset))){
+			dbg(1, "ev_stat %08x", ev_stat);
+			onEvent(wo, ev_stat, offset);
+		}
+	}else{
 		*fifstat = CHECK_FIFSTAT(wo, *fifstat, offset);
 	}
 
@@ -620,6 +649,8 @@ static int woOnRefill(
 	}else{
 		wo->now->event_count++;
 	}
+        dbg(2, "99 rv %d", phase != wo->now);
+
 	return phase != wo->now;         /* event is in NEW Phase */
 }
 
@@ -778,12 +809,13 @@ void share_tblock(
 
 #ifndef WAV232
 
-static void _dmc_handle_dcb_inst(
+/* static */
+void _dmc_handle_dcb_inst(
 	struct DataConsumerBuffer *dcb,
 	u32 fifstat,
 	u32 offset)
 {
-
+	dbg(3, "01");
 	if (dcb->flow_control_active){
 		if (u32rb_is_empty(&dcb->rb)){
 			dcb->flow_control_active = 0;			
@@ -808,9 +840,11 @@ static void _dmc_handle_dcb_inst(
 			DG->stats.dcb_flow_control_discards++;
 		}
 	}	
+	dbg(3, "99");
 }
 
-static void _dmc_handle_dcb(
+/* static */
+void _dmc_handle_dcb(
 	struct iop321_dma_desc *pbuf, u32 offset
 	)
 {
@@ -891,7 +925,8 @@ static void poll_dma_done(void);
 
 #define CLV_LEN	(BLOCK_MOD*DMA_BLOCK_LEN)
 
-static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
+/* static */
+void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 {
 /* run client in arrears to ensure it doesn't get values in flight -
  * a possibility at slow sample rates
@@ -973,14 +1008,15 @@ static void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		}else
 #endif			
 		{
+			u32* dd_fifstat = &pbuf->DD_FIFSTAT;
+
 			if (TBLOCK_OFFSET(offset) == 0 && 
 			    dmc_phase_add_tblock(phase, &offset) == 0){
 				err("drop out early");
 				acq200_dmad_free(pbuf);
 				break;
 			}
-			end_of_phase = woOnRefill(wo, 
-						  &pbuf->DD_FIFSTAT, &offset);
+			end_of_phase = woOnRefill(wo, dd_fifstat, &offset);
 
 			dbg( 3, "free %s", acq200_debug>3?dmad_diag(pbuf): "");
 			++DG->stats.refill_blocks;
@@ -1723,98 +1759,114 @@ static void init_phase(struct Phase *phase, int len, int oneshot)
 }
 
 
-
-static struct Phase* onPIT_repeater(
-	struct Phase *phase, u32 status, u32* offset)
+static struct Phase* _onPIT_repeater(
+	struct Phase *phase, u32 ev_stat, u32* offset)
 {
 	struct list_head *clients = &DG->tbc_event.list;
 	struct list_head *empties = &DG->bigbuf.empty_tblocks;
 	int tbix = getTblockFromOffset(*offset);
+	struct list_head* pool = &DG->bigbuf.pool_tblocks;
+	struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
+	struct TBLOCK *next_tb = 0;
+	struct TBLOCK *prev_tb = 0;
+	struct list_head* head =  &phase->tblocks;
+	int found_self = 0;
+	TBLE *tble;
+	struct TblockConsumer *tbc;
 
 	dbg(1, "phase %s offset %u TBLOCK %u", phase->name, *offset, tbix);
+		
+	list_for_each_entry_reverse(tble, head, list){
+		dbg(1, "cursor:%d key:%d", tble->tblock->iblock,
+						    tblock->iblock);
+		if (tble->tblock == tblock){
+			found_self = 1;
+			break;
+		}
+	}
+
+	if (!found_self){
+		err("FAILED to find SELF");
+		return 0;
+	}else{
+		/* next may not be in phase yet .. */
+		TBLE* next_tble = list_first_entry(empties, TBLE, list);
+		TBLE* tble_m1 = 0;		/* previous tblock */
+
+		if (tble->list.prev != head){
+			tble_m1 = list_entry(tble->list.prev, TBLE, list);
+		}
+		if (tble->list.next != head){
+			next_tble = list_entry(tble->list.next, TBLE, list);
+		}
+
+		if (tble_m1)	prev_tb = tble_m1->tblock;
+		if (next_tble)	next_tb = next_tble->tblock;	
+	}
+
+
+	dbg(1, "01: prev_tb %p next_tb %p", prev_tb, next_tb);
+	dbg(1, "02: pret_tb %d next_tb %d", prev_tb->iblock, next_tb->iblock);
+
+	list_for_each_entry(tbc, clients, list){
+		TBLE* tle;
+		TBLE* tle_prev;
+		TBLE* tle_next;
+			
+		if (tbc->backlog_limit && tbc->backlog_limit < tbc->backlog){
+			tbc_discards++;
+			continue;
+		}
+
+		tle = TBLE_LIST_ENTRY(pool->next);
+
+		dbg(1, "30: listp %p", &tle->list);
+
+		list_del(&tle->list);
+		tle->event_offset = TBLOCK_EVENT_OFFSET(ev_stat);
+		tle->phase_sample_start = getPhaseSampleStart();
+		atomic_inc(&tblock->in_phase);
+		tle->tblock = tblock;
+
+		INIT_LIST_HEAD(&tle->neighbours);				
+		list_move(pool->next, &tle->neighbours);
+		list_move_tail(pool->next, &tle->neighbours);
+
+
+		tle_prev = list_entry(tle->neighbours.prev, TBLE, list);
+		tle_prev->tblock = prev_tb;
+		if (prev_tb) atomic_inc(&prev_tb->in_phase);
+
+		tle_next = list_entry(tle->neighbours.next, TBLE, list);
+		tle_next->tblock = next_tb;
+		if (next_tb) atomic_inc(&next_tb->in_phase);
+
+		++tbc->backlog;
+		list_add_tail(&tle->list, &tbc->tle_q);
+		wake_up_interruptible(&tbc->waitq);
+	}
+
+	return phase;
+}
+
+static struct Phase* onPIT_repeater(
+	struct Phase *phase, u32 status_notused, u32* offset)
+{
+	struct list_head *clients = &DG->tbc_event.list;
+	struct list_head *empties = &DG->bigbuf.empty_tblocks;
+
 
 	if (list_empty(empties)){
 		err("no empties");
 		return phase;
 	}
 
-	spin_lock(&DG->tbc_event.lock);
-
-	
+	spin_lock(&DG->tbc_event.lock);		/** @@critical */
 	if (!list_empty(clients)){
-		unsigned pss = getPhaseSampleStart();
-		struct list_head* pool = &DG->bigbuf.pool_tblocks;
-		struct TBLOCK *tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
-		unsigned tboff = TBLOCK_OFFSET(*offset);
-		struct TblockConsumer *tbc;
-		TBLE* tble_m1;		/* previous tblock */
-		int found_self = 0;
-		struct TBLOCK *prev_tb = 0;
-		TBLE* next_tble = list_first_entry(empties, TBLE, list);
-		struct TBLOCK *next_tb = next_tble->tblock;
-		
-		/** @@todo - get prev TB from phase, get next TB. */
-		
-		list_for_each_entry_reverse(tble_m1, &phase->tblocks, list){
-			dbg(1, "reverse list phase tblocks %d",
-						tble_m1->tblock->iblock);
-			if (!found_self){
-				if (tble_m1->tblock != tblock){
-					err("expected to find self failed");
-				}else{
-					found_self = 1;
-				}
-			}else{
-				prev_tb = tble_m1->tblock;
-				break;
-			}
-		}
-
-		dbg(1, "01: prev_tb %p next_tb %p", prev_tb, next_tb);
-		dbg(1, "02: pret_tb %d next_tb %d",
-					prev_tb->iblock, next_tb->iblock);
-
-		list_for_each_entry(tbc, clients, list){
-			if (tbc->backlog_limit == 0 ||
-			    tbc->backlog_limit > tbc->backlog){
-
-				TBLE* tle = TBLE_LIST_ENTRY(pool->next);
-				TBLE* tle_prev;
-				TBLE* tle_next;
-
-				dbg(1, "30: listp %p", &tle->list);
-
-				list_del(&tle->list);
-				tle->event_offset = tboff;
-				tle->phase_sample_start = pss;
-				++tbc->backlog;
-				atomic_inc(&tblock->in_phase);
-				tle->tblock = tblock;
-
-				INIT_LIST_HEAD(&tle->neighbours);
-				
-				list_move(pool->next, &tle->neighbours);
-				list_move_tail(pool->next, &tle->neighbours);
-
-				tle_next = list_entry(tle->neighbours.next,
-						      TBLE, list);
-				tle_prev = list_entry(tle->neighbours.prev, 
-							TBLE, list);
-
-				tle_prev->tblock = prev_tb;
-				if (prev_tb){
-					atomic_inc(&prev_tb->in_phase);
-				}
-				tle_next->tblock = next_tb;
-				atomic_inc(&next_tb->in_phase);
-				list_add_tail(&tle->list, &tbc->tle_q);
-				wake_up_interruptible(&tbc->waitq);
-			}else{
-				tbc_discards++;
-			}
-		}
+		phase = _onPIT_repeater(phase, status_notused, offset);
 	}
-	spin_unlock(&DG->tbc_event.lock);
+	spin_unlock(&DG->tbc_event.lock);	/** @@critical ends */
+
 	return phase;
 }
 
