@@ -45,35 +45,61 @@
 char acq100_rtm_driver_name[] = "acq100-rtmclk";
 #include "acqX00-rtm.h"
 
-#define	RTMCLK_LICR \
-	(DIO_REG_TYPE((unsigned)ACQ200_EXTERNIO+0x14))	
-#define	RTMCLK_LOCR \
-	(DIO_REG_TYPE((unsigned)ACQ200_EXTERNIO+0x18))	
 
 #define	RTMCLK_CONTROL_OPTOS_OFF	(1<<3)
 
-int debug = 1;
+#define	RTMCLK_LICR \
+	(DIO_REG_TYPE((unsigned)ACQ200_EXTERNIO+0x14))	
+
+#define RTMCLK_LICR_DI0	0x0
+#define RTMCLK_LICR_DI1 0x1
+#define RTMCLK_LICR_DI2 0x2
+#define RTMCLK_LICR_NC  0x3	/* DISCONNECTED */
+
+#define	RTMCLK_LOCR \
+	(DIO_REG_TYPE((unsigned)ACQ200_EXTERNIO+0x18))	
+
+#define LOCR_LIN	0x0	/* Lemo IN */
+#define LOCR_DO0	0x1
+#define LOCR_DO1	0x2
+#define LOCR_DO2	0x3
+
+#define LOCR1(lv)	((lv) << 0)
+#define LOCR2(lv)	((lv) << 2)
+#define LOCR3(lv)	((lv) << 4)
+#define LOCR4(lv)	((lv) << 6)
+
+#define LOCR_ALL(lv)	(LOCR1(lv)|LOCR2(lv)|LOCR3(lv)|LOCR4(lv))
+
+
+
+int debug = 0;
+module_param(debug, int, 0644);
 
 static int __init rtmclk_init( void )
 {
-	u32 rev = *RTM_DIO_CONTROL;
+	unsigned rev = RTM_REVID(*RTM_DIO_CONTROL);
+
 	if (rev >= 8){
 		info("RTM_CLK located, setting up");
-		SET_REG(RTM_DIO_CONTROL, =, RTM_REGCLR|RTMCLK_CONTROL_OPTOS_OFF);
-		SET_REG(RTMCLK_LICR, =, 0x3);
-//		SET_REG(RTMCLK_LOCR, =, 0x55);
-		SET_REG(RTMCLK_LOCR, =, 0xaa);
+		SET_REG(RTM_DIO_CONTROL, =, 
+					RTM_REGCLR|RTMCLK_CONTROL_OPTOS_OFF);
+		SET_REG(RTMCLK_LICR, =, RTMCLK_LICR_NC);
+		SET_REG(RTMCLK_LOCR, =, LOCR_ALL(LOCR_DO1));
+		return 0;
 	}else{
 		err("RTM is not RTM_CLK, rev code %02x", rev);
+		return -ENODEV;
 	}
-	return 0;
 }
 
 
 static void __exit
 rtmclk_exit_module(void)
 {
-	info("");
+	info("restore LIN default");
+	SET_REG(RTMCLK_LICR, =, RTMCLK_LICR_DI0);
+	SET_REG(RTMCLK_LOCR, =, LOCR_ALL(LOCR_LIN));
 }
 
 module_init(rtmclk_init);
