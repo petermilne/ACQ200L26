@@ -39,6 +39,8 @@ static struct DIO32 {
 #define RTM_REGCLR 0x01
 #define RTM_DIREN  0x02
 
+#define RTM_REVID(ctrl) (((ctrl)>>4)&0x0f)
+
 #define SET_REG(reg, op, value) \
         *reg op value; \
         dbg(1, "0x%p %s 0x%08x", reg, #op, value)
