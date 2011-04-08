@@ -173,7 +173,7 @@ static ssize_t store_locr(
 
 	for (ik = 0; ik < 4; ++ik){
 		if (strcmp(key, LUT[ik]) == 0){
-			dbg(1, "match %s", key);
+			dbg(1, "match %s  (%d<<%d)", key, ik, shl);
 
 			locr &= ~(LOCR_MASK << shl);
 			locr |= ik << shl;
