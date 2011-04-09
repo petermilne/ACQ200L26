@@ -230,6 +230,7 @@ extern unsigned int processor_id;
 /* PEC0 DOESN'T EXIST - index from 1! */
 #define IOP321_PECR0	(volatile u32 *)IOP321_REG_ADDR(0x00000710)
 
+#define IOP321_GTMR_INTEN	0x01
 #define IOP321_GTMR_NGCE	0x04 /* (Not) Global Counter Enable */
 
 /* Internal arbitration unit 0x00000780 through 0x0007BF */
