@@ -924,6 +924,91 @@ static void poll_dma_done(void);
 
 #define CLV_LEN	(BLOCK_MOD*DMA_BLOCK_LEN)
 
+struct iop321_dma_desc *__dmc_handle_refills_pbc(
+	struct iop321_dma_desc *pbuf
+	)
+{
+	if (pbuf->clidat){			
+		/** return pbc to endstops, passing fifo_to_local
+		 *  to regular downstream processing.
+		 */
+		struct PrebuiltChain* pbc = 
+			(struct PrebuiltChain*)pbuf->clidat;
+
+		if (IS_MFA(pbc)){
+			/* this is a gross error. log it */
+			err("MFA in clidat 0x%08x", (unsigned)pbc);
+			goto no_clidat;
+		}
+
+#ifdef ACQ216
+		/** do not interfere with DMAD in flight! 
+		 *  this theory is DODGY because this code tinks with 
+		 *  pbc, NOT dmad
+		 */
+		if (RB_IS_EMPTY(IPC->active)){
+			poll_dma_done();
+		}
+#endif
+/** @todo - surely a DMAD leak if multiple elements in chain? */
+		if (dmc0.pbc_client){
+			dmc0.pbc_client(pbc);
+		}
+		pbuf = pbc->the_chain[pbc->fifo_to_local];
+		pbc->the_chain[pbc->fifo_to_local] = 0;
+		rb_put(&IPC->endstops, &pbc->desc);
+	}
+no_clidat:
+	return pbuf;
+}
+
+int _dmc_handle_refills_end_of_phase(
+	struct DMC_WORK_ORDER *wo,
+	struct Phase* phase,
+	int bda_fin)
+{
+	dbg(1, "phase_end d:%d l:%d", 
+	    phase->demand_len, phase_len(phase));
+
+	if (!bda_fin && wo->now != 0 && !phase_end(wo->now)){
+		share_last_tblock(wo->now, phase);
+		return 0;
+	}else{
+		/* clients want to know about LAST tblock,
+		 * full or not.. */
+#ifndef WAV232	
+		_dmc_handle_tb_clients(
+			TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
+#endif
+		wo->finished_code = 1;
+		if (bda_fin){
+			dbg( 1,"BDA_FIN - shut down and wake caller");
+			finish_with_engines(__LINE__);
+		}else{
+			dbg( 1,"all done - shut down and wake caller");
+			finish_with_engines(__LINE__);
+		}
+
+		return 1;
+	}	
+
+}
+
+void _dmc_handle_refills_refill_client(
+	struct DMC_WORK_ORDER *wo, 
+	u32 offset,
+	void ** clv)
+{
+	if (wo->dmc_dma_buf_modulus == 0){
+		if (*clv != 0){
+			acq200_runRefillClient(*clv, CLV_LEN);
+		}
+		*clv = BB_PTR(offset);
+	}
+	if (++wo->dmc_dma_buf_modulus == BLOCK_MOD){
+		wo->dmc_dma_buf_modulus = 0;
+	}
+}
 /* static */
 void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 {
@@ -931,7 +1016,6 @@ void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
  * a possibility at slow sample rates
  */
 	static void* clv;		/* client last value */
-
 	struct iop321_dma_desc *pbuf;
 	int nrefills = 0;
 	u32 offset;
@@ -946,56 +1030,16 @@ void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		/** @todo - try to trap a null pointer exception */
 		assert(pbuf);
 
-		if (pbuf->clidat){			
-			/** return pbc to endstops, passing fifo_to_local
-                         *  to regular downstream processing.
-			 */
-			struct PrebuiltChain* pbc = 
-				(struct PrebuiltChain*)pbuf->clidat;
-
-			if (IS_MFA(pbc)){
-				/* this is a gross error. log it */
-				err("MFA in clidat 0x%08x", (unsigned)pbc);
-				goto no_clidat;
-			}
-
-#ifdef ACQ216
-			/** do not interfere with DMAD in flight! 
-			 *  this theory is DODGY because this code tinks with 
-                         *  pbc, NOT dmad
-			 */
-			if (RB_IS_EMPTY(IPC->active)){
-				poll_dma_done();
-			}
-#endif
-/** @todo - surely a DMAD leak if multiple elements in chain? */
-			if (dmc0.pbc_client){
-				dmc0.pbc_client(pbc);
-			}
-			pbuf = pbc->the_chain[pbc->fifo_to_local];
-			pbc->the_chain[pbc->fifo_to_local] = 0;
-			rb_put(&IPC->endstops, &pbc->desc);
-		}
-
-	no_clidat:
+		pbuf = __dmc_handle_refills_pbc(pbuf);
 		phase = wo->now;
 		offset = pbuf->LAD - wo->pa;
 
 		if (wo->scc.scc == 0){
 			dbg(1, "first dmad offset:%d %s",
-			    offset, dmad_diag(pbuf));
+					offset, dmad_diag(pbuf));
 		}
 
-		if (wo->dmc_dma_buf_modulus == 0){
-			if (clv != 0){
-				acq200_runRefillClient(clv, CLV_LEN);
-			}
-			clv = BB_PTR(offset);
-		}
-		if (++wo->dmc_dma_buf_modulus == BLOCK_MOD){
-			wo->dmc_dma_buf_modulus = 0;
-		}
-
+		_dmc_handle_refills_refill_client(wo, offset, &clv);
 #ifndef WAV232
 		increment_scc(&wo->scc);
 
@@ -1032,33 +1076,10 @@ void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 
 		acq200_dmad_free(pbuf);
 
-		if (end_of_phase){
-			dbg(1, "phase_end d:%d l:%d", 
-			    phase->demand_len, phase_len(phase));
-
-			if (!bda_fin && wo->now != 0 && !phase_end(wo->now)){
-				share_last_tblock(wo->now, phase);
-			}else{
-				/* clients want to know about LAST tblock,
-				 * full or not.. */
-#ifndef WAV232	
-				_dmc_handle_tb_clients(
-					TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
-#endif
-				wo->finished_code = 1;
-				if (bda_fin){
-					dbg( 1,"BDA_FIN - shut down and wake caller");
-					finish_with_engines(__LINE__);
-				}else{
-					dbg( 1,"all done - shut down and wake caller");
-					finish_with_engines(__LINE__);
-				}
-
-				break;
-			}
-		}
-
-		if (nrefills >= GET_MAX_ACTIVE){
+		if (end_of_phase && 
+			_dmc_handle_refills_end_of_phase(wo, phase, bda_fin)){
+			break;
+		}else if (nrefills >= GET_MAX_ACTIVE){
 			break;
 		}
 	}
