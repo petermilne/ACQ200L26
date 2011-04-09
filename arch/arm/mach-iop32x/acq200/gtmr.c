@@ -114,9 +114,10 @@ static ssize_t show_msecs(
 	char * buf
 	)
 {
-	unsigned long ts2 = gtmr_update_timestamp() >> 16;
-	   
-	return sprintf(buf, "%lu %lu\n", ts2, ts2*655/500);
+	unsigned long long ts = gtmr_update_timestamp();
+	do_div(ts, GTMR_TICK_PER_MSEC);
+
+	return sprintf(buf, "%u\n", ts);
 }
 
 static DEVICE_ATTR(msecs, S_IRUGO, show_msecs, 0);

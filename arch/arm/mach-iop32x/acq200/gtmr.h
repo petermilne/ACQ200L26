@@ -28,6 +28,7 @@
 #define __GTMR_H__
 
 #define GTMR_TICK_NSEC		20
+#define GTMR_TICK_PER_USEC	50
 #define GTMR_TICK_PER_MSEC	50000
 
 unsigned long long gtmr_update_timestamp(void);
