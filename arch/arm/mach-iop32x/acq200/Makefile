@@ -53,6 +53,7 @@ CONFIG_ACQ200_HOSTDRV=m
 CONFIG_ARCH_DTACQ_ACQ100_GATHER=m
 CONFIG_ARCH_DTACQ_ACQ100_RTMCLK=m
 
+
 obj-y			:= \
 	acq200-time.o \
 	acqX00-setup.o   \
@@ -74,8 +75,6 @@ obj-			:=
 
 
 obj-$(CONFIG_ARCH_DTACQ_CORE) += acq200-core.o
-
-obj-$(CONFIG_ARCH_DTACQ_FIQTIMER) += fiq-timer.o
 
 obj-$(CONFIG_ARCH_DTACQ_BRIDGE) += acq200-bridge.o
 
@@ -253,10 +252,6 @@ acq100_rtm_t-objs := acq100_rtm_t_main.o acq100_rtm_t_uart.o acq100_rtm_t_spi.o
 
 #acq216-fiq.o: acq216-fiq.S
 #wav232-fiq.o: wav232-fiq.S
-
-acq200-fiq-shell.o: acq200-fiq-shell.S
-
-
 
 .links: 
 	ln -s /home/pgm/PROJECTS/ACQ200/project/BASE/DTACQ/SRC/include/acq32busprot.h acq32busprot.h
