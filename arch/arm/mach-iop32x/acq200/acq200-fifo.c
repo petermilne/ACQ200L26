@@ -67,6 +67,7 @@
 
 #include "prebuiltChainUtils.h"
 
+#include "gtmr.h"
 
 
 #define VERID \
@@ -463,7 +464,7 @@ static int _finish_with_engines(int ifinish)
 	iop321_stop_ppmu();
 
 
-	DG->stats.end_gtsr = *IOP321_GTSR;
+	DG->stats.end_gtsr = gtmr_update_timestamp();
 	DG->stats.end_jiffies = jiffies;
 	DG->stats.finish_time = CURRENT_TIME;
 
@@ -2098,7 +2099,7 @@ static void onTrigger(void)
 
 	if (my_turn){
 		iop321_start_ppmu();
-		DG->stats.start_gtsr = *IOP321_GTSR;
+		DG->stats.start_gtsr = gtmr_update_timestamp();
 		DG->stats.start_jiffies = jiffies;
 		DMC_WO_setState(ST_RUN);
 		DG->shot++;

@@ -519,8 +519,8 @@ struct DevGlobs {
 		unsigned long start_jiffies;
 		unsigned long end_jiffies;
 		
-		unsigned long start_gtsr;
-		unsigned long end_gtsr;
+		unsigned long long start_gtsr;
+		unsigned long long end_gtsr;
 
 		unsigned num_eoc_ints;
 		unsigned num_eoc_bh;
@@ -1229,14 +1229,23 @@ int acq200_bits(void);
  * OFFSET != 0 => offset of first event
  * COUNT : total num events in tblock
  */
-#define TBLOCK_EVENT_OFFSET(tbe)	((tbe)&0x00ffffff)
-#define TBLOCK_EVENT_COUNT_SHL		24
+
+
+#define TBLOCK_EVENT_OFFSET_MASK	0x00ffffff	
+#define TBLOCK_EVENT_OFFSET(tbe)	((tbe)&TBLOCK_EVENT_OFFSET_MASK)
+
+#define TBLOCK_EVENT_COUNT_SHL		28
 #define TBLOCK_EVENT_COUNT(tbe) \
 	(TBLOCK_EVENT_OFFSET(tbe)? 1+((tbe)>>TBLOCK_EVENT_COUNT_SHL): 0)
 
 #define MAKE_TBLOCK_EVENT_COUNT(cnt) \
 	((cnt)>1? ((cnt)-1) << TBLOCK_EVENT_COUNT_SHL: 0)
 
+#define MAKE_TBLOCK_EVENT_OFFSET(tb_offset) \
+	((tb_o
+
+#define MK_TBLOCK_EVENT(cnt, tb_offset) \
+	(MAKE_TBLOCK_EVENT_COUNT(cnt) | TBLOCK_EVENT_OFFSET(tb_offset))
 
 #define TBLOCK_EVENT_SZ		(sizeof(struct TBLOCK_EVENT_INFO)*MAX_TBLOCK)
 #endif /* ACQ200_FIFO_H__ */
