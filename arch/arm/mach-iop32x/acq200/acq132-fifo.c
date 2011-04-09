@@ -38,6 +38,7 @@
 #include "acq200-fifo.h"
 #include "acq132.h"
 
+#include "gtmr.h"
 
 #include "acq196-AO.h"
 #include "acq100-offset.h"
@@ -977,8 +978,13 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 	struct TBLOCK_EVENT_INFO *tbinfo;
 	unsigned tbe;
 
+#if 0
 	/* event is AT least at this point, if not further. */
 	latest_desc = active->buffers[active->iget];
+#else
+	/* event is shortly before this point .. */
+	latest_desc = active->buffers[RB_DECR(active->iput)];
+#endif
 	bb_offset = latest_desc->LAD - pa_buf(DG);
 
 	tbix = DG->bigbuf.tblock_offset_lut[TBLOCK_EVENT_HASH(bb_offset)];
@@ -986,7 +992,8 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 
 	if ((tbe = tbinfo->event) != 0){
 		unsigned ec = TBLOCK_EVENT_COUNT(tbe) + 1;
-		tbe = TBLOCK_EVENT_OFFSET(tbe) | MAKE_TBLOCK_EVENT_COUNT(ec);
+		tbe = MK_TBLOCK_EVENT(ec, tbe);
+
 		dbg(1, "multiple events! [%d] = %08x was %08x", 
 		    tbix, tbe, tbinfo->event);
 		tbinfo->event = tbe;
@@ -994,10 +1001,9 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 		unsigned tb_offset = 
 			bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset;
 
-		memset(tbinfo, 0, sizeof(struct TBLOCK_EVENT_INFO));
-		tbinfo->gtsr = *IOP321_GTSR;
 		tbinfo->event = TBLOCK_EVENT_OFFSET(tb_offset);
-		tbinfo->index = DG->stats.tblocks_filled;
+		tbinfo->gtmr = gtmr_update_timestamp();
+		tbinfo->unused = active->nput - active->nget;
 
 		if (TBLOCK_EVENT_OFFSET(tb_offset) != 
 		    bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset){
@@ -1005,6 +1011,8 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 			    tbix, bb_offset, 
 			    DG->bigbuf.tblocks.the_tblocks[tbix].offset);
 		}
+
+		
 	}		       
 }
 

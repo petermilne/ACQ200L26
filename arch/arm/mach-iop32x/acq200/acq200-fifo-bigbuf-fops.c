@@ -49,6 +49,7 @@
 #include <linux/ctype.h>
 
 #include "acq200-mu-app.h"
+#include "gtmr.h"
 
 #if 1
 #include <linux/blkdev.h>
@@ -1649,6 +1650,7 @@ static int readClearEvCount(int tbix)
 	}
 }
 
+#define XX_DMA_BLOCK_LEN	4096	/** @@hack  ACQ132 ONLY  */
 static ssize_t status_tb_evread (
 	struct file *file, char *buf, size_t len, loff_t *offset)
 /** output last tblock as string data.
@@ -1717,23 +1719,42 @@ static ssize_t status_tb_evread (
 			}
 		}
 
+
 		if (DMC_WO->early_event_checking){
+			unsigned long long gtmr = 
+				tbinfo->gtmr - DG->stats.start_gtmr;
+
+			do_div(gtmr, GTMR_TICK_PER_MSEC);
+
 			ev_count[0] = readClearEvCount(tb_prev);
 			ev_count[1] = readClearEvCount(tbix);
 			ev_count[2] = readClearEvCount(tb_next);
+
+			rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
+				"tblock=%03d,%03d,%03d "
+				"pss=%-8u esoff=0x%08x "
+				"ecount=%d,%d,%d "
+				"tbeoff:0x%08x msec=%llu\n",
+				      tb_prev, tle->tblock->iblock, tb_next,
+				      tle->phase_sample_start,
+					 tle->event_offset,
+				      ev_count[0], ev_count[1], ev_count[2],
+				      TBLOCK_EVENT_OFFSET(tbinfo->event),gtmr);
+		}else{
+			rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
+			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x "
+				      "\n",
+					tb_prev, tle->tblock->iblock, tb_next,
+					tle->phase_sample_start,
+					tle->event_offset);
 		}
-		list_add_tail(&tle->list, DCI_LIST(file));
-		rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
-			"tblock=%03d,%03d,%03d pss=%-8u "
-			"esoff=0x%08x ecount=%d,%d,%d pss2=%-8u gtsr=%u\n",
-				tb_prev, tle->tblock->iblock, tb_next,
-				tle->phase_sample_start,
-			      tle->event_offset,
-			      ev_count[0], ev_count[1], ev_count[2],
-			      tbinfo->index * DG->stats.samples_per_tblock,
-			      tbinfo->gtsr);
+
+
+		
+
 
 		DG->stats.event0_count += ev_count[0]+ev_count[1]+ev_count[2];
+		list_add_tail(&tle->list, DCI_LIST(file));		
 	}
 	tbc->c.tle = tle;
 

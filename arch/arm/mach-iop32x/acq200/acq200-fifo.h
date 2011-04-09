@@ -519,8 +519,8 @@ struct DevGlobs {
 		unsigned long start_jiffies;
 		unsigned long end_jiffies;
 		
-		unsigned long long start_gtsr;
-		unsigned long long end_gtsr;
+		unsigned long long start_gtmr;
+		unsigned long long end_gtmr;
 
 		unsigned num_eoc_ints;
 		unsigned num_eoc_bh;
@@ -593,10 +593,9 @@ struct DevGlobs {
 		short *tblock_offset_lut;	/* [offset] -> TBIX */
 		int tblock_offset_lut_len;
 		struct TBLOCK_EVENT_INFO {
-			unsigned event;		/* TBLOCK_EVENT_ */
-			unsigned gtsr;		/* timer snapshot */
-			unsigned index;		/* TBN in capture */
-			unsigned unused;
+			unsigned event;		/* TBLOCK_EVENT_ */		
+       			unsigned unused;
+			unsigned long long gtmr;
 		}  *tblock_event_table;	/* [TBIX] -> EVENT/NO EVENT */
 	} bigbuf;
 
