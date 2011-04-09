@@ -43,44 +43,135 @@
 #include <asm-arm/fiq.h>
 #include <linux/proc_fs.h>
 
-#include "acqX00-port.h"
+#include <asm/arch/iop321.h>
+#include <asm/arch/iop321-irqs.h>
+
+#include "gtmr.h"
+
+#include "acqX00-port.h"	
 
 #define acq200_debug	debug
 #include "acq200_debug.h"
 
-char acq100_rtm_driver_name[] = "acq100-gtmr";
-
 #define REVID	"acq100_gtmr B1000"
-
 
 
 int debug = 0;
 module_param(debug, int, 0644);
 
+struct GTMR_DATA {
+	unsigned long long timestamp;	
+	spinlock_t lock;	
+	unsigned last_gtsr;
+	unsigned int_count;
+};
+
+struct GTMR_DATA gtmr_data;
+
+
+static void update_timestamp(int is_interrupt)
+{
+	unsigned gtsr = *IOP321_GTSR;
+	unsigned msw;
+
+	if (is_interrupt){
+		msw = ++gtmr_data.int_count;
+		gtmr_data.last_gtsr = gtsr;
+	}else{
+		if (unlikely(gtsr < gtmr_data.last_gtsr)){
+			/* after rollover but before isr? */
+			msw = gtmr_data.int_count+1;
+		}else{
+			msw = gtmr_data.int_count;
+		}
+	}
+
+	gtmr_data.timestamp = ((unsigned long long)msw << 32) | gtsr;
+}
+
+unsigned long long gtmr_update_timestamp(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&gtmr_data.lock, flags);
+	update_timestamp(0);
+	spin_unlock_irqrestore(&gtmr_data.lock, flags);
+	return gtmr_data.timestamp;
+}
+
+static irqreturn_t gtmr_isr(int irq, void *dev_id)
+{
+	u32 flags = *IOP321_EMISR;
+	update_timestamp(flags&0x01);	/* 0x01 : GTSR OVERFLOW */
+	*IOP321_EMISR = flags;		/* INT ACK */
+	return IRQ_HANDLED;
+}
+
+/* show msecs: awk '{ print $1/50000 }' */
+static ssize_t show_msecs(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+	unsigned long ts2 = gtmr_update_timestamp() >> 16;
+	   
+	return sprintf(buf, "%lu %lu\n", ts2, ts2*655/500);
+}
+
+static DEVICE_ATTR(msecs, S_IRUGO, show_msecs, 0);
+
+static ssize_t show_gtmr(
+	struct device *dev, 
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+	return sprintf(buf, "%llu\n", gtmr_update_timestamp());
+}
+
+static DEVICE_ATTR(GTMR, S_IRUGO, show_gtmr, 0);
 
 static void mk_gtmr_sysfs(struct device *dev)
 {
-//	DEVICE_CREATE_FILE(dev, &dev_attr_LEMO_IN);
+	DEVICE_CREATE_FILE(dev, &dev_attr_msecs);
+	DEVICE_CREATE_FILE(dev, &dev_attr_GTMR);
 }
+
 
 static int gtmr_probe(struct device *dev)
 {
-
+	if (request_irq(IRQ_IOP321_PERFMON, gtmr_isr, 0, "gtmr", 0)){
+		err("request_irq failed");
+		return -ENODEV;
+	}else{
+		memset(&gtmr_data, 0, sizeof(gtmr_data));
+		gtmr_data.lock = SPIN_LOCK_UNLOCKED;
+		gtmr_update_timestamp();
+		*IOP321_GTMR = IOP321_GTMR_INTEN;
+		mk_gtmr_sysfs(dev);
+		return 0;
+	}
 }
 static void gtmr_dev_release(struct device * dev)
 {
-	info("");
+
 }
 
 static int gtmr_remove(struct device *dev)
 {
+	info("");
 
+	*IOP321_GTMR = 0;
+	free_irq(IRQ_IOP321_PERFMON, 0);
+	return 0;
 }
+
 
 
 static u64 dma_mask = 0x00000000ffffffff;
 static struct platform_device gtmr_device = {
-	.name	= "acq200_gtmr",
+	.name	= "gtmr",
 	.id	= 0,
 	.dev	= {
 		.release	= gtmr_dev_release,
@@ -91,7 +182,7 @@ static struct platform_device gtmr_device = {
 
 
 static struct device_driver gtmr_driver = {
-	.name	= "acq200_gtmr",
+	.name	= "gtmr",
 	.probe	= gtmr_probe,
 	.remove = gtmr_remove,
 	.bus	= &platform_bus_type
@@ -134,6 +225,7 @@ gtmr_exit_module(void)
 module_init(gtmr_init);
 module_exit(gtmr_exit_module);
 
+EXPORT_SYMBOL_GPL(gtmr_update_timestamp);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter.Milne@d-tacq.com");
