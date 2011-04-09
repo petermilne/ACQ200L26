@@ -90,9 +90,13 @@ static unsigned locr;
 int debug = 0;
 module_param(debug, int, 0644);
 
+#define KEYMAX	3		/* compare this many letters */
+
+#define NKEYS	4		/* 4 options each function */
+
 /** @@warning: LUT order MUST match RTMCLK_LICR_xxx */
 const char* LICR_LUT[] = {
-	"DI0", "DI1", "DI2", "NC"
+	"DI0", "DI1", "DI2", "none"
 };
 
 /** @@warning: LUT order MUST match LOCR_xxx */
@@ -126,13 +130,13 @@ static ssize_t store_licr(
 	const char *buf,
 	size_t count)
 {
-	char key[4];
+	char key[KEYMAX+1];
 	int ik;
 
-	strncpy(key, buf, 3); key[3] = '\0';
+	strncpy(key, buf, KEYMAX); key[KEYMAX] = '\0';
 
-	for (ik = 0; ik < 4; ++ik){
-		if (strcmp(key, LICR_LUT[ik]) == 0){
+	for (ik = 0; ik < NKEYS; ++ik){
+		if (strncmp(key, LICR_LUT[ik], KEYMAX) == 0){
 			dbg(1, "match %s", key);
 
 			licr &= ~RTMCLK_LICR_MASK;
