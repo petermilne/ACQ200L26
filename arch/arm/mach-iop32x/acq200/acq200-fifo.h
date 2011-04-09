@@ -113,6 +113,7 @@ struct TblockConsumer {
 	unsigned flags;
 	unsigned backlog;
 	unsigned backlog_limit;
+	void *clidat;
 };
 
 /* typedef void (* RefillClient)(void *data, int nbytes); */
@@ -591,7 +592,12 @@ struct DevGlobs {
 		} tblocks;
 		short *tblock_offset_lut;	/* [offset] -> TBIX */
 		int tblock_offset_lut_len;
-		unsigned *tblock_event_table;	/* [TBIX] -> EVENT/NO EVENT */
+		struct TBLOCK_EVENT_INFO {
+			unsigned event;		/* TBLOCK_EVENT_ */
+			unsigned gtsr;		/* timer snapshot */
+			unsigned index;		/* TBN in capture */
+			unsigned unused;
+		}  *tblock_event_table;	/* [TBIX] -> EVENT/NO EVENT */
 	} bigbuf;
 
 	struct PIT_STORE {
@@ -1045,7 +1051,6 @@ struct DataChannelInfo {
 	DataMover extract;            /** optional custom extractor */
 	Memcpy memcpy;                /** memory copy method (def:memcpy() */
 	union {
-		void *clidat;
 		struct Phase* phase;          /** phase (if known) */
 		struct TblockConsumer* tbc;
 	} _u;
@@ -1233,5 +1238,5 @@ int acq200_bits(void);
 	((cnt)>1? ((cnt)-1) << TBLOCK_EVENT_COUNT_SHL: 0)
 
 
-#define TBLOCK_EVENT_SZ		(sizeof(unsigned)*MAX_TBLOCK)
+#define TBLOCK_EVENT_SZ		(sizeof(struct TBLOCK_EVENT_INFO)*MAX_TBLOCK)
 #endif /* ACQ200_FIFO_H__ */

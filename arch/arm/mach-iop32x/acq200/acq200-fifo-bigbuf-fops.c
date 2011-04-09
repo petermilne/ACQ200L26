@@ -167,13 +167,18 @@ static void deleteTBC(struct TblockConsumer *tbc)
 	return _deleteTBC(&DG->tbc_regular, tbc);
 }
 
+#define EVBUF_LEN	256
+
 static struct TblockConsumer *newEventTBC(unsigned backlog_limit)
 {
-	return _newTBC(&DG->tbc_event, backlog_limit);
+	struct TblockConsumer *tbc = _newTBC(&DG->tbc_event, backlog_limit);
+	tbc->clidat = kzalloc(EVBUF_LEN, GFP_KERNEL);
+	return tbc;	
 }
 
 static void deleteEventTBC(struct TblockConsumer *tbc)
 {
+	kfree(tbc->clidat);
 	return _deleteTBC(&DG->tbc_event, tbc);
 }
 #define NOSAMPLES 0xffffffff
@@ -1628,15 +1633,16 @@ static int readClearEvCount(int tbix)
 	if (tbix == TB_NOT_BORDERLINE){
 		return 0;
 	}else{
-		unsigned *pstat = &DG->bigbuf.tblock_event_table[tbix];
-		unsigned stat = *pstat;
+		struct TBLOCK_EVENT_INFO *tbinfo =
+			&DG->bigbuf.tblock_event_table[tbix];
+		unsigned stat = tbinfo->event;
 
 		dbg(1, "[%d] = 0x%08x %d %06x",
 		    tbix, stat, TBLOCK_EVENT_COUNT(stat), 
 		    TBLOCK_EVENT_OFFSET(stat));
 
 		if (!tblock_ev_noclear){
-			*pstat = 0;		
+			memset(tbinfo, 0, sizeof(struct TBLOCK_EVENT_INFO));
 		}
 
 		return TBLOCK_EVENT_COUNT(stat);
@@ -1656,8 +1662,17 @@ static ssize_t status_tb_evread (
 {
 	struct TblockConsumer *tbc = DCI_TBC(file);
 	struct TblockListElement *tle;
-	char lbuf[80];
+	char* lbuf = tbc->clidat;
 	int rc;
+
+	if (tbc->clidat == 0){
+		err("no local buffer");
+		return -ENODEV;
+	}
+	if (DG->bigbuf.tblock_event_table == 0){
+		err("no tblock_event_table");
+		return -ENODEV;
+	}
 
 	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
 
@@ -1674,9 +1689,13 @@ static ssize_t status_tb_evread (
 		int tb_prev = TB_NOT_BORDERLINE;
 		int tb_next = TB_NOT_BORDERLINE;
 		int ev_count[3] = {};
+		int tbix = tle->tblock->iblock;
 
 		TBLE *tble_prev = list_entry(tle->neighbours.prev, TBLE, list);
 		TBLE *tble_next = list_entry(tle->neighbours.next, TBLE, list);
+		struct TBLOCK_EVENT_INFO *tbinfo = 
+			DG->bigbuf.tblock_event_table+tbix;
+
 		if (tle->event_offset > BORDERLINE){
 			if (tble_prev->tblock){
 				acq200_phase_release_tblock_entry(tble_prev);
@@ -1700,16 +1719,20 @@ static ssize_t status_tb_evread (
 
 		if (DMC_WO->early_event_checking){
 			ev_count[0] = readClearEvCount(tb_prev);
-			ev_count[1] = readClearEvCount(tle->tblock->iblock);
+			ev_count[1] = readClearEvCount(tbix);
 			ev_count[2] = readClearEvCount(tb_next);
 		}
 		list_add_tail(&tle->list, DCI_LIST(file));
-		rc = snprintf(lbuf, min(sizeof(lbuf), len),
-		"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x ecount=%d,%d,%d\n",
+		rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
+			"tblock=%03d,%03d,%03d pss=%-8u "
+			"esoff=0x%08x ecount=%d,%d,%d pss2=%-8u gtsr=%u\n",
 				tb_prev, tle->tblock->iblock, tb_next,
 				tle->phase_sample_start,
 			      tle->event_offset,
-			      ev_count[0], ev_count[1], ev_count[2]);
+			      ev_count[0], ev_count[1], ev_count[2],
+			      tbinfo->index * DG->stats.samples_per_tblock,
+			      tbinfo->gtsr);
+
 		DG->stats.event0_count += ev_count[0]+ev_count[1]+ev_count[2];
 	}
 	tbc->c.tle = tle;

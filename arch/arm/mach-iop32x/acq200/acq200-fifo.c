@@ -571,8 +571,7 @@ int getEvStat(u32 *fifstat, unsigned *offset)
 		unsigned tboff = *offset & (TBLOCK_EVENT_BLOCKSIZE-1);
 
 		if (tboff + DMA_BLOCK_LEN >= TBLOCK_EVENT_BLOCKSIZE){
-			unsigned ev_stat = DG->bigbuf.tblock_event_table[tbix];
-			return ev_stat;
+			return DG->bigbuf.tblock_event_table[tbix].event;
 		}		
 	}
 	
@@ -1010,13 +1009,14 @@ void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 		{
 			u32* dd_fifstat = &pbuf->DD_FIFSTAT;
 
+			end_of_phase = woOnRefill(wo, dd_fifstat, &offset);
+
 			if (TBLOCK_OFFSET(offset) == 0 && 
 			    dmc_phase_add_tblock(phase, &offset) == 0){
 				err("drop out early");
 				acq200_dmad_free(pbuf);
 				break;
 			}
-			end_of_phase = woOnRefill(wo, dd_fifstat, &offset);
 
 			dbg( 3, "free %s", acq200_debug>3?dmad_diag(pbuf): "");
 			++DG->stats.refill_blocks;
