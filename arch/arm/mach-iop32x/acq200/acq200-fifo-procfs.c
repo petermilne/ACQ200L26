@@ -34,7 +34,7 @@
 
 #include "acq200-fifo-tblock.h"
 #include "dio_defs.h"
-
+#include "gtmr.h"
 #include <asm-arm/arch-iop32x/acq200.h>
 
 #ifndef GROUP_DELAY
@@ -50,19 +50,13 @@ module_param(histo_log2_scaling, int, 0644);
 int exhaustive_event_search = 0;
 module_param(exhaustive_event_search, int, 0644);
 
-#define GTSR_COUNT_US  50
-#define GTSR_TCOUNT_US ((0x1000000/GTSR_COUNT_US)*0x100)
-
 static int calc_process_us(void)
 {
-	int start_us = DG->stats.start_gtsr/GTSR_COUNT_US;
-	int end_us   = DG->stats.end_gtsr/GTSR_COUNT_US;
-	int proc_us = end_us - start_us;
+	unsigned long long delta_ticks = 
+		DG->stats.end_gtsr-DG->stats.start_gtsr;
+	do_div(delta_ticks, GTMR_TICK_PER_USEC);
 
-	if ( proc_us < 0 ){
-		proc_us += GTSR_TCOUNT_US;
-	}
-	return proc_us;
+	return (int)delta_ticks;
 }
 
 
