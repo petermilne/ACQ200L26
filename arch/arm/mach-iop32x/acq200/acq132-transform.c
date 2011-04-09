@@ -34,8 +34,6 @@
 
 #define MTTR2	0x80
 
-#include <linux/platform_device.h>
-
 #include "acq200-fifo-top.h"
 
 #include "acq200-fifo-local.h"
