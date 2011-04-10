@@ -1720,11 +1720,17 @@ static ssize_t status_tb_evread (
 		}
 
 
-		if (DMC_WO->early_event_checking){
+		if (DMC_WO->early_event_checking && tbinfo->event){
 			unsigned long long gtmr = 
 				tbinfo->gtmr - DG->stats.start_gtmr;
 
+			dbg(1, "gtmr %llu start %llu diff %llu",
+			    tbinfo->gtmr, DG->stats.start_gtmr, gtmr);
+
 			do_div(gtmr, GTMR_TICK_PER_MSEC);
+
+			dbg(1, "gtmr %llu start %llu diff %llu",
+			    tbinfo->gtmr, DG->stats.start_gtmr, gtmr);
 
 			ev_count[0] = readClearEvCount(tb_prev);
 			ev_count[1] = readClearEvCount(tbix);
@@ -1734,12 +1740,12 @@ static ssize_t status_tb_evread (
 				"tblock=%03d,%03d,%03d "
 				"pss=%-8u esoff=0x%08x "
 				"ecount=%d,%d,%d "
-				"tbeoff:0x%08x msec=%llu\n",
+				"msec=%llu\n",
 				      tb_prev, tle->tblock->iblock, tb_next,
 				      tle->phase_sample_start,
 					 tle->event_offset,
 				      ev_count[0], ev_count[1], ev_count[2],
-				      TBLOCK_EVENT_OFFSET(tbinfo->event),gtmr);
+				      gtmr);
 		}else{
 			rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
 			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x "

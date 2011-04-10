@@ -461,8 +461,9 @@ static int _finish_with_engines(int ifinish)
 /** ST_CAPDONE is an attempt to avoid end of shot status race. */
 		DMC_WO_setState(uses_ST_CAPDONE? ST_CAPDONE: ST_STOP);
 	}
+/*
 	iop321_stop_ppmu();
-
+*/
 
 	DG->stats.end_gtmr = gtmr_update_timestamp();
 	DG->stats.end_jiffies = jiffies;
@@ -2098,7 +2099,9 @@ static void onTrigger(void)
 	spin_unlock_irqrestore(&DMC_WO->onTrigger.lock, flags);
 
 	if (my_turn){
+/* iop321_start_ppmu() resets gtsr - this is bad
 		iop321_start_ppmu();
+*/
 		DG->stats.start_gtmr = gtmr_update_timestamp();
 		DG->stats.start_jiffies = jiffies;
 		DMC_WO_setState(ST_RUN);

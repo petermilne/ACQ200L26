@@ -374,7 +374,7 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 	}
 
 	if (atomic_dec_and_test(&tblock->in_phase)){
-		dbg(!acq200_tblock_debug, "add_free %d old: next:%p prev:%p",
+		dbg(acq200_tblock_debug?1:5, "add_free %d old: next:%p prev:%p",
 			 tblock->iblock, tle->list.next, tle->list.prev);
 
 		tblock_clear(tblock);
@@ -383,10 +383,10 @@ void acq200_phase_release_tblock_entry(struct TblockListElement* tle)
 		list_move_tail(&tle->list, &bb->free_tblocks);
 		spin_unlock_irqrestore(&bb->tb_list_lock, flags);
 
-		dbg(!acq200_tblock_debug, 
+		dbg(acq200_tblock_debug? 1: 5, 
 			"[%d] ret  list_move_tail", tblock->iblock);
 	}else{
-		dbg(!acq200_tblock_debug, 
+		dbg(acq200_tblock_debug? 1: 5,
 		 "[%d] shared tblock stash wrapper in pool", tblock->iblock);
 
 		spin_lock_irqsave(&bb->tb_list_lock, flags);
