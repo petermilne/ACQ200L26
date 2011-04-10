@@ -64,19 +64,12 @@ void iop321_start_ppmu(void)
 
 	*IOP321_ESR = 0;
 	*IOP321_ESR = mode;
-#ifdef PGOMCOMOUT
-	*IOP321_GTMR &= ~IOP321_GTMR_NGCE;
-#endif
 	gtsr1 = *IOP321_GTSR;
 	is_running = 1;
 }
 
 void iop321_stop_ppmu(void)
 {
-#ifdef PGMCOMOUT
-/* 2.6.18.2 - now used in timer gen */
-	*IOP321_GTMR = IOP321_GTMR_NGCE;
-#endif
 	gtsr2 = *IOP321_GTSR;
 	memcpy(counters, (void*)IOP321_PECR0, sizeof(counters));
 	is_running = 0;

@@ -59,6 +59,15 @@
 int debug = 0;
 module_param(debug, int, 0644);
 
+int reads;
+module_param(reads, int, 0644);
+
+int reads_after_rollover_but_before_int;
+module_param(reads_after_rollover_but_before_int, int, 0644);
+
+int errors;
+module_param(errors, int, 0644);
+
 struct GTMR_DATA {
 	unsigned long long timestamp;	
 	spinlock_t lock;	
@@ -73,6 +82,7 @@ static void update_timestamp(int is_interrupt)
 {
 	unsigned gtsr = *IOP321_GTSR;
 	unsigned msw;
+	unsigned long long new_ts;
 
 	if (is_interrupt){
 		msw = ++gtmr_data.int_count;
@@ -81,12 +91,27 @@ static void update_timestamp(int is_interrupt)
 		if (unlikely(gtsr < gtmr_data.last_gtsr)){
 			/* after rollover but before isr? */
 			msw = gtmr_data.int_count+1;
+			++reads_after_rollover_but_before_int;
 		}else{
 			msw = gtmr_data.int_count;
 		}
-	}
 
-	gtmr_data.timestamp = ((unsigned long long)msw << 32) | gtsr;
+		++reads;
+	}
+	new_ts = ((unsigned long long)msw << 32) | gtsr;
+
+	if (new_ts < gtmr_data.timestamp){
+		err("GTMR runs backwards! reads:%d", reads);
+		++errors;
+	}
+	gtmr_data.timestamp = new_ts;
+
+/*
+	info("%3s: int:%d msw:%d last:%08x gtsr:%08x ts:%llx",
+	     is_interrupt? "INT": "reg",
+	     gtmr_data.int_count, msw, gtmr_data.last_gtsr,
+	     gtsr, gtmr_data.timestamp);
+*/
 }
 
 unsigned long long gtmr_update_timestamp(void)
@@ -117,7 +142,7 @@ static ssize_t show_msecs(
 	unsigned long long ts = gtmr_update_timestamp();
 	do_div(ts, GTMR_TICK_PER_MSEC);
 
-	return sprintf(buf, "%u\n", ts);
+	return sprintf(buf, "%llu\n", ts);
 }
 
 static DEVICE_ATTR(msecs, S_IRUGO, show_msecs, 0);
