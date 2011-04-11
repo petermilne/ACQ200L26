@@ -397,6 +397,7 @@ void acq200_initBBRP_using_phase(
 	if (samples_left_in_block%stride != 0){
 		my_samples_left += 1;   /* already -> first sample */
 	}
+	bbrp->tble = tble;
 	bbrp->tblock = tble->tblock;
 	bbrp->my_samples_reqlen = min(my_samples_left, req_samples);
 	bbrp->block_off_sample = block_off_sample + tble->tblock_sample_start;
@@ -529,14 +530,6 @@ ssize_t acq200_fifo_bigbuf_read_bbrp(
 	}else{
 		int extract_words = bbrp->my_samples_reqlen;
 
-#ifdef TODO_OR_NOTODO
-		/* @@todo should not be needed with extract32 ? */	
-		if (DCI(file)->ssize > sizeof(short)){
-			/* extractor works in shorts */
-			extract_words *= DCI(file)->ssize;
-			extract_words /= sizeof(short);
-		}
-#endif
 		cpwords = bbrp->extract(
 			        bbrp->tblock, 
 				(short*)buf, 
@@ -550,7 +543,7 @@ ssize_t acq200_fifo_bigbuf_read_bbrp(
 
 
 		dbg(2, "offset %lu returns %d\n", 
-		    (unsigned long)*offset, cpbytes);
+				(unsigned long)*offset, cpbytes);
 
 		RETURN(cpbytes);
 	}
@@ -678,9 +671,7 @@ static struct page *fifo_AIfs_vma_nopage(
 	struct BigbufReadPrams* bbrp = 
 		(struct BigbufReadPrams*)vma->vm_private_data;
 
-	dbg(1, "address 0x%08lx", address);
-
-	if (offset > bbrp->my_samples_reqlen){
+	if (offset >= bbrp->my_samples_reqlen){
 		initBBRP(vma->vm_file, vma->vm_end-vma->vm_start,
 			 &offset, bbrp);
 	}
@@ -691,11 +682,17 @@ static struct page *fifo_AIfs_vma_nopage(
 	}else if ( bbrp->my_samples_reqlen == 0 ){
 		RETURN;
 	}else{
-		unsigned choffset = DCI(vma->vm_file)->lchan * 
-			bbrp->tblock_samples * sizeof(short);
-		unsigned pa = PA_TBLOCK(bbrp->tblock) + choffset + offset; 
-
-		dbg(1, "offset:%6lu pa:%08x va:%p",(unsigned long)offset,
+		const int ssize = DCI(vma->vm_file)->ssize;
+		unsigned choffset = 
+			DCI(vma->vm_file)->pchan*bbrp->tblock_samples*ssize;
+		unsigned offblock = 
+			offset - bbrp->tble->phase_sample_start*ssize;
+		unsigned pa = PA_TBLOCK(bbrp->tblock) + offblock + choffset;
+		       
+		dbg(1, "addr:0x%08lx offset:%6lu pss:%u pat:%08x pa:%08x va:%p",
+		    address,
+		    (unsigned long)offset, bbrp->tble->phase_sample_start,
+		    PA_TBLOCK(bbrp->tblock),
 		    pa, VA_TBLOCK(bbrp->tblock) + choffset + offset);
 
 		page = pfn_to_page(pa >> PAGE_SHIFT);

@@ -268,7 +268,7 @@ struct TBLOCK;
 struct TblockListElement {
 /*
  * structure owned by phase, and maps tblock data to phase
- */
+1 */
 	struct TBLOCK* tblock;
 	unsigned phase_sample_start; /* sample offset of first sample in ph */
 	unsigned tblock_sample_start;/* sample offset of first sample in tb */
@@ -1013,8 +1013,9 @@ void acq200_del_ext_phase_handler(struct ExtPhase *ext_phase);
 
 struct BigbufReadPrams {
 	struct TBLOCK *tblock;
-	int my_samples_reqlen;
-	int block_off_sample;
+	struct TblockListElement* tble;
+	int my_samples_reqlen;	
+	int block_off_sample;		/* sample offset in block */
 	int samples_left_in_block;
 	int status;
 	DataMover extract;   /** extractor to use this time */
