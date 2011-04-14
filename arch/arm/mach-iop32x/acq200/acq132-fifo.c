@@ -78,6 +78,9 @@ module_param(DR_with_ES, int, 0644);
 int early_event_checking = 1;
 module_param(early_event_checking, int, 0644);
 
+int early_event_ignore_bogus_initial_event = 1;
+module_param(early_event_ignore_bogus_initial_event, int, 0644);
+
 /* acq132-transform.c */
 extern void acq132_register_transformers(void);
 extern struct file_operations acq132_timebase_ops;
@@ -977,7 +980,12 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 	short tbix;
 	struct TBLOCK_EVENT_INFO *tbinfo;
 	unsigned tbe;
+	unsigned tb_offset;
 
+	if (early_event_ignore_bogus_initial_event && 
+				DMC_WO->now->tblock_count <= 1){
+		return;
+	}
 #if 0
 	/* event is AT least at this point, if not further. */
 	latest_desc = active->buffers[active->iget];
@@ -990,29 +998,28 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 	tbix = DG->bigbuf.tblock_offset_lut[TBLOCK_EVENT_HASH(bb_offset)];
 	tbinfo = DG->bigbuf.tblock_event_table+tbix;
 
-	if ((tbe = tbinfo->event) != 0){
+	tb_offset = bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset;
+	tb_offset = TBLOCK_EVENT_OFFSET(tb_offset);
+
+	if ((tbe = tbinfo->event) == 0){
+		tbinfo->event =  MK_TBLOCK_EVENT(1, tb_offset);
+		tbinfo->eventN = tbinfo->event;
+		tbinfo->gtmr = gtmr_update_timestamp();
+
+		if (bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset !=
+			tb_offset){
+			err("[%d] bb_offset 0x%08x tblock: 0x%08x",
+			    tbix, bb_offset, 
+			    DG->bigbuf.tblocks.the_tblocks[tbix].offset);
+		}
+	}else{
 		unsigned ec = TBLOCK_EVENT_COUNT(tbe) + 1;
 		tbe = MK_TBLOCK_EVENT(ec, tbe);
 
 		dbg(1, "multiple events! [%d] = %08x was %08x", 
 		    tbix, tbe, tbinfo->event);
 		tbinfo->event = tbe;
-	}else{
-		unsigned tb_offset = 
-			bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset;
-
-		tbinfo->event = TBLOCK_EVENT_OFFSET(tb_offset);
-		tbinfo->gtmr = gtmr_update_timestamp();
-		tbinfo->unused = active->nput - active->nget;
-
-		if (TBLOCK_EVENT_OFFSET(tb_offset) != 
-		    bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset){
-			err("[%d] bb_offset 0x%08x tblock: 0x%08x",
-			    tbix, bb_offset, 
-			    DG->bigbuf.tblocks.the_tblocks[tbix].offset);
-		}
-
-		
+		tbinfo->eventN = MK_TBLOCK_EVENT(ec, tb_offset);
 	}		       
 }
 
@@ -1052,6 +1059,7 @@ static void _configure_early_event_dcb_client(int enable)
 		acq200_addDataConsumer(event_dcb);
 	}else{
 		acq200_removeDataConsumer(event_dcb);
+		INIT_LIST_HEAD(&event_dcb->list);
 	}	
 }
 static int configure_early_event_dcb_client(int enable)

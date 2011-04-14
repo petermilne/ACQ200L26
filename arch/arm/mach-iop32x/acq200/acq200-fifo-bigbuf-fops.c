@@ -1622,7 +1622,8 @@ static ssize_t status_tb_read (
 	return rc;
 }
 
-#define BORDERLINE	0x100000
+/* threshold to include left,right TBLOCKS */
+#define BORDERLINE		0x100000
 #define TB_NOT_BORDERLINE	999
 
 
@@ -1692,6 +1693,9 @@ static ssize_t status_tb_evread (
 
 		TBLE *tble_prev = list_entry(tle->neighbours.prev, TBLE, list);
 		TBLE *tble_next = list_entry(tle->neighbours.next, TBLE, list);
+
+		unsigned last_offset = tle->event_offset;
+
 		struct TBLOCK_EVENT_INFO *tbinfo = 
 			DG->bigbuf.tblock_event_table+tbix;
 
@@ -1705,7 +1709,18 @@ static ssize_t status_tb_evread (
 				list_move_tail(&tble_prev->list, DCI_LIST(file));
 			}
 		}
-		if (tle->event_offset < TBLOCK_LEN(DG)-BORDERLINE){
+
+		if (DMC_WO->early_event_checking && tbinfo->event){
+			struct TBLOCK_EVENT_INFO *tbinfo =
+				&DG->bigbuf.tblock_event_table[tbix];
+			unsigned lo = TBLOCK_EVENT_OFFSET(tbinfo->event);
+
+			dbg(1, "change offset from %d to %d", last_offset, lo);
+
+			last_offset = lo;
+		}
+
+		if (last_offset < TBLOCK_LEN(DG)-BORDERLINE){
 			if (tble_next->tblock){
 				acq200_phase_release_tblock_entry(tble_next);
 			}

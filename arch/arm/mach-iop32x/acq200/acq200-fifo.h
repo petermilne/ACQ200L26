@@ -593,8 +593,8 @@ struct DevGlobs {
 		short *tblock_offset_lut;	/* [offset] -> TBIX */
 		int tblock_offset_lut_len;
 		struct TBLOCK_EVENT_INFO {
-			unsigned event;		/* TBLOCK_EVENT_ */		
-       			unsigned unused;
+			unsigned event;		 /* FIRST TBLOCK_EVENT_ */
+       			unsigned eventN;	 /* LAST  TBLOCK_EVENT_ */
 			unsigned long long gtmr;
 		}  *tblock_event_table;	/* [TBIX] -> EVENT/NO EVENT */
 	} bigbuf;
