@@ -1741,6 +1741,7 @@ static ssize_t status_tb_evread (
 				 DG->stats.start_gtmr);
 			unsigned long long gtmr = tbinfo->gtmr - gtmr1;
 			unsigned tblockN = tbinfo_get_tbcount(tbinfo->eventN);
+			unsigned offN = tbinfo_get_offsetn(tbinfo->eventN);
 
 			dbg(1, "gtmr %llu start %llu diff %llu",
 			    tbinfo->gtmr, DG->stats.start_gtmr, gtmr);
@@ -1756,12 +1757,12 @@ static ssize_t status_tb_evread (
 
 			rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
 				"tblock=%03d,%03d,%03d "
-				"pss=%-8u esoff=0x%08x "
+				"pss=%-8u esoff=0x%08x,0x%08x "
 				"ecount=%d,%d,%d "
 				"msec=%llu tblockN=%u\n",
 				      tb_prev, tle->tblock->iblock, tb_next,
 				      tle->phase_sample_start,
-					 tle->event_offset,
+				      tle->event_offset, offN,
 				      ev_count[0], ev_count[1], ev_count[2],
 				      gtmr, tblockN);
 		}else{

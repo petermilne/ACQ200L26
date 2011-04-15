@@ -981,7 +981,7 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 	struct TBLOCK_EVENT_INFO *tbinfo;
 	unsigned tbe;
 	unsigned tb_offset;
-	unsigned tb_count = DMC_WO->now->tblock_count;
+	unsigned tb_count = DG->stats.tblocks_filled;
 
 	if (early_event_ignore_bogus_initial_event && tb_count <= 1){
 		unsigned long long gtmr = gtmr_update_timestamp();
@@ -1015,6 +1015,7 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 			    tbix, bb_offset, 
 			    DG->bigbuf.tblocks.the_tblocks[tbix].offset);
 		}
+		tbinfo->eventN = tbinfo_make_eventn(0, tb_count);
 	}else{
 		unsigned ec = TBLOCK_EVENT_COUNT(tbe) + 1;
 		tbe = MK_TBLOCK_EVENT(ec, tbe);
