@@ -693,7 +693,6 @@ static void acq132_transform_unblocked1pQ(
 /* keep a stash of NSCAN to vectors */
 #define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
 	int row_off[MAX_ROWS];
-	int channel_sam = nsamples/ROWS;
 	int row;
 
 	if (ROWS > MAX_ROWS){
