@@ -519,6 +519,9 @@ struct DevGlobs {
 		unsigned long start_jiffies;
 		unsigned long end_jiffies;
 		
+		/* early start is the most accurate start
+		 * not always available*/
+		unsigned long long early_start_gtmr; 
 		unsigned long long start_gtmr;
 		unsigned long long end_gtmr;
 
@@ -1247,5 +1250,20 @@ int acq200_bits(void);
 #define MK_TBLOCK_EVENT(cnt, tb_offset) \
 	(MAKE_TBLOCK_EVENT_COUNT(cnt) | TBLOCK_EVENT_OFFSET(tb_offset))
 
+static inline unsigned tbinfo_make_eventn(unsigned offset, unsigned tbcount)
+{
+/* with offset, we lose 4 bits resolution (on 16 byte boundary anyway 
+ * maxtbcount 65525 * .1s = 2h
+ */
+	return (offset >> 8) | (tbcount << 16);
+}
+static inline unsigned tbinfo_get_offsetn(unsigned eventn)
+{
+	return (eventn&0x0ffff) << 8;
+}
+static inline unsigned tbinfo_get_tbcount(unsigned eventn)
+{
+	return eventn >> 16;
+}
 #define TBLOCK_EVENT_SZ		(sizeof(struct TBLOCK_EVENT_INFO)*MAX_TBLOCK)
 #endif /* ACQ200_FIFO_H__ */

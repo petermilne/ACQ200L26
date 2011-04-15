@@ -53,7 +53,7 @@ module_param(exhaustive_event_search, int, 0644);
 static int calc_process_us(void)
 {
 	unsigned long long delta_ticks = 
-		DG->stats.end_gtmr-DG->stats.start_gtmr;
+		DG->stats.end_gtmr - DG->stats.early_start_gtmr;
 	do_div(delta_ticks, GTMR_TICK_PER_USEC);
 
 	return (int)delta_ticks;

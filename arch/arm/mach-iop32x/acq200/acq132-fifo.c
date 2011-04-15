@@ -981,9 +981,13 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 	struct TBLOCK_EVENT_INFO *tbinfo;
 	unsigned tbe;
 	unsigned tb_offset;
+	unsigned tb_count = DMC_WO->now->tblock_count;
 
-	if (early_event_ignore_bogus_initial_event && 
-				DMC_WO->now->tblock_count <= 1){
+	if (early_event_ignore_bogus_initial_event && tb_count <= 1){
+		unsigned long long gtmr = gtmr_update_timestamp();
+		if (DG->stats.early_start_gtmr == 0){
+			DG->stats.early_start_gtmr = gtmr;
+		}
 		return;
 	}
 #if 0
@@ -1003,7 +1007,6 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 
 	if ((tbe = tbinfo->event) == 0){
 		tbinfo->event =  MK_TBLOCK_EVENT(1, tb_offset);
-		tbinfo->eventN = tbinfo->event;
 		tbinfo->gtmr = gtmr_update_timestamp();
 
 		if (bb_offset - DG->bigbuf.tblocks.the_tblocks[tbix].offset !=
@@ -1019,7 +1022,7 @@ void acq132_dcb_act_on_event(struct acq200_dma_ring_buffer* active)
 		dbg(1, "multiple events! [%d] = %08x was %08x", 
 		    tbix, tbe, tbinfo->event);
 		tbinfo->event = tbe;
-		tbinfo->eventN = MK_TBLOCK_EVENT(ec, tb_offset);
+		tbinfo->eventN = tbinfo_make_eventn(tb_offset, tb_count);
 	}		       
 }
 

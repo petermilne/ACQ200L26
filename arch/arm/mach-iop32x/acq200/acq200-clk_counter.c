@@ -64,7 +64,7 @@ module_param(clk_dj_max, int, 0644);
 
 
 struct CLKCOUNTER_STATE {
-	const struct CLKCOUNTER_DESCR descr;
+	struct CLKCOUNTER_DESCR descr;
 	struct BOXCAR32 data;
 	u32 previous;
 	u32 result;

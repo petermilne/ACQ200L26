@@ -65,7 +65,7 @@ int debug_tbstat_ev = 0;
 module_param(debug_tbstat_ev, int, 0644);
 MODULE_PARM_DESC(debug_tbstat_ev, "turn on tbstat debugs");
 
-int tblock_ev_noclear = 0;
+int tblock_ev_noclear = 1;
 module_param(tblock_ev_noclear, int, 0644);
 MODULE_PARM_DESC(tblock_ev_noclear, "DEBUG ONLY");
 
@@ -1713,11 +1713,13 @@ static ssize_t status_tb_evread (
 		if (DMC_WO->early_event_checking && tbinfo->event){
 			struct TBLOCK_EVENT_INFO *tbinfo =
 				&DG->bigbuf.tblock_event_table[tbix];
-			unsigned lo = TBLOCK_EVENT_OFFSET(tbinfo->event);
+			unsigned lo = tbinfo_get_offsetn(tbinfo->eventN);
 
 			dbg(1, "change offset from %d to %d", last_offset, lo);
 
-			last_offset = lo;
+			if (lo){
+				last_offset = lo;
+			}
 		}
 
 		if (last_offset < TBLOCK_LEN(DG)-BORDERLINE){
@@ -1733,8 +1735,12 @@ static ssize_t status_tb_evread (
 
 
 		if (DMC_WO->early_event_checking && tbinfo->event){
-			unsigned long long gtmr = 
-				tbinfo->gtmr - DG->stats.start_gtmr;
+			unsigned long long gtmr1 = 
+				(DG->stats.early_start_gtmr!=0?
+				 DG->stats.early_start_gtmr:
+				 DG->stats.start_gtmr);
+			unsigned long long gtmr = tbinfo->gtmr - gtmr1;
+			unsigned tblockN = tbinfo_get_tbcount(tbinfo->eventN);
 
 			dbg(1, "gtmr %llu start %llu diff %llu",
 			    tbinfo->gtmr, DG->stats.start_gtmr, gtmr);
@@ -1752,12 +1758,12 @@ static ssize_t status_tb_evread (
 				"tblock=%03d,%03d,%03d "
 				"pss=%-8u esoff=0x%08x "
 				"ecount=%d,%d,%d "
-				"msec=%llu\n",
+				"msec=%llu tblockN=%u\n",
 				      tb_prev, tle->tblock->iblock, tb_next,
 				      tle->phase_sample_start,
 					 tle->event_offset,
 				      ev_count[0], ev_count[1], ev_count[2],
-				      gtmr);
+				      gtmr, tblockN);
 		}else{
 			rc = snprintf(lbuf, min(EVBUF_LEN, (int)len),
 			"tblock=%03d,%03d,%03d pss=%-8u esoff=0x%08x "
