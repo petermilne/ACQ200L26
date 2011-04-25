@@ -1616,35 +1616,35 @@ static const struct ADC_CHANNEL_LUT DEFAULT_ADC_CHANNEL_LUT[] = {
 	[ 0] = {},
 	[ 1] = { BANK_D, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
 	[ 2] = { BANK_D, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
-	[ 3] = { BANK_D, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[ 3] = { BANK_D, 'R', ACQ132_ADC_RANGE_R3, MASK_1B },
 	[ 4] = { BANK_D, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
 	[ 5] = { BANK_C, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
 	[ 6] = { BANK_C, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
-	[ 7] = { BANK_C, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[ 7] = { BANK_C, 'R', ACQ132_ADC_RANGE_R3, MASK_1B },
 	[ 8] = { BANK_C, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
 	[ 9] = { BANK_B, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
 	[10] = { BANK_B, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
-	[11] = { BANK_B, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[11] = { BANK_B, 'R', ACQ132_ADC_RANGE_R3, MASK_1B },
 	[12] = { BANK_B, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
 	[13] = { BANK_A, 'R', ACQ132_ADC_RANGE_R1, MASK_1 },
 	[14] = { BANK_A, 'R', ACQ132_ADC_RANGE_R2, MASK_4 },
-	[15] = { BANK_A, 'R', ACQ132_ADC_RANGE_R3, MASK_2 },
+	[15] = { BANK_A, 'R', ACQ132_ADC_RANGE_R3, MASK_1B },
 	[16] = { BANK_A, 'R', ACQ132_ADC_RANGE_R4, MASK_4 },
 	[17] = { BANK_D, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
 	[18] = { BANK_D, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
-	[19] = { BANK_D, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[19] = { BANK_D, 'L', ACQ132_ADC_RANGE_L3, MASK_1B },
 	[20] = { BANK_D, 'L', ACQ132_ADC_RANGE_L4, MASK_4 },
 	[21] = { BANK_C, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
 	[22] = { BANK_C, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
-	[23] = { BANK_C, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[23] = { BANK_C, 'L', ACQ132_ADC_RANGE_L3, MASK_1B },
 	[24] = { BANK_C, 'L', ACQ132_ADC_RANGE_L4, MASK_4 },
 	[25] = { BANK_B, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
 	[26] = { BANK_B, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
-	[27] = { BANK_B, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[27] = { BANK_B, 'L', ACQ132_ADC_RANGE_L3, MASK_1B },
 	[28] = { BANK_B, 'L', ACQ132_ADC_RANGE_L4, MASK_4 },
 	[29] = { BANK_A, 'L', ACQ132_ADC_RANGE_L1, MASK_1 },
 	[30] = { BANK_A, 'L', ACQ132_ADC_RANGE_L2, MASK_4 },
-	[31] = { BANK_A, 'L', ACQ132_ADC_RANGE_L3, MASK_2 },
+	[31] = { BANK_A, 'L', ACQ132_ADC_RANGE_L3, MASK_1B },
 	[32] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4, MASK_4 }
 };
 
@@ -1718,15 +1718,14 @@ static int __getChannelsInMaskSide(
 		*cix = ch_index + 1;
 		break;
 	case MASK_2:
-		if (pch->afpga_cmask == MASK_2 ||
-		    pch->afpga_cmask == MASK_1   ){
+		if (FITS_MASK_2(pch->afpga_cmask)){
 			channels[ch_index + 2] = ic;
 			channels[ch_index] = ic;
 			*cix = ch_index + 1;
 		}
 		break;
 	case MASK_1:
-		if (pch->afpga_cmask == MASK_1){
+		if (FITS_MASK_1(pch->afpga_cmask)){
 			channels[ch_index + 3] =			
 			channels[ch_index + 2] =
 			channels[ch_index + 1] =

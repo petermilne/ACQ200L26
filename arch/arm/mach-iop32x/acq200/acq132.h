@@ -76,8 +76,13 @@
 
 /* channel mask in bank */
 #define MASK_1	0x1
-#define MASK_2	0x5
+#define MASK_1B 0x4		/** @todo: selects one channel, alt */
+
+#define MASK_2	(MASK_1|MASK_1B)
 #define MASK_4	0xf
+
+#define FITS_MASK_2(m) ((m) == MASK_1 || (m) == MASK_1B || (m) == MASK_2)
+#define FITS_MASK_1(m) ((m) == MASK_1 || (m) == MASK_1B)
 
 
 /* custom bits */
