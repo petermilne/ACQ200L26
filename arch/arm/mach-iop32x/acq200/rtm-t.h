@@ -349,6 +349,32 @@ void /* __devexit */ rtm_t_uart_remove(struct pci_dev *pci_dev);
 
 #define FPGA_ID	0		/* S6 unique ID TBA */
 
+/* LLC SIGNALING */
+
+
+#define H_MBOX1_LLC_CMD		0xffff0000
+#define H_MBOX1_LLC_RUN		0x11c10000
+#define H_MBOX1_LLC_STOP	0x11c00000
+
+#define Q_MBOX1_LLC_ACK		0xFFFF0000
+#define Q_MBOX1_LLC_SHOT	0x0000ffff
+
+#define MAKE_LLC_CMD(clkdiv, clk_pos, trg_pos) \
+	(H_MBOX1_LLC_CMD | ((clkdiv)&0x00ff) |\
+	 ((clk_pos)? 0x00008000:0) | ((trg_pos)? 0x00004000:0))
+
+#define DECODE_LLC_CMD(mbox, clkdiv, clk_pos, trig_pos) \
+	do { \
+		clkdiv = (mbox)&0x00ff; \
+		clk_pos = ((mbox)&0x00008000) != 0; \
+		trg_pos = ((mbox)&0x00004000) != 0; \
+	} while(0)
+
+#define IS_LLC_RUN(mbox)	(((mbox)&H_MBOX1_LLC_CMD)==H_MBOX1_LLC_RUN)
+#define IS_LLC_STOP(mbox)	(((mbox)&H_MBOX1_LLC_CMD)==H_MBOX1_LLC_STOP)
+
+/*  Q_MBOX2 is LLC_TLATCH */
+
 #endif /* __RTM_T_H__ */
 
 
