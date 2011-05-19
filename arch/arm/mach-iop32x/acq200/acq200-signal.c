@@ -127,8 +127,10 @@ ssize_t acq200_store_signal(
 	if (ok != 0){
 		err("signal %s input validation failed %d \"%s\"", 
 		    signal->name, ok, buf);
+		return -EINVAL;
+	}else{
+		return count;
 	}
-	return count;	  
 }
 
 
