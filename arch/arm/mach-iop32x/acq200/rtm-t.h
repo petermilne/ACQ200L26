@@ -359,11 +359,14 @@ void /* __devexit */ rtm_t_uart_remove(struct pci_dev *pci_dev);
 #define Q_MBOX1_LLC_ACK		0xFFFF0000
 #define Q_MBOX1_LLC_SHOT	0x0000ffff
 
-#define MAKE_LLC_CMD(clkdiv, clk_pos, trg_pos) \
-	(H_MBOX1_LLC_CMD | ((clkdiv)&0x00ff) |\
+#define __MAKE_LLC_CMD(cmd, clkdiv, clk_pos, trg_pos) \
+	((cmd) | ((clkdiv)&0x00ff) |\
 	 ((clk_pos)? 0x00008000:0) | ((trg_pos)? 0x00004000:0))
 
-#define DECODE_LLC_CMD(mbox, clkdiv, clk_pos, trig_pos) \
+#define MAKE_LLC_RUN(clkdiv, clk_pos, trg_pos) \
+		__MAKE_LLC_CMD(H_MBOX1_LLC_RUN, clkdiv, clk_pos, trg_pos)
+
+#define DECODE_LLC_CMD(mbox, clkdiv, clk_pos, trg_pos) \
 	do { \
 		clkdiv = (mbox)&0x00ff; \
 		clk_pos = ((mbox)&0x00008000) != 0; \

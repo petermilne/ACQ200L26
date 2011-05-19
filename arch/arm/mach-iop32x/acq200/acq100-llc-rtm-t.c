@@ -73,7 +73,7 @@
 int acq100_llc_rtm_t_debug;
 module_param(acq100_llc_rtm_t_debug, int, 0664);
 
-int acq100_dropACQEN_on_exit;
+int acq100_dropACQEN_on_exit = 1;
 module_param(acq100_dropACQEN_on_exit, int, 0664);
 
 int sync2v_samples_per_cycle = 1;
@@ -81,6 +81,20 @@ module_param(sync2v_samples_per_cycle, int, 0644);
 
 int disable_acq_debug = 0;         /* set 1 */
 module_param(disable_acq_debug, int, 0644);
+
+int mbox_poll_ticks = HZ;
+module_param(mbox_poll_ticks, int, 0644);
+MODULE_PARM_DESC(mbox_poll_ticks, "LLC mbox poll rate in jiffies 0:continuous");
+
+int fifo_poll_ticks = 1;
+module_param(fifo_poll_ticks, int, 0644);
+MODULE_PARM_DESC(fifo_poll_ticks, "poll interval for fifo in jiffies 0:continuous");
+
+int state;
+module_param(state, int, 0444);
+
+int iter;
+module_param(iter, int, 0444);
 
 /** set to non-zero for 2V mode */
 int acq100_llc_sync2V = 0;
@@ -110,7 +124,8 @@ int acq100_llc_sync2V = 0;
 
 
 #define REPORT_ERROR(fmt, arg...) \
-    sprintf(dg.status.report, "%d " fmt, dg.status.errline = __LINE__, arg)
+	err(fmt, arg)
+//    sprintf(dg.status.report, "%d " fmt, dg.status.errline = __LINE__, arg)
 
 #define REPORT_ERROR_AND_QUIT(fmt, arg...) \
         REPORT_ERROR(fmt, arg); goto quit
@@ -119,7 +134,7 @@ int acq100_llc_sync2V = 0;
         sprintf(dg.status.report, "%d " fmt, __LINE__, arg); goto quit
 
 /** increment BUILD and VERID each build */
-#define BUILD 1000
+#define BUILD 1001
 
 #define _VERID(build) "build " #build
 #define VERID _VERID(BUILD)
@@ -135,15 +150,6 @@ char acq100_llc_copyright[] = "Copyright (c) 2004-2011 D-TACQ Solutions Ltd";
 
 /** size of fifo extension for sync2v */
 #define SCRATCHPAD_SIZE (32*sizeof(short))
-
-#define REPORT_ERROR(fmt, arg...) \
-    sprintf(dg.status.report, "%d " fmt, dg.status.errline = __LINE__, arg)
-
-#define REPORT_ERROR_AND_QUIT(fmt, arg...) \
-        REPORT_ERROR(fmt, arg); goto quit
-
-#define REPORT_AND_QUIT(fmt, arg...) \
-        sprintf(dg.status.report, "%d " fmt, __LINE__, arg); goto quit
 
 #if USES_CLKDLY
 #define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
@@ -213,7 +219,6 @@ static struct LlcDevGlobs {
 	/* STATUS gets cleared on entry */
 	struct STATUS {
 		int is_triggered;
-		unsigned iter;
 		u32 t0;
 		u32 tinst;
 		u32 tlatch;
@@ -304,82 +309,78 @@ static void llc_loop_sync2V(void)
  *
  */
 {
+	wait_queue_head_t queue;
+
 	u32 fifstat;
 	u32 tcycle = 0;
-	u32 fifstat2;
 	unsigned iter1 = 0;
-	u32 command = 0;
-#if FIFO_ONESAM
-	unsigned fifo_onesam =
-		getNumChan(CHANNEL_MASK) == 32? 2:
-		getNumChan(CHANNEL_MASK) == 64? 3: 4;
-#endif
-	dg.status.sample_count = 0;
-	llPreamble2V();
+	unsigned tlatch = *ACQ196_TCR_LATCH;
+	unsigned tlatch1;
 
-	for (iter1 = dg.status.iter = 0; !dg.emergency_stop;  ++dg.status.iter){
+	dg.status.sample_count = 0;
+	init_waitqueue_head(&queue);
+
+	enable_acq();
+
+	for (iter1 = iter = 0; !dg.emergency_stop;  ++iter){
 		/** @critical STARTS */
 		fifstat = *ACQ196_FIFSTAT;
+		tlatch1 = *ACQ196_TCR_LATCH;
 
-		if (AISAMPLE_CLOCKED(fifstat) != 0){
-			/* @todo HOUSKEEPING - were we fast enough? */
+		if (AISAMPLE_CLOCKED(fifstat) != 0 || tlatch1 != tlatch){
+			tlatch = tlatch1;
 
-			/* we assume it doesn't matter if this stuff makes this transfer or not..
-			 * We set CLKDLY short to give time for something useful ..
-			 */
-			hot_start:
 			/* @critical ENDS */
 
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
 				if (acq100_llc_sync2V >=
 						ACQ100_LLC_SYNC2V_DIDOSTA ){
-					I_SCRATCH_ITER = dg.status.iter;
+					I_SCRATCH_ITER = iter;
 					I_SCRATCH_SC = dg.status.sample_count;
 					I_SCRATCH_FSTA = fifstat;
 				}
 			}
-
-
-			if (++dg.status.sample_count == 1){
-				dg.status.iter = 1;
-			}
-
-			yield(); yield(); yield();
-
-			/*
-			if (dg.settings.do64_readback == 2){
-				u32* va = (u32*)((void*)dg.settings.ao32.tmp+AO32_VECLEN);
-				unsigned pa = dg.settings.ao32.tmp_pa+AO32_VECLEN-sizeof(u32);
-				dma_sync_single_for_cpu(NULL, pa, sizeof(u32), DMA_FROM_DEVICE);
-				I_SCRATCH_DORB = va[-1];
-			}
-			 */
 			/** housekeeping - error if zero polls */
-			if (dg.status.iter - iter1 < 1){
+			if (iter - iter1 < 1){
 				I_SCRATCH_LASTE	= dg.status.sample_count;
 			}
-			iter1 = dg.status.iter;
+			iter1 = iter;
 
-			/** @todo check overruns */
-			fifstat2 = *ACQ196_FIFSTAT;
+			if (++dg.status.sample_count == 1){
+				iter = 1;
+			}
 
-			if (OVERRUN(fifstat)) goto onOverrun;
-#if FIFO_ONESAM
-			if ((fifstat2&ACQ196_FIFSTAT_HOTPOINT) > fifo_onesam){
-				goto onFifoNotEmpty;
+			if ((fifstat & ACQ196_FIFSTAT_ERR) != 0){
+				goto onOverrun;
 			}
-#else
-			if (AIFIFO_NOT_EMPTY(fifstat2)) goto onFifoNotEmpty;
-#endif
-			if (!command && AISAMPLE_CLOCKED(fifstat2)){
-				++dg.status.hot_starts;
-				fifstat = fifstat2;
-				goto hot_start;       /** skip fifstat poll */
+		}
+
+
+		if (fifo_poll_ticks == 0){
+			yield();
+		}else{
+			if (interruptible_sleep_on_timeout(
+					&queue, fifo_poll_ticks)){
+				err("INTERRUPTED");
+				break;
 			}
+		}
+		if (++dg.status.sample_count == 1){
+			iter = 1;
 		}
 
 		if(askedToQuit()){
 			REPORT_AND_QUIT("QUIT on remote %d", 0);
+		}else{
+			if (fifo_poll_ticks == 0){
+				yield();
+			}else{
+				if (interruptible_sleep_on_timeout(
+					&queue, fifo_poll_ticks)){
+					err("INTERRUPTED");
+					break;
+				}
+			}
 		}
 	}
 
@@ -388,26 +389,23 @@ static void llc_loop_sync2V(void)
 	DBG(1, "QUITTING %s", dg.emergency_stop? "ESTOP": "");
 	dg.emergency_stop = 0;
 
-	llPostamble();
+
 	return;
 
 
-onOverrun:
-onFifoNotEmpty: {
+onOverrun: {
 		u32 tl2 = *ACQ196_TCR_LATCH;
 		u32 ti2 = *ACQ196_TCR_IMMEDIATE;
 
 		err("status TI 0x%08x TL 0x%08x\n", ti2, tl2);
 
 		if (OVERRUN(fifstat)){
-			REPORT_ERROR(
-				"ERROR:FIFO SAMPLE OVERRUN 0x%08x 0x%08x tc %d",
-				fifstat, fifstat2, tcycle);
+			REPORT_ERROR("ERROR:FIFO SAMPLE OVERRUN 0x%08x tc %d",
+				fifstat, tcycle);
 		}
-		if (AIFIFO_NOT_EMPTY(fifstat2)){
-			REPORT_ERROR(
-				"ERROR:FIFO NOT EMPTY 0x%08x 0x%08x tc %d",
-				fifstat, fifstat2, tcycle);
+		if (AIFIFO_NOT_EMPTY(fifstat)){
+			REPORT_ERROR("ERROR:FIFO NOT EMPTY 0x%08x tc %d",
+				fifstat, tcycle);
 		}
 		goto quit;
 	}
@@ -476,17 +474,19 @@ static int llc_onEntry(void)
 
 static void onRun(u32 mbox)
 {
-	unsigned clkdiv, clk_pos, trg_pos;
+	DECODE_LLC_CMD(mbox, dg.prams.divisor, dg.prams.clkpos, dg.prams.trpos);
 
-	DECODE_LLC_CMD(mbox, clkdiv, clk_pos, trg_pos);
+	dbg(1, "clkdiv %d clk_pos:%d trg_pos:%d",
+			dg.prams.divisor, dg.prams.clkpos, dg.prams.trpos);
 
-	dbg(1, "clkdiv %d clk_pos:%d trg_pos:%d", clkdiv, clk_pos, trg_pos);
 	llc_onEntry();
 }
 
 static void runAction(void)
 {
+	llPreamble2V();
 	llc_loop_sync2V();
+	llPostamble();
 }
 
 static void onStop(void)
@@ -508,21 +508,27 @@ static int askedToQuit(void)
 	return IS_LLC_STOP(h_mbox1);
 }
 
+enum LLC_STATE { IDLE, RUN };
 
 static int llc_task(void *nothing)
 {
-	enum LLC_STATE { IDLE, RUN } state = IDLE;
-
-	wait_queue_head_t queue;
+	int pollcat = 0;
 	u32 h_mbox1 = *RTMT_REG(RTMT_H_MBOX1);
+	wait_queue_head_t queue;
 
 	init_waitqueue_head(&queue);
+
+	state = IDLE;
 
 	while(!kthread_should_stop()){
 		u32 new_h_mbox1 = *RTMT_REG(RTMT_H_MBOX1);
 		int input_change;
+
+		++pollcat;
+
 		if ((input_change = new_h_mbox1 != h_mbox1) != 0){
-			info("input change %08x => %08x", h_mbox1, new_h_mbox1);
+			info("%5d input change %08x => %08x",
+					pollcat, h_mbox1, new_h_mbox1);
 			h_mbox1 = new_h_mbox1;
 		}
 
@@ -532,7 +538,6 @@ static int llc_task(void *nothing)
 				onRun(h_mbox1);
 				ack(h_mbox1);
 				state = RUN;	/* fall thru */
-
 			}else{
 				break;
 			}
@@ -543,11 +548,19 @@ static int llc_task(void *nothing)
 				ack(h_mbox1);
 			}else{
 				runAction();
+				ack(*RTMT_REG(RTMT_H_MBOX1));
 				state = IDLE;
-				/* continue; */ /* comment in when runAction blocks */
 			}
 		}
-		interruptible_sleep_on_timeout(&queue, HZ);
+		if (mbox_poll_ticks == 0){
+			yield();
+		}else{
+			if (interruptible_sleep_on_timeout(
+					&queue, mbox_poll_ticks)){
+				err("INTERRUPTED");
+				break;
+			}
+		}
 	}
 
 	return 0;
@@ -569,7 +582,7 @@ static void llc_task_start(int start)
 }
 static int acq100_llc_rtm_t_probe(struct device *dev)
 {
-	info("");
+	info(VERID);
 	llc_task_start(1);
 	return 0;
 }
@@ -593,17 +606,11 @@ static struct device_driver acq100_llc_rtm_t_driver = {
 };
 
 
-/*
-static u64 dma_mask = 0x00000000ffffffff;
-*/
 static struct platform_device acq100_llc_rtm_t_device = {
 	.name = "acq100_llc_rtm_t",
 	.id   = 0,
 	.dev = {
 		.release    = acq100_llc_rtm_t_dev_release,
-/*
-		.dma_mask   = &dma_mask
-*/
 	}
 
 };
