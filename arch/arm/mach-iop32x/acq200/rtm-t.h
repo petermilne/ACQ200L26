@@ -124,9 +124,13 @@
 #define RTMT_D_FCR_SIM_THROTTLE_MSK 0xf		/* 0x0 : /1, 0x1 : /2 .. etc */
 #define RTMT_D_FCR_SIM_MODE	(1<<7)		/* 1: Simulate on source=ctr */
 #define RTMT_D_FCR_PCIE_DATAON	(1<<6)		/* 1: request data frm ACQ */
-/* unused 5-1 */
+#define RTMT_D_FCR_LOWLAT	(1<<5)
+/* unused 4-1 */
+#define RTMT_D_FCR_DMA_SINGLE_RECYCLE	(1<<1)	/* 1: reuse #1 DMA descr forever */
 #define RTMT_D_FCR_FIFO_RESET	(1<<0)		/* 1: reset COMMS FIFO Which One? */
 
+#define RTMT_D_FCR_SIM_CLR	\
+		(RTMT_D_FCR_SIM_MODE|RTMT_D_FCR_SIM_THROTTLE_MSK<<RTMT_D_FCR_SIM_THROTTLE_SHL)
 
 #define RTMT_D_DIO_DRVON_SHL	24	/* 1: HD15 is OUTPUT */
 #define RTMT_D_DIO_SETOUT_SHL	16	/* 1: FPGA is OUTPUT */
@@ -172,6 +176,7 @@
 #define NO_BAR		-1
 #define MAP_COUNT	5
 
+/* we wanted an elegant multi-vector solution, but we can only have one int */
 #define MSI_DMA		0
 #ifdef MSI_BLOCK_WORKS
 #define MSI_UART	1
@@ -207,147 +212,9 @@
 /* it's actually double, but then we'd have to update stty */
 #define RTM_T_UART_XTAL	(14181800)
 
-/* idea by John: make it a multiple of 3 to handle 96ch align case */
-#define NBUFFERS	66
-	
-#ifndef NVEC
-#define NVEC		16
-#endif
-#define NBUFFERS_FIFO	NBUFFERS
-
-#define NBUFFERS_MASK	127
-
-#define BUFFER_LEN	0x100000
-
-#define MINOR_DMAREAD	254
-#define MINOR_REGREAD	253
-#define MINOR_DATA_FIFO 252
-#define MINOR_DESC_FIFO 251
-#define MINOR_UART	250
-
-
-struct RTM_T_DEV {
-	struct PciMapping {
-		int bar;
-		u32 pa;
-		void* va;
-		unsigned len;
-		struct resource *region;
-		char name[32];
-	} mappings[MAP_COUNT];
-
-	struct RegsMirror {
-		u32 ctrl;
-		u32 D_FCR;
-		u32 dio;
-		u32 dio_read;
-	} regs;
-
-	struct HostBuffer {
-		int ibuf;
-		void *va;
-		u32 pa;
-		int len;
-		int req_len;
-		u32 descr;
-		struct list_head list;
-		enum BSTATE { 
-			BS_EMPTY, BS_FILLING, BS_FULL, BS_FULL_APP } 
-		bstate;
-		u32 timestamp;
-	} hb[NBUFFERS];
-
-#define NSTATES		4
-#define N_DRV_STATES	3
-
-	struct mutex list_mutex;
-
-	struct BOTTLING_PLANT {
-		struct list_head list;
-		struct proc_dir_entry *proc;
-	}	
-		bp[N_DRV_STATES];
-
-#define bp_empties bp[BS_EMPTY]
-#define bp_filling bp[BS_FILLING]
-#define bp_full	   bp[BS_FULL]
-/* BS_FULL_APP : in list in path buffer */
-
-
-	int nbuffers;	
-	struct pci_dev *pci_dev;
-	struct CLASS_DEVICE *class_dev;	
-	int idx;
-	char name[16];
-	char mon_name[16];
-	char slot_name[16];
-	int major;	
-	struct list_head list;
-
-
-	struct WORK {				/* ISR BH processing */	
-		wait_queue_head_t w_waitq;
-		unsigned long w_to_do;
-		struct task_struct* w_task;
-#define WORK_REQUEST	0
-		struct task_struct* mon_task;
-	} work;
-
-
-
-	wait_queue_head_t return_waitq;
-
-	struct proc_dir_entry *proc_dir_root;
-
-	struct JOB {
-		unsigned buffers_demand;
-		unsigned buffers_queued;
-		unsigned buffers_received;
-		unsigned ints;
-		int please_stop;
-		unsigned rx_buffers_previous;
-		unsigned int_previous;
-		unsigned rx_rate;
-		unsigned int_rate;
-		unsigned errors;
-	}
-		job;
-	spinlock_t job_lock;
-
-	unsigned *data_fifo_histo;
-      	unsigned *desc_fifo_histo;
-
-	char last_dio_bit_store[40];
-};
-
-
-void rtd_write_reg(struct RTM_T_DEV *tdev, int regoff, u32 value);
-u32 rtd_read_reg(struct RTM_T_DEV *tdev, int regoff);
-
-void rtm_t_createSysfs(struct RTM_T_DEV *tdev);
-
-void rtm_t_create_sysfs_class(struct RTM_T_DEV *tdev);
-void rtm_t_remove_sysfs_class(struct RTM_T_DEV *tdev);
-
-int rtm_t_reset_buffers(struct RTM_T_DEV* tdev);
-
-struct RTM_T_DEV* rtm_t_lookupDev(struct device *dev);
-struct RTM_T_DEV *rtm_t_lookupDeviceFromClass(struct CLASS_DEVICE *dev);
-
-extern int buffer_len;
-
-enum { PS_OFF, PS_PLEASE_STOP, PS_STOP_DONE };
-
-static inline int cable_is_connected(struct RTM_T_DEV *tdev)
-{
-	return (rtd_read_reg(tdev, RTMT_D_FCR) & RTMT_D_FCR_PCIE_APP_RDY) == 0;
-}
-
-int /* __devinit */ rtm_t_uart_init(struct pci_dev *pci_dev, void *mapping);
-void /* __devexit */ rtm_t_uart_remove(struct pci_dev *pci_dev);
-
 
 #define FPGA_ID	0		/* S6 unique ID TBA */
+
 
 /* LLC SIGNALING */
 

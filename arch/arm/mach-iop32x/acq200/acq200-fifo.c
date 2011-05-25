@@ -1561,7 +1561,7 @@ static void fifo_dma_irq_eoc_callback(struct InterruptSync *self, u32 flags)
 /* acq216 - nothing waits on this Q. But may be needed by WAV etc WORKTODO
                 wake_up_interruptible(&is->waitq);
 */
-	if (fifsta&DG->FIFERR || (flags&DMA_ERROR)){
+	if ((fifsta&DG->FIFERR) || (flags&DMA_ERROR)){
 		if (!DG->fiferr){
 			if (fifsta&DG->FIFERR){
 				DG->fiferr = fifsta;
