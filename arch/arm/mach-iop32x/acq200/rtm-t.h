@@ -85,10 +85,18 @@
 
 #define RTMT_Q_SPI_CTL		0xac
 #define RTMT_Q_SPI_DAT		0xb0
+#define RTMT_Q_I2C		0xb4
 #define RTMT_Q_MBOX1		0xb8
 #define RTMT_Q_MBOX2		0xbc
 #define	RTMT_Q_END		RTMT_Q_MBOX2
-#define REGS_LEN	        (0x80+RTMT_Q_END+4)
+
+#define RTMT_D_AURORA0_CTRL	0xc0
+#define RTMT_D_AURORA0_STAT	0xc4
+
+#define REGS_LEN	        (0x80+RTMT_D_AURORA0_STAT+4)
+
+
+
 
 #define RTMT_H_PCIE_CSR_FPGA_FAMILY	0xff000000
 #define RTMT_H_PCIE_CSR_INT_TYPE	0x00070000
@@ -170,6 +178,26 @@
 #define RTMT_Q_SPI_HOLD			(1<<1)
 #define RTMT_Q_SPI_WP			(1<<2)
 
+
+#define RTMT_D_AURORA_CTRL_RESET	(1<<31)
+#define RTMT_D_AURORA_CTRL_CLR		(1<<7)
+#define RTMT_D_AURORA_CTRL_PWR_DWN	(1<<4)
+#define RTMT_D_AURORA_CTRL_LOOPBACK	(0x7)
+
+#define RTMT_D_AURORA_STAT_SFP_PRESENTn	(1<<31)
+#define RTMT_D_AURORA_STAT_SFP_LOS	(1<<30)
+#define RTMT_D_AURORA_STAT_SFP_TX_FAULT (1<<29)
+#define RTMT_D_AURORA_STAT_HARD_ERR	(1<<6)
+#define RTMT_D_AURORA_STAT_SOFT_ERR	(1<<5)
+#define RTMT_D_AURORA_STAT_FRAME_ERR	(1<<4)
+#define RTMT_D_AURORA_STAT_CHANNEL_UP	(1<<1)
+#define RTMT_D_AURORA_STAT_LANE_UP	(1<<0)
+
+#define RTMT_Q_I2C_SCL_R		0
+#define RTMT_Q_I2C_SDA_R		1
+#define RTMT_Q_I2C_SCL_W		8
+#define RTMT_Q_I2C_SDA_W		9
+
 #define UART_BAR	4
 #define TX_FIFO_BAR	2
 #define REGS_BAR	0
@@ -243,8 +271,8 @@
 #define IS_LLC_RUN(mbox)	(((mbox)&H_MBOX1_LLC_CMD)==H_MBOX1_LLC_RUN)
 #define IS_LLC_STOP(mbox)	(((mbox)&H_MBOX1_LLC_CMD)==H_MBOX1_LLC_STOP)
 
-/*  Q_MBOX2 is LLC_TLATCH */
 
+/*  Q_MBOX2 is LLC_TLATCH */
 #endif /* __RTM_T_H__ */
 
 

@@ -50,13 +50,15 @@ CONFIG_ARCH_DTACQ_DEBUG_IOP=m
 CONFIG_ARCH_DTACQ_DEBUG_ACQ1xx=m
 CONFIG_ARCH_DTACQ_ACQ132_LFP=m
 CONFIG_ARCH_DTACQ_ACQ100_RTM_T=m
+CONFIG_ARCH_DTACQ_ACQ100_RTM_T_SFP_I2C=m
 CONFIG_ARCH_DTACQ_ACQ100_SPIFLASH=m
 CONFIG_ACQ200_HOSTDRV=m
 CONFIG_ARCH_DTACQ_ACQ100_GATHER=m
 CONFIG_ARCH_DTACQ_ACQ100_RTMCLK=m
 
 
-obj-y			:= \
+
+obj-y := \
 	acq200-time.o \
 	acqX00-setup.o   \
 	acq200-sys.o \
@@ -177,6 +179,8 @@ obj-$(CONFIG_ARCH_DTACQ_ACQ100_GATHER) += acq100_gather.o
 obj-$(CONFIG_ARCH_DTACQ_ACQ100_RTMCLK) += acq100_rtmclk.o
 obj-$(CONFIG_ARCH_DTACQ_GTMR) += gtmr.o
 
+obj-$(CONFIG_ARCH_DTACQ_ACQ100_RTM_T_SFP_I2C) += acq100_rtm_t_sfp_i2c.o
+
 ACQ2XX_FIFO_COMMONA=\
 	acq200-fifo-tblock.o \
 	acq200-transform.o \
@@ -253,7 +257,9 @@ acq100_skel-objs := acq100-skel.o
 
 acq196_mac-objs := acq196-mac.o
 
-acq100_rtm_t-objs := acq100_rtm_t_main.o acq100_rtm_t_uart.o acq100_rtm_t_spi.o
+acq100_rtm_t-objs := \
+	acq100_rtm_t_main.o acq100_rtm_t_uart.o \
+	acq100_rtm_t_spi.o acq100_rtm_t_sfp.o
 
 #acq216-fiq.o: acq216-fiq.S
 #wav232-fiq.o: wav232-fiq.S

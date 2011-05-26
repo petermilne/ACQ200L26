@@ -111,6 +111,7 @@ static DEVICE_ATTR(cable_connected, S_IRUGO, show_cable_connected, 0);
   
 static void mk_rtm_t_sysfs(struct device *dev)
 {
+	create_sfp_knobs(dev);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxQ1);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxQ2);
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxH1);
