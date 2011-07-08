@@ -1,6 +1,8 @@
 #
 # Makefile for the i2c bus drivers.
 #
+# pgmwashere
+CONFIG_I2C_GPIO=m
 
 obj-$(CONFIG_I2C_ALI1535)	+= i2c-ali1535.o
 obj-$(CONFIG_I2C_ALI1563)	+= i2c-ali1563.o

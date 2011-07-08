@@ -1,6 +1,9 @@
 #
 # Makefile for the i2c algorithms
 #
+# pgmwashere 
+#
+CONFIG_I2C_ALGOBIT=m
 
 obj-$(CONFIG_I2C_ALGOBIT)	+= i2c-algo-bit.o
 obj-$(CONFIG_I2C_ALGOPCF)	+= i2c-algo-pcf.o
