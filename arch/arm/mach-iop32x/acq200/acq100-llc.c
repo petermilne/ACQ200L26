@@ -155,9 +155,11 @@ int sync2v_samples_per_cycle = 1;
 module_param(sync2v_samples_per_cycle, int, 0644);
 
 /* SYNC2V SCRATCHPAD */
+
+#define I_SCRATCH_TLAT32	ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLAT32]
 #define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
-#define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+1]
-#define I_SCRATCH_FSTA ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_VERID+2]
+#define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_SCOUNT]
+#define I_SCRATCH_FSTA ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_FIFSTA]
 #if DI_IN_1
 #define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[1]
 #else
@@ -189,8 +191,8 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1077
-#define _VERID(build) "$Revision: 1.24 $ build " #build
+#define BUILD 1078
+#define _VERID(build) "Build " #build
 
 #define VERID _VERID(BUILD)
 
@@ -1627,6 +1629,9 @@ static void llc_loop_sync2V(int entry_code)
 		getNumChan(CHANNEL_MASK) == 32? 2:
 		getNumChan(CHANNEL_MASK) == 64? 3: 4;
 #endif		
+	u32 tlat32 = 0;
+
+
 	DBG(1, "ENTER %d", entry_code);
 	dg.status.sample_count = 0;
 	llPreamble2V();
@@ -1652,11 +1657,11 @@ static void llc_loop_sync2V(int entry_code)
 
 				if (acq100_llc_sync2V >=
 				    ACQ100_LLC_SYNC2V_DIDOSTA ){
-#if 0
+					SERVICE_TLATCH(tlat32);
 					I_SCRATCH_ITER = dg.status.iter;
 					I_SCRATCH_SC = dg.status.sample_count;
-#endif
-					I_SCRATCH_FSTA = fifstat;
+	    				I_SCRATCH_FSTA = fifstat;
+					I_SCRATCH_TLAT32 = tlat32;
 				}
 			}
 			
