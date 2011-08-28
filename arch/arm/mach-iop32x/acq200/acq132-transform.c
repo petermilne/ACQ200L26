@@ -538,10 +538,6 @@ int acq132_transform_row_es(
 			}
 #endif
 			to[chx*channel_sam + tosam] = buf.ch[chx];
-/* change to splitter function to handle masks:
-			to[chx][tosam] = buf.ch[chx];
-*/
-			
 		}	
 		++tosam;		
 	}
@@ -605,25 +601,8 @@ int acq132_transform_row_es1pQ(
 				buf & 0x0000ffff, buf>>16, full-1);
 		}
 
-		if (likely(store_half == 0)){
-			to[0*channel_sam + tosam] = buf & 0x0000ffff;
-			to[1*channel_sam + tosam] = buf >> 16;
-		}else if (store_half < 0){
-			to[0*channel_sam + tosam] = buf & 0x0000ffff;
-			if (store_half < -1){
-				to[1*channel_sam + tosam] = tosam;
-			}
-			if (tosam < 20){
-				if (store_half < -10){
-					to[0*channel_sam + tosam] = tosam;
-				}
-			}
-		}else if (store_half >= 0){
-			to[1*channel_sam + tosam] = buf >> 16;
-			if (store_half > 1){
-				to[0*channel_sam + tosam] = tosam;
-			}
-		}
+		to[0*channel_sam + tosam] = buf & 0x0000ffff;
+		to[1*channel_sam + tosam] = buf >> 16;
 
 		++tosam;		
 	}
@@ -814,7 +793,7 @@ static void acq132_transform_es1pQ(
 	G_current_transform_tbxo = va2tbxo(from);
 
 	acq132_transform_unblocked1pQ(
-		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
+		to, acq132_deblock(from, nwords, stride/ROW_CHAN), nwords/stride, stride/ROW_CHAN4);
 }
 
 
