@@ -696,28 +696,13 @@ static void acq132_transform_unblocked1pQ(
 		TBG(2, "row_off[%d] = %d", row, row_off[row]);
 	}
 
-	if (acq132_transform_debug > 1){
-		int ch_len = nsamples * sizeof(short);
-		TBG(1, "IDENTIFYING to:%p len:%d chlen:%d", 
-		    to, TBLOCK_LEN(DG), ch_len);
-		
-		for (row = 0; row < ROWS; ++row){
-			ident_memset(to + row_off[row], 2*row, ch_len);
-			ident_memset(to + row_off[row]+nsamples, 
-							2*row+1, ch_len);
-		}
-	}
-
-	TBG(1, "nsamples:%d ROWS:%d", nsamples, ROWS);
-
 	for (row = 0; row < ROWS; ++row){
-
 		TBG(2, "to:%p + row_off[%d] %p, from %p", 
 		    to, row, to + row_off[row], from);
 
-		row_off[row] += acq132_transform_row_es1pQ(
+		acq132_transform_row_es1pQ(
 			to + row_off[row], 
-			from, 
+			from,
 			nsamples,
 			nsamples
 			);
@@ -732,19 +717,20 @@ static void* acq132_deblock(const short * from, int nwords, int ROWS)
 	short* const to = (short*)BB_PTR(g_esm.es_deblock->tblock->offset);
 	int row_off[MAX_ROWS];
 	int row;
+	int first_time = 1;
 
 	dbg(1, "00 block: %03d ROWS:%d", TBLOCK_INDEX((void*)from-BB_PTR(0)), ROWS);
 	dbg(1, "to block %03d, to:%p", g_esm.es_deblock->tblock->iblock, to);
 
 	for (row = 0; row != ROWS; ++row){
 		row_off[row] = DQ_ROW_OFF(row, ROWS);	
-		dbg(1+row, "01b:%d", row_off[row]);
+		dbg(1+row, "01b:row_off[%d] = %d", row, row_off[row]);
 	}
 	
 	while(nwords > 0){
 		for (row = 0; row != ROWS; ++row){
 
-			dbg(4, "b:%d memcpy(%p, %p, %d)",
+			dbg(first_time==1? 1: 4, "%d memcpy(%p, %p, %d)",
 			    row, to+row_off[row], from, ROW_SIZE);
 
 			memcpy(to+row_off[row], from, ROW_SIZE);
@@ -752,6 +738,7 @@ static void* acq132_deblock(const short * from, int nwords, int ROWS)
 			from += ROW_WORDS;
 			nwords -= ROW_WORDS;
 		}
+		first_time = 0;
 	}
 
 	/* ES detection needs to know TROW info ... this copy
@@ -783,7 +770,7 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 }
 
 static void acq132_transform_es1pQ(
-	short *to, short *from, int nwords, int stride)
+		short *to, short *from, int nwords, int stride)
 {
 	int ROWS = stride/ROW_CHAN4;
 
