@@ -771,9 +771,11 @@ static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
 	int ROWS = stride/ROW_CHAN;
 
-	dbg(1, "to:tblock:%d from:tblock:%d", 
-	    TBLOCK_INDEX((void*)to - va_buf(DG)),
-	    TBLOCK_INDEX((void*)from - va_buf(DG)));
+	dbg(1, "to:tblock:%d from:tblock:%d nwords:%d stride:%d",
+		    TBLOCK_INDEX((void*)to - va_buf(DG)),
+		    TBLOCK_INDEX((void*)from - va_buf(DG)),
+		    nwords,
+		    stride);
 
 	G_current_transform_tbxo = va2tbxo(from);
 
@@ -786,14 +788,16 @@ static void acq132_transform_es1pQ(
 {
 	int ROWS = stride/ROW_CHAN4;
 
-	dbg(1, "to:tblock:%d from:tblock:%d", 
+	dbg(1, "to:tblock:%d from:tblock:%d nwords:%d stride:%d",
 	    TBLOCK_INDEX((void*)to - va_buf(DG)),
-	    TBLOCK_INDEX((void*)from - va_buf(DG)));
+	    TBLOCK_INDEX((void*)from - va_buf(DG)),
+	    nwords,
+	    stride);
 
 	G_current_transform_tbxo = va2tbxo(from);
 
 	acq132_transform_unblocked1pQ(
-		to, acq132_deblock(from, nwords, stride/ROW_CHAN), nwords/stride, stride/ROW_CHAN4);
+		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
 }
 
 
