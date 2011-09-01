@@ -506,7 +506,7 @@ extern const struct ADC_CHANNEL_LUT* ADC_CHANNEL_LUT;
 int acq132_setChannelMask(unsigned mask);
 /* returns >= 0 if OK */
 
-extern void acq132_setChannelLUTs(struct Acq132ChannelLUT_Collection* luts);
+extern void acq132_setChannelLUTs(const struct Acq132ChannelLUT_Collection* luts);
 
 int acq132_rewire(int ch);	/* accounts for any non-standard wiring */
 int acq132_store_scanlist(const char* sl_def);
