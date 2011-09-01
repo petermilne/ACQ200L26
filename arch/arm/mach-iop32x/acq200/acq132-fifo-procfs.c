@@ -1052,12 +1052,12 @@ static ssize_t set_daq_enable(
 	return strlen(buf);
 }
 
-#define BANK_ENTRY(dev, cmask)	  { "BANK" #dev " " #cmask "\n", 0 }
+#define BANK_ENTRY(bank, cmask)	  { bank " " #cmask "\n", 0 }
 #define SPACER_ENTRY	  { "|\n", 0 }
 #define REGS_LUT_ENTRY(n) { #n, n }
 
-#define ADC_REGS_ENTRY(dev, cmask)		\
-	BANK_ENTRY(dev, cmask),			\
+#define ADC_REGS_ENTRY(bank, dev, cmask)	\
+	BANK_ENTRY(bank, cmask),		\
 	REGS_LUT_ENTRY(ACQ132_ADC_VERID(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_CTRL(dev)),	\
 	REGS_LUT_ENTRY(ACQ132_ADC_RANGE(dev)),	\
@@ -1083,10 +1083,10 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_DEF),
 		REGS_LUT_ENTRY(ACQ132_SCAN_LIST_LEN),
 		SPACER_ENTRY,
-		ADC_REGS_ENTRY(BANK_A, MASK_A),
-		ADC_REGS_ENTRY(BANK_B, MASK_B),
-		ADC_REGS_ENTRY(BANK_C, MASK_C),
-		ADC_REGS_ENTRY(BANK_D, MASK_D),
+		ADC_REGS_ENTRY("BANK_A", BANK_A, MASK_A),
+		ADC_REGS_ENTRY("BANK_B", BANK_B, MASK_B),
+		ADC_REGS_ENTRY("BANK_C", BANK_C, MASK_C),
+		ADC_REGS_ENTRY("BANK_D", BANK_D, MASK_D),
 		REGS_LUT_ENTRY(ACQ196_CLKCON),
 		REGS_LUT_ENTRY(ACQ200_CLKDAT),
 		REGS_LUT_ENTRY(ACQ200_DIOCON),
