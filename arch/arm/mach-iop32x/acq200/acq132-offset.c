@@ -236,7 +236,7 @@ int acq132_store_scanlist(const char* sl_def)
 	return ok;
 }
 
-void acq132_setChannelLUTs(struct Acq132ChannelLUT_Collection* luts)
+void acq132_setChannelLUTs(const struct Acq132ChannelLUT_Collection* luts)
 {
 	if (luts){
 		acq132_LUTs = luts;
