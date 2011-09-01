@@ -702,11 +702,10 @@ static void acq132_transform_unblocked1pQ(
 
 		acq132_transform_row_es1pQ(
 			to + row_off[row], 
-			from,
+			from + row_off[row],
 			nsamples,
 			nsamples
 			);
-		from += nsamples;
 	}
 
 	TBG(1, "99");
