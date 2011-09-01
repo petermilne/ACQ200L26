@@ -111,11 +111,10 @@ static const int acq132_lfp_plut11[] = {
 /* index: memory order 1:32
  * value: nameplate order 1:32
  */
-
-	[ 1] = 15 /*  1 */, [ 2] = 31 /* 17 */,	/* BANK_D MASK_1 */
-	[ 9] = 11 /*  5 */, [10] = 27 /* 21 */, /* BANK_C MASK_1 */
-	[17] =  7 /*  9 */, [18] = 23 /* 25 */, /* BANK_B MASK_1 */
-	[25] =  3 /* 13 */, [26] = 19 /* 29 */, /* BANK_A MASK_1 */
+	[ 1] =  1 /* 15 */, [ 2] = 17 /* 31 */, /* BANK_A MASK_1B */
+	[ 3] =  5 /* 11 */, [ 4] = 21 /* 27 */, /* BANK_B MASK_1B */
+	[ 5] =  9 /*  7 */, [ 6] = 25 /* 23 */, /* BANK_C MASK_1B */
+	[ 7] = 13 /*  3 */, [ 8] = 29 /* 19 */, /* BANK_D MASK_1B */
 };
 
 
@@ -132,9 +131,10 @@ static const struct Acq132ChannelLUT acq132_lfp_luts[] = {
 	{	0x40004000,  4, acq132_lfp_plut44444444,	"D"	},
 
 	{	0x55555555, 16, acq132_lfp_plut55555555,	"DCBA"	},
-	{	0x11111111,  8, acq132_lfp_plut11,		"DCBA"	},
-	{	0x00110011,  4, acq132_lfp_plut11,		"DC"	},
-	{	0x00010001,  2, acq132_lfp_plut11,		"D"	},
+
+	{	0x11111111,  8, acq132_lfp_plut11,		"ABCD"	},
+	{	0x00110011,  4, acq132_lfp_plut11,		"AB"	},
+	{	0x00010001,  2, acq132_lfp_plut11,		"A"	},
 };
 
 
@@ -175,7 +175,7 @@ static const struct ADC_CHANNEL_LUT LFP_ADC_CHANNEL_LUT[] = {
 	[18] = { BANK_A, 'L', ACQ132_ADC_RANGE_L4, MASK_4 }
 };
 
-static struct Acq132ChannelLUT_Collection acq132_lfp_LUTs = {
+static const struct Acq132ChannelLUT_Collection acq132_lfp_LUTs = {
 	.model = "acq132-lfp",
 	.nmasks = sizeof(acq132_lfp_luts)/sizeof(struct Acq132ChannelLUT),
 	.luts = acq132_lfp_luts
