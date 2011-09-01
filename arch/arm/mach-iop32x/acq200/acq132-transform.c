@@ -612,7 +612,7 @@ int acq132_transform_row_es1pQ(
 }
 
 
-#define DQ_ROW_OFF(blk, rows) (blk*TBLOCK_LEN(DG)/rows)
+#define DQ_ROW_OFF(blk, rows) ((blk*TBLOCK_LEN(DG)/rows)/sizeof(short))
 
 static void acq132_transform_unblocked(
 	short *to, short *from, int nsamples, int ROWS)
@@ -630,7 +630,7 @@ static void acq132_transform_unblocked(
 	G_rows = ROWS;
 
 	for (row = 0; row < ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
+		row_off[row] = DQ_ROW_OFF(row, ROWS);
 	}
 
 	TBG(1, "nsamples:%d to:[%03d] %p  from:[%03d] %p", 
@@ -692,7 +692,7 @@ static void acq132_transform_unblocked1pQ(
 	}
 
 	for (row = 0; row < ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS)/sizeof(short);
+		row_off[row] = DQ_ROW_OFF(row, ROWS);
 		TBG(2, "row_off[%d] = %d", row, row_off[row]);
 	}
 
@@ -727,14 +727,13 @@ static void acq132_transform_unblocked1pQ(
 	TBG(1, "99");
 }
 
-static void* acq132_deblock(short * const from, int nwords, int ROWS)
+static void* acq132_deblock(const short * from, int nwords, int ROWS)
 {
-	void* const to = BB_PTR(g_esm.es_deblock->tblock->offset);
-	void *frm = from;
+	short* const to = (short*)BB_PTR(g_esm.es_deblock->tblock->offset);
 	int row_off[MAX_ROWS];
 	int row;
 
-	dbg(1, "00 block: %03d ROWS:%d", TBLOCK_INDEX(frm-BB_PTR(0)), ROWS);
+	dbg(1, "00 block: %03d ROWS:%d", TBLOCK_INDEX((void*)from-BB_PTR(0)), ROWS);
 	dbg(1, "to block %03d, to:%p", g_esm.es_deblock->tblock->iblock, to);
 
 	for (row = 0; row != ROWS; ++row){
@@ -746,12 +745,12 @@ static void* acq132_deblock(short * const from, int nwords, int ROWS)
 		for (row = 0; row != ROWS; ++row){
 
 			dbg(4, "b:%d memcpy(%p, %p, %d)",
-			    row, to+row_off[row], frm, ROW_SIZE);
+			    row, to+row_off[row], from, ROW_SIZE);
 
-			memcpy(to+row_off[row], frm, ROW_SIZE);
-			row_off[row] += ROW_SIZE;
-			frm += ROW_SIZE;
-			nwords -= ROW_SIZE/SWS;
+			memcpy(to+row_off[row], from, ROW_SIZE);
+			row_off[row] += ROW_WORDS;
+			from += ROW_WORDS;
+			nwords -= ROW_WORDS;
 		}
 	}
 
