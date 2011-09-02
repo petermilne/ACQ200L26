@@ -121,6 +121,7 @@ static const int acq132_lfp_plut11[] = {
 
 static const struct Acq132ChannelLUT acq132_lfp_luts[] = {
 	{	0xffffffff, 32, acq132_lfp_plut,		"DCBA"	},
+	{ 	0x0fff0fff, 24, acq132_lfp_plut+8,		"CBA"	},
 	{	0x00ff00ff, 16, acq132_lfp_plut16,		"BA"	},
 	{	0x000f000f,  8, acq132_lfp_plut8,		"A"	},
 	{	0x55555555, 16, acq132_lfp_plut55555555,	"DCBA"  },

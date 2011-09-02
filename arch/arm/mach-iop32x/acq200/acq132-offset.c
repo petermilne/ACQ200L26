@@ -76,6 +76,7 @@ static const int acq132_default_plut11[] = {
 static struct Acq132ChannelLUT default_luts[] = {
 //	[ FULL_LUT ] = 
        	{	0xffffffff, 32, acq132_default_plut,	"DCBA"	},
+       	{	0x00ffffff, 24, acq132_default_plut,	"DCB"	},
 	{	0x00ff00ff, 16, acq132_default_plut,    "DC"	},
 	{	0x000f000f,  8, acq132_default_plut,	"D"	},
 	{	0x00030003,  4, acq132_default_plut,	"D"	},
