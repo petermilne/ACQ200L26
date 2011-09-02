@@ -155,7 +155,7 @@ static int bit_test(void)
 extern int rtm_t_spi_master_init(struct device *dev);
 
 
-static int rtm_t_probe(struct device *dev)
+static int __init  rtm_t_probe(struct device *dev)
 {
 	struct platform_device* pd = 
 		container_of(dev, struct platform_device, dev);
@@ -200,7 +200,7 @@ static void rtm_t_dev_release(struct device * dev)
 	}
 }
 
-static int rtm_t_remove(struct device *dev)
+static int __exit rtm_t_remove(struct device *dev)
 {
 	acq100_rtm_t_uart_exit();
 	return 0;
