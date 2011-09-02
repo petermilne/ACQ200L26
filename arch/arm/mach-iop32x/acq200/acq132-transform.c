@@ -519,24 +519,8 @@ int acq132_transform_row_es(
 			
 			continue;
 		}
-#ifdef DEBUGGING
-		if ((short*)full < from1 || (short*)full > from2){
-			err("from outrun at  %p %p %p sam:%d",
-			    from1, full, from2, sam);
-			return nsamples;
-		}
-#endif
 
 		for (chx = 0; chx < ROW_CHAN; ++chx){
-
-#ifdef DEBUGGING
-			short *pto = to + chx*channel_sam + tosam;
-			if (pto < to1 || pto > to2){
-				err("buffer outrun at %p %p %p chx:%d tosam:%d",
-				    to1, pto, to2, chx, tosam);
-				return nsamples;
-			}
-#endif
 			to[chx*channel_sam + tosam] = buf.ch[chx];
 		}	
 		++tosam;		
@@ -576,29 +560,14 @@ int acq132_transform_row_es1pQ(
 		 */
 		if (buf == ES_MAGIC_LONG){
 			TBG(1, "ES_MAGIC_LONG %08lx %08lx %08lx %08lx",
-			    buf, full[1], full[3], full[5]);
-		}
-		if (buf == ES_MAGIC_LONG     && full[1] == ES_MAGIC_LONG &&
-		    remove_es(nsamples-sam, (unsigned short*)before, before)){
+					buf, full[1], full[3], full[5]);
+
+			if (full[1] == ES_MAGIC_LONG &&
+			    remove_es(nsamples-sam,
+					    (unsigned short*)before, before)){
 			full += 7;
 			dbg(1, "remove_es() said YES");
 			continue;
-		}
-#if 0
-#ifdef DEBUGGING
-		if ((short*)full < from1 || (short*)full > from2){
-			err("from outrun at  %p %p %p sam:%d",
-			    from1, full, from2, sam);
-			return nsamples;
-		}
-#endif
-#endif
-
-		if (tosam < 20){
-		/* ROW_CHAN == 2 */
-			TBG(4, "to[0*%d + %d] = [%04lx, %04lx] %p", 
-			    channel_sam, tosam, 
-				buf & 0x0000ffff, buf>>16, full-1);
 		}
 
 		to[0*channel_sam + tosam] = buf & 0x0000ffff;
