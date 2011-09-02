@@ -599,7 +599,7 @@ int acq132_transform_row_es2pQ(
 		return nsamples;
 
 	}
-	for (sam = nsamples; sam != 0; --sam){
+	for (sam = nsamples/2; sam != 0; --sam, tosam += 2){
 		void *before = full;
 		unsigned long buf = *full++;
 
@@ -621,14 +621,21 @@ int acq132_transform_row_es2pQ(
 			}
 		}
 
+		/* sequence found empirically pgm 20110902 */
+		to[2*channel_sam + tosam] = buf & 0x0000ffff;
+		to[3*channel_sam + tosam] = buf >> 16;
+
+		buf = *full++;
+		to[2*channel_sam + tosam+1] = buf & 0x0000ffff;
+		to[3*channel_sam + tosam+1] = buf >> 16;
+
+		buf = *full++;
 		to[0*channel_sam + tosam] = buf & 0x0000ffff;
 		to[1*channel_sam + tosam] = buf >> 16;
 
 		buf = *full++;
-		to[2*channel_sam + tosam] = buf & 0x0000ffff;
-		to[3*channel_sam + tosam] = buf >> 16;
-
-		++tosam;
+		to[0*channel_sam + tosam+1] = buf & 0x0000ffff;
+		to[1*channel_sam + tosam+1] = buf >> 16;
 	}
 	TBG(3, "99 returns %d", tosam);
 	return tosam;
