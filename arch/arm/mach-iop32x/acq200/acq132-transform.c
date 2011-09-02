@@ -477,6 +477,7 @@ static void timebase_debug(void)
 	}
 }
 
+#define DQ_ROW_OFF(blk, rows) ((blk*TBLOCK_LEN(DG)/rows)/sizeof(short))
 
 
 int acq132_transform_row_es(
@@ -531,9 +532,9 @@ int acq132_transform_row_es(
 }
 
 int acq132_transform_row_es1pQ(
-	short *to, 
-/*      short *to[ROW_CHAN], */
-	short *from, int nsamples, int channel_sam)
+		short *to,
+		/*      short *to[ROW_CHAN], */
+		short *from, int nsamples, int channel_sam)
 /* read a1 block of data from to and farm 2 channels to from */
 {
 	unsigned long *full = (unsigned long *)from;
@@ -541,7 +542,7 @@ int acq132_transform_row_es1pQ(
 	int tosam = 0;
 
 	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
-	    to, from, nsamples, channel_sam);
+			to, from, nsamples, channel_sam);
 
 	if (stub_transform){
 		TBG(3, "stub");
@@ -562,25 +563,79 @@ int acq132_transform_row_es1pQ(
 					buf, full[1], full[3], full[5]);
 
 			if (full[1] == ES_MAGIC_LONG &&
-			    remove_es(nsamples-sam,
-					    (unsigned short*)before, before)){
-			full += 7;
-			dbg(1, "remove_es() said YES");
-			continue;
+					remove_es(nsamples-sam,
+							(unsigned short*)before, before)){
+				full += 7;
+				dbg(1, "remove_es() said YES");
+				continue;
+			}
 		}
 
 		to[0*channel_sam + tosam] = buf & 0x0000ffff;
 		to[1*channel_sam + tosam] = buf >> 16;
 
-		++tosam;		
+		++tosam;
 	}
 
-	TBG(3, "99 returns %d", tosam);	
+	TBG(3, "99 returns %d", tosam);
+	return tosam;
+}
+
+int acq132_transform_row_es2pQ(
+		short *to,
+		/*      short *to[ROW_CHAN], */
+		short *from, int nsamples, int channel_sam)
+/* read a1 block of data from to and farm 2 channels to from */
+{
+	unsigned long *full = (unsigned long *)from;
+	int sam;
+	int tosam = 0;
+
+	TBG(3, "to:%p from:%p nsamples:%d channel_sam:%d",
+			to, from, nsamples, channel_sam);
+
+	if (stub_transform){
+		TBG(3, "stub");
+		return nsamples;
+
+	}
+	for (sam = nsamples; sam != 0; --sam){
+		void *before = full;
+		unsigned long buf = *full++;
+
+		/* rapid fail ES_MAGIC test
+		 aa55 aa55 0000 0000 aa55 aa55 0000 0000
+		0493000 aa55 aa55 0355 0355 aa55 aa55 0355 0355
+		0493800 aa55 aa55 0355 0355 aa55 aa55 0355 0355
+		 */
+		if (buf == ES_MAGIC_LONG){
+			TBG(1, "ES_MAGIC_LONG %08lx %08lx %08lx %08lx",
+					buf, full[1], full[3], full[5]);
+
+			if (full[1] == ES_MAGIC_LONG &&
+					remove_es(nsamples-sam,
+							(unsigned short*)before, before)){
+				full += 7;
+				dbg(1, "remove_es() said YES");
+				continue;
+			}
+		}
+
+		to[0*channel_sam + tosam] = buf & 0x0000ffff;
+		to[1*channel_sam + tosam] = buf >> 16;
+
+		buf = *full++;
+		to[2*channel_sam + tosam] = buf & 0x0000ffff;
+		to[3*channel_sam + tosam] = buf >> 16;
+
+		++tosam;
+	}
+	TBG(3, "99 returns %d", tosam);
 	return tosam;
 }
 
 
-#define DQ_ROW_OFF(blk, rows) ((blk*TBLOCK_LEN(DG)/rows)/sizeof(short))
+
 
 static void acq132_transform_unblocked(
 	short *to, short *from, int nsamples, int ROWS)
@@ -670,6 +725,49 @@ static void acq132_transform_unblocked1pQ(
 	TBG(1, "99");
 }
 
+
+
+
+static void acq132_transform_unblocked2pQ(
+	short *to, short *from, int nsamples, int ROWS)
+{
+/* keep a stash of NSCAN to vectors */
+#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples)
+	int row_off[MAX_ROWS];
+	int row;
+
+	if (ROWS > MAX_ROWS){
+		err("rows %d > MAX_ROWS", ROWS);
+		return;
+	}
+
+	G_rows = ROWS;
+
+	TBG(1, "to:%p [%03d] from: %p [%03d] nsamples:%d ROWS:%d",
+	    to, TBLOCK_INDEX((void*)to - va_buf(DG)),
+	    from, TBLOCK_INDEX((void*)from - va_buf(DG)),
+	    nsamples, ROWS);
+
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] = DQ_ROW_OFF(row, ROWS);
+		TBG(2, "row_off[%d] = %d", row, row_off[row]);
+	}
+
+	for (row = 0; row < ROWS; ++row){
+		TBG(2, "to:%p + row_off[%d] %p, from %p",
+		    to, row, to + row_off[row], from);
+
+		acq132_transform_row_es2pQ(
+			to + row_off[row],
+			from + row_off[row],
+			nsamples,
+			nsamples
+			);
+	}
+
+	TBG(1, "99");
+}
+
 static void* acq132_deblock(const short * from, int nwords, int ROWS)
 {
 	short* const to = (short*)BB_PTR(g_esm.es_deblock->tblock->offset);
@@ -744,6 +842,22 @@ static void acq132_transform_es1pQ(
 		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
 }
 
+static void acq132_transform_es2pQ(
+		short *to, short *from, int nwords, int stride)
+{
+	int ROWS = stride/ROW_CHAN2;
+
+	dbg(1, "to:tblock:%d from:tblock:%d nwords:%d stride:%d",
+	    TBLOCK_INDEX((void*)to - va_buf(DG)),
+	    TBLOCK_INDEX((void*)from - va_buf(DG)),
+	    nwords,
+	    stride);
+
+	G_current_transform_tbxo = va2tbxo(from);
+
+	acq132_transform_unblocked2pQ(
+		to, acq132_deblock(from, nwords, ROWS), nwords/stride, ROWS);
+}
 
 
 static struct Transformer transformer_es = {
@@ -753,6 +867,10 @@ static struct Transformer transformer_es = {
 static struct Transformer transformer_es1pQ = {
 	.name = "acq132es1pQ",
 	.transform = acq132_transform_es1pQ
+};
+static struct Transformer transformer_es2pQ = {
+	.name = "acq132es2pQ",
+	.transform = acq132_transform_es2pQ
 };
 
 static int transformSelected(void *fun, const char* name)
@@ -778,8 +896,9 @@ static TBLE *reserveFreeTblock(const char *id){
 static void transformer_es_onStart(void *unused)
 /* @TODO wants to be onPreArm (but not implemented) */
 {
-	if (TRANSFORM_SELECTED(acq132_transform_es) ||
-	    TRANSFORM_SELECTED(acq132_transform_es1pQ) ){
+	if (TRANSFORM_SELECTED(acq132_transform_es) 	||
+	    TRANSFORM_SELECTED(acq132_transform_es1pQ) 	||
+	    TRANSFORM_SELECTED(acq132_transform_es2pQ)		){
 		if (g_esm.es_tble == 0 &&
 			(g_esm.es_tble = reserveFreeTblock("ES")) == 0){
 			return;
@@ -817,6 +936,7 @@ void acq132_register_transformers(void)
 	it = acq200_registerTransformer(&transformer_es);       
 	acq200_setTransformer(it);
 	acq200_registerTransformer(&transformer_es1pQ);
+	acq200_registerTransformer(&transformer_es2pQ);
 }
 
 
