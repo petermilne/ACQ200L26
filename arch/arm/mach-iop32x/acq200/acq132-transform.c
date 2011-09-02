@@ -536,7 +536,6 @@ int acq132_transform_row_es1pQ(
 	short *from, int nsamples, int channel_sam)
 /* read a1 block of data from to and farm 2 channels to from */
 {
-	unsigned long buf;
 	unsigned long *full = (unsigned long *)from;
 	int sam;
 	int tosam = 0;
@@ -551,7 +550,7 @@ int acq132_transform_row_es1pQ(
 	}
 	for (sam = nsamples; sam != 0; --sam){
 		void *before = full;
-		buf = *full++;
+		unsigned long buf = *full++;
 
 		/* rapid fail ES_MAGIC test 
 		 aa55 aa55 0000 0000 aa55 aa55 0000 0000
@@ -630,11 +629,7 @@ static void acq132_transform_unblocked(
 	TBG(1, "99");
 }
 
-static void ident_memset(void* buf, int value, int len)
-{
-	dbg(1, "buf:%p %02d : %d", buf, value, len);
-	memset(buf, value, len);
-}
+
 static void acq132_transform_unblocked1pQ(
 	short *to, short *from, int nsamples, int ROWS)
 {
@@ -654,11 +649,6 @@ static void acq132_transform_unblocked1pQ(
 	    to, TBLOCK_INDEX((void*)to - va_buf(DG)),
 	    from, TBLOCK_INDEX((void*)from - va_buf(DG)),
 	    nsamples, ROWS);
-
-	if (acq132_transform_debug){
-		TBG(1, "nulling to:%p len:%d", to, TBLOCK_LEN(DG));
-		memset(to, 0, TBLOCK_LEN(DG));
-	}
 
 	for (row = 0; row < ROWS; ++row){
 		row_off[row] = DQ_ROW_OFF(row, ROWS);
