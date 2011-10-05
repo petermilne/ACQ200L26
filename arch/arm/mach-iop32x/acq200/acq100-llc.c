@@ -144,6 +144,7 @@ module_param(disable_acq_debug, int, 0664);
 
 /** set to non-zero for 2V mode */
 int acq100_llc_sync2V = 0;
+module_param(acq100_llc_sync2V, int, 0664);
 
 #define ACQ100_LLC_SYNC2V         1
 #define ACQ100_LLC_SYNC2V_DI      2
@@ -154,6 +155,13 @@ int acq100_llc_sync2V = 0;
 int sync2v_samples_per_cycle = 1;
 module_param(sync2v_samples_per_cycle, int, 0644);
 
+/** recommend: set to 1<<5 = 0x20 to toggle DO5
+ * use RTM-CLK
+ * set.sys /dev/rtmclk/LEMO_OUT_4 DO5
+ * this wd is controlled by HOST action and is different to wdt_action
+ */
+int host_wd_mask = 0;
+module_param(host_wd_mask, int, 0644);
 /* SYNC2V SCRATCHPAD */
 
 #define I_SCRATCH_TLAT32	ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLAT32]
@@ -172,7 +180,7 @@ module_param(sync2v_samples_per_cycle, int, 0644);
 #define PA_SCRATCH(off_words) \
 	(DG->fpga.regs.pa + ACQ196_LL_AI_SCRATCH_OFF + off_words*sizeof(u32))
 
-module_param(acq100_llc_sync2V, int, 0664);
+
 
 
 int acq100_llc_sync2V_AO_len = 0;
@@ -191,10 +199,8 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1078
-#define _VERID(build) "Build " #build
-
-#define VERID _VERID(BUILD)
+#define BUILD 1079
+#define VERID "BUILD 1080"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -1593,6 +1599,27 @@ onFifoNotEmpty: {
  *
  **********************************************************************************************/
 
+static void host_wd_action(void)
+{
+	u32 *aox = (u32*)dg.settings.ao32.tmp;
+	u32 host_wd;
+
+	dma_sync_single_for_cpu(
+			0, dg.settings.ao32.tmp_pa+LLC_SYNC2V_WD*sizeof(u32),
+			sizeof(u32), DMA_FROM_DEVICE);
+
+	host_wd = aox[LLC_SYNC2V_WD];
+
+	dbg(1, "src:%p host_wd:%d mask:%02x DIOCON:=%02x",
+			&aox[LLC_SYNC2V_WD], host_wd, host_wd_mask,
+			(host_wd&LLC_SYNC2V_WD_BIT) != 0? host_wd_mask: 0);
+
+	if ((host_wd&LLC_SYNC2V_WD_BIT) != 0){
+		*ACQ200_DIOCON |= host_wd_mask << ACQ200_DIOCON_OUTDAT_SHL;
+	}else{
+		*ACQ200_DIOCON &= ~(host_wd_mask << ACQ200_DIOCON_OUTDAT_SHL);
+	}
+}
 
 
 static void llc_loop_sync2V(int entry_code)
@@ -1688,6 +1715,10 @@ static void llc_loop_sync2V(int entry_code)
 
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
 				setDO32(O_SCRATCH_DO32);
+
+				if (host_wd_mask){
+					host_wd_action();
+				}
 			}
 			if (dg.settings.do64_readback == 2){
 				u32* va = (u32*)((void*)dg.settings.ao32.tmp+AO32_VECLEN);
