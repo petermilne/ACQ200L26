@@ -68,12 +68,12 @@ ssize_t acq200_store_signal(
 {
 	char buf[80];
 	char name[64];
-	char io;
+	char edge[64];
+	char *src = edge;
 	int xx;
-	char edge[32];
-	char src[32];
 	int ok = __LINE__;
 	int nc;
+	char io;
 /**
  * debug parsing - sets ok to line# on fail, second cond ALWAYS fails
  * resulting in drop out.
