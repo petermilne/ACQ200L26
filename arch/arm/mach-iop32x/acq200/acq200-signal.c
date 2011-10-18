@@ -70,7 +70,8 @@ ssize_t acq200_store_signal(
 	char name[64];
 	char io;
 	int xx;
-	char edge[64];
+	char edge[32];
+	char src[32];
 	int ok = __LINE__;
 	int nc;
 /**
@@ -92,16 +93,18 @@ ssize_t acq200_store_signal(
 		*strchr(buf, '\n') = '\0';
 	}
 
-	if (signal->has_internal_option &&
+	nc = sscanf(buf, "%s %s", name, src);
+
+	if (signal->has_internal_option && OKL(nc == 2) &&
 	    OKL(strcmp(name, signal->name) == 0) && 
-	    OKL(strcmp(edge, "internal") == 0)){
+	    OKL(strcmp(src, "internal") == 0)){
 		if (OKL(setSignal(signal, DIX_INTERNAL, 1) == 1)){
 		    activateSignal(signal);
 		    OKOK;
 		}
-	}else if (OKL(sscanf(buf, "%s %s", name, edge) == 2) && 
+	}else if (OKL(nc == 2) &&
 	    OKL(strcmp(name, signal->name) == 0) && 
-	    OKL(strcmp(edge, "none") == 0)){
+	    OKL(strcmp(src, "none") == 0)){
 		deactivateSignal(signal);
 		setSignal(signal, DIX_NONE, 0);
 		OKOK;
