@@ -98,10 +98,9 @@ ssize_t acq200_store_signal(
 	if (signal->has_internal_option && OKL(nc == 2) &&
 	    OKL(strcmp(name, signal->name) == 0) && 
 	    OKL(strcmp(src, "internal") == 0)){
-		if (OKL(setSignal(signal, DIX_INTERNAL, 1) == 1)){
-		    activateSignal(signal);
-		    OKOK;
-		}
+		signal->DIx = DIX_INTERNAL;
+		activateSignal(signal);
+		OKOK;
 	}else if (OKL(nc == 2) &&
 	    OKL(strcmp(name, signal->name) == 0) && 
 	    OKL(strcmp(src, "none") == 0)){
