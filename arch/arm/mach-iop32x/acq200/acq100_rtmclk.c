@@ -243,8 +243,7 @@ static int rtmclk_probe(struct device *dev)
 
 	if (rev >= 8){
 		info("RTM_CLK located, setting up");
-		SET_REG(RTM_DIO_CONTROL, =, 
-					RTM_REGCLR|RTMCLK_CONTROL_OPTOS_OFF);
+		SET_REG(RTM_DIO_CONTROL, |=, RTMCLK_CONTROL_OPTOS_OFF);
 		SET_REG(RTMCLK_LICR, =, licr = RTMCLK_LICR_NC);
 		SET_REG(RTMCLK_LOCR, =, locr = LOCR_ALL(LOCR_DO1));
 
