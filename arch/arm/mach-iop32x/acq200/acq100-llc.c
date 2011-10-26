@@ -31,7 +31,7 @@
 #define SYNC2V               1
 #define DMA_POLL_HOLDOFF     1
 #define FIFO_ONESAM          1
-#define DI_IN_1              1
+#define DI_IN_1              0
 #define CYCLE_STEAL	     1
 #define AO32CPCI	     1
 #define WDT		     1
@@ -162,17 +162,23 @@ module_param(sync2v_samples_per_cycle, int, 0644);
  */
 int host_wd_mask = 0;
 module_param(host_wd_mask, int, 0644);
+
+int DI_offset =
+#if DI_IN_1
+		1;			/** workaround for old FPGA bug */
+#else
+		LLC_SYNC2V_IN_DI32;
+#endif
+module_param(DI_offset, int, 0644);
+
 /* SYNC2V SCRATCHPAD */
 
 #define I_SCRATCH_TLAT32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLAT32]
+#define I_SCRATCH_TINST	 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLAT32]
 #define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
 #define I_SCRATCH_SC   ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_SCOUNT]
 #define I_SCRATCH_FSTA ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_FIFSTA]
-#if DI_IN_1
-#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[1]
-#else
-#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DI32]
-#endif
+#define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[DI_offset]
 #define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
 #define I_SCRATCH_DORB  ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DO64]
 #define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
@@ -199,8 +205,8 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1079
-#define VERID "BUILD 1080"
+#define BUILD 1081
+#define VERID "BUILD 1081 TEST"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -257,7 +263,7 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #define DBG dbg
 
 
-char acq100_llc_copyright[] = "Copyright (c) 2004-2009 D-TACQ Solutions Ltd";
+char acq100_llc_copyright[] = "Copyright (c) 2004-2011 D-TACQ Solutions Ltd";
 
 
 /** size of fifo extension for sync2v */
@@ -1622,8 +1628,8 @@ static void host_wd_action(void)
 }
 
 
-static void llc_loop_sync2V(int entry_code)
-/**< llc_loop_sync2V 2Vectors syncronised loop, optimized for max reprate. 
+void llc_loop_sync2V(int entry_code)
+/**< llc_loop_sync2V 2Vectors synchronized loop, optimized for max reprate.
  *
  * Sequence: 
  * - Detect incoming AI Clock
@@ -1671,7 +1677,14 @@ static void llc_loop_sync2V(int entry_code)
 
 		if (AISAMPLE_CLOCKED(fifstat) != 0){
 			/* @todo HOUSKEEPING - were we fast enough? */
-			
+
+			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
+				I_SCRATCH_DI32 = getDI32();
+				if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
+					SERVICE_TLATCH(tlat32);
+					I_SCRATCH_TLAT32 = tlat32;
+				}
+			}
 /* we assume it doesn't matter if this stuff makes this transfer or not.. 
  * We set CLKDLY short to give time for something useful ..
  */
@@ -1680,15 +1693,12 @@ static void llc_loop_sync2V(int entry_code)
 			/* @critical ENDS */
 
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
-				I_SCRATCH_DI32 = getDI32();
-
 				if (acq100_llc_sync2V >=
 				    ACQ100_LLC_SYNC2V_DIDOSTA ){
-					SERVICE_TLATCH(tlat32);
 					I_SCRATCH_ITER = dg.status.iter;
+					I_SCRATCH_TINST = *IOP321_GTSR;
 					I_SCRATCH_SC = dg.status.sample_count;
 	    				I_SCRATCH_FSTA = fifstat;
-					I_SCRATCH_TLAT32 = tlat32;
 				}
 			}
 			
