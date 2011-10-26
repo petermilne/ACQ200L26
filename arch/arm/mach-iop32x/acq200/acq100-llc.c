@@ -199,14 +199,18 @@ module_param(acq100_mem2mem, int, 0664);
 int acq100_dropACQEN_on_exit;
 module_param(acq100_dropACQEN_on_exit, int, 0664);
 
+/* writes initial values to AO, DO on LLC entry (Sync2V only) */
+int init_Xo_on_entry = 0;
+module_param(init_Xo_on_entry, int, 0664);
+
 #if CYCLE_STEAL
 int pbi_cycle_steal = 0;
 module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1081
-#define VERID "BUILD 1081 TEST"
+#define BUILD 1082
+#define VERID "BUILD 1082"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -1080,14 +1084,27 @@ static void llPreamble2V(void)
 		gap_dmad->LAD = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[6]);
 		gap_dmad->BC = dg.settings.io_gap;
 		gap_dmad->DC = DMA_DCR_MEM2MEM;
-		dma_append_chain(&ai_dma, gap_dmad, "AI");
+		dma_append_chain(&ai_dma, gap_dmad, "gap");
 	}
 
 	if (dg.settings.AO_src){
+		int ao_head = ai_dma.nchain;
+
 		if (dg.settings.ao32.count){
 			initAIdma_AO32();	/* does AO16 also */
 		}else{
 			initAIdma_AO16();
+		}
+
+		if (init_Xo_on_entry){
+			unsigned status;
+
+			DMA_ARM_DIRECT(ai_dma, ai_dma.dmad[ao_head]);
+			DMA_FIRE(ai_dma);
+			while(!DMA_DONE(ai_dma, status)){
+				yield();
+			}
+			DMA_DISABLE(ai_dma);
 		}
 	}
 
