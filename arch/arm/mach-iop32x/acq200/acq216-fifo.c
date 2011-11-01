@@ -638,7 +638,7 @@ static void acq216_event_adjust(
 
 static int _acq200_lookup_pchan(int lchannel)
 {
-#define RET_DEMANGLE(pcbase) return pcbase + (lchannel-1)%4
+#define RET_DEMANGLE(pcbase) return (pcbase + ((lchannel-1)&3))
 #define BRK_ERROR            break
 	switch(NCHAN){
 	case 16:

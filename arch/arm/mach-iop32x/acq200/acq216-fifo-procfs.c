@@ -475,12 +475,15 @@ void acq200_setChannelMask(unsigned mask)
 		}
 	}
 
-	for (lchan = mm = 1; mm; mm<<=1, lchan++){
+
+	for (pchan = 1; pchan <= 16; ++pchan){
+		acq200_setChannelEnabled(pchan, 0);
+	}
+	CAPDEF_set_nchan(nchan);
+	for (lchan = mm = 1; mm && lchan <= 16; mm<<=1, lchan++){
 		acq200_setChannelEnabled(
 			acq200_lookup_pchan(lchan), (mm&mask) != 0);
 	}
-
-	CAPDEF_set_nchan(nchan);
 	CAPDEF->channel_mask = mask;
 
 	*ACQ200_SYSCON &= ~(ACQ200_SYSCON_CH_CONFIG|ACQ200_SYSCON_DAQEN);
