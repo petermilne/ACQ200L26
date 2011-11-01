@@ -426,7 +426,7 @@ void acq200_setChannelMask(unsigned mask)
 	unsigned daqen = syscon&ACQ200_SYSCON_DAQEN;
 	unsigned ap = syscon&ACQ200_SYSCON_ANTIPHASE;
 	unsigned fifen = *ACQ200_FIFCON&ACQ200_FIFCON_HC_ENABLE;
-	unsigned lchan, mm;
+	unsigned lchan, mm, pchan;
 
 	if (fifen){
 		info("refusing to change CMASK with FIFO ENABLED");
