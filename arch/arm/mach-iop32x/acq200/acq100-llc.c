@@ -209,8 +209,8 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1082
-#define VERID "BUILD 1082"
+#define BUILD 1083
+#define VERID "BUILD 1083"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -1099,12 +1099,12 @@ static void llPreamble2V(void)
 		if (init_Xo_on_entry){
 			unsigned status;
 
-			DMA_ARM_DIRECT(ai_dma, ai_dma.dmad[ao_head]);
-			DMA_FIRE(ai_dma);
-			while(!DMA_DONE(ai_dma, status)){
+			dma_copy_chain(&ao_dma, &ai_dma, ao_head);
+			DMA_ARM(ao_dma);
+			DMA_FIRE(ao_dma);
+			while(!DMA_DONE(ao_dma, status)){
 				yield();
 			}
-			DMA_DISABLE(ai_dma);
 		}
 	}
 
