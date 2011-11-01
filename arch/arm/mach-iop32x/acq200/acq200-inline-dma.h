@@ -56,6 +56,17 @@ struct DmaChannel {
 
 #define EOX (IOP321_CSR_EOCIF|IOP321_CSR_EOTIF)
 
+static inline void dma_copy_chain(
+		struct DmaChannel *to, struct DmaChannel *from, int ii)
+{
+	int ito = 0;
+	for (; ii < from->nchain; ++ii, ++ito){
+		to->description[ito] = from->description[ii];
+		to->dmad[ito] = from->dmad[ii];
+	}
+	to->nchain = ito;
+}
+
 static inline int dma_eox(struct DmaChannel *dmac, u32 status)
 {
 	status = DMA_STA(*dmac) & EOX;
