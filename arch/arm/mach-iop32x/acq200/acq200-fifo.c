@@ -189,6 +189,9 @@ int acq200_maxchan = MAXCHAN;
 module_param(acq200_maxchan, int, 0444);
 MODULE_PARM_DESC(acq200_maxchan, "maximum possible channels this arch");
 
+int ok_to_set_final_tblock_length = 1;
+module_param(ok_to_set_final_tblock_length, int, 0644);
+
 static char errbuf[128];
 
 static void preEnable(void);   /* call immediately BEFORE trigger en */
@@ -247,6 +250,7 @@ static void wake_dmc0(void)
 #include "acq200-pulse.c"
 
 static void onTrigger(void);
+void acq200_setTblockLength(struct TBLOCK *tblock, int len);
 
 static struct pci_mapping int_enable;
 
@@ -726,9 +730,13 @@ static struct TblockListElement* dmc_phase_add_tblock(
 
 		atomic_inc(&tle->tblock->in_phase);
 		if (!list_empty(&phase->tblocks)){
+			struct TBLOCK *old_tb =
+				TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock;
+			acq200_setTblockLength(
+					old_tb, DG->bigbuf.tblocks.blocklen);
+
 			/* pass old [full] tblock to clients */
-			_dmc_handle_tb_clients(
-				TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
+			_dmc_handle_tb_clients(old_tb);
 		}
 		spin_lock_irqsave(&bb->tb_list_lock, flags);
 		list_move_tail(empty_tblocks->next, &phase->tblocks);
@@ -964,21 +972,43 @@ no_clidat:
 	return pbuf;
 }
 
+void acq200_setTblockLength(struct TBLOCK *tblock, int len)
+{
+	tblock->tb_length = len;
+	if (tblock->inode) tblock->inode->i_size = len;
+}
+
+void setFinalTblockLength(u32 offset)
+{
+	struct BIGBUF *bb = &DG->bigbuf;
+	unsigned tbix = TBLOCK_INDEX(offset);
+	unsigned tboff = TBLOCK_OFFSET(offset);
+	struct TBLOCK *tblock = &bb->tblocks.the_tblocks[tbix];
+
+	acq200_setTblockLength(tblock, tboff);
+}
+
+
 int _dmc_handle_refills_end_of_phase(
 	struct DMC_WORK_ORDER *wo,
 	struct Phase* phase,
-	int bda_fin)
+	int bda_fin,
+	u32 offset)
 {
 	dbg(1, "phase_end d:%d l:%d", 
 	    phase->demand_len, phase_len(phase));
 
-	if (!bda_fin && wo->now != 0 && !phase_end(wo->now)){
+	if (wo->finished_code){
+		info("double finish, discard");
+		return 1;
+	}else if (!bda_fin && wo->now != 0 && !phase_end(wo->now)){
 		share_last_tblock(wo->now, phase);
 		return 0;
 	}else{
-		/* clients want to know about LAST tblock,
-		 * full or not.. */
-#ifndef WAV232	
+#ifndef WAV232
+		if (ok_to_set_final_tblock_length){
+			setFinalTblockLength(offset);
+		}
 		_dmc_handle_tb_clients(
 			TBLE_LIST_ENTRY(phase->tblocks.prev)->tblock);
 #endif
@@ -1011,6 +1041,8 @@ void _dmc_handle_refills_refill_client(
 		wo->dmc_dma_buf_modulus = 0;
 	}
 }
+
+
 /* static */
 void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 {
@@ -1078,9 +1110,11 @@ void _dmc_handle_refills(struct DMC_WORK_ORDER *wo)
 
 		acq200_dmad_free(pbuf);
 
-		if (end_of_phase && 
-			_dmc_handle_refills_end_of_phase(wo, phase, bda_fin)){
-			break;
+		if (end_of_phase){
+			if (_dmc_handle_refills_end_of_phase(
+					wo, phase, bda_fin, offset)){
+				break;
+			}
 		}else if (nrefills >= GET_MAX_ACTIVE){
 			break;
 		}

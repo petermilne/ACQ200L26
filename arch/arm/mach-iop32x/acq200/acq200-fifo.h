@@ -391,6 +391,8 @@ typedef int (*DataMover)(
 	int stride);
 
 typedef void* (*Memcpy)(void* to, const void* from, __kernel_size_t len);
+
+struct inode;		/* opaque */
 /*
  * class TBLOCK - a block of data in bb
  */
@@ -404,6 +406,7 @@ struct TBLOCK {
 	DataMover extract;
 	DataMover fill;
 	Memcpy memcpy;
+	struct inode *inode;
 };
 
 typedef int (*GetChannelData)(
@@ -1266,4 +1269,6 @@ static inline unsigned tbinfo_get_tbcount(unsigned eventn)
 	return eventn >> 16;
 }
 #define TBLOCK_EVENT_SZ		(sizeof(struct TBLOCK_EVENT_INFO)*MAX_TBLOCK)
+
+extern int acq200_calc_max_tblocks(void);
 #endif /* ACQ200_FIFO_H__ */

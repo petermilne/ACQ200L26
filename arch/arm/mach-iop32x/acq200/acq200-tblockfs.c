@@ -147,7 +147,8 @@ static ssize_t tblock_data_mapping_read (
  */
 {
 	struct TBLOCK* tb = (struct TBLOCK*)file->private_data;
-	int maxbytes = min(TBLOCK_LEN(DG), (int)desc->count);
+	size_t tblen = (size_t)tb->tb_length;
+	int maxbytes = min(tblen, desc->count);
 
 	int rc = tblock_data_extractPages(
 		tb, 
@@ -468,8 +469,16 @@ static int acq200_tblockfs_fill_super (
 		struct inode *inode;
 
 		list_for_each_entry(inode, &sb->s_inodes, i_sb_list){
-			if (IN_RANGE(INO2TBLOCK(inode->i_ino), 0, MAX_TBLOCK)){
-				inode->i_size = TBLOCK_LEN(DG);
+			int tbix = INO2TBLOCK(inode->i_ino);
+			if (IN_RANGE(tbix, 0, MAX_TBLOCK-1)){
+				struct TBLOCK *tblock =
+					&DG->bigbuf.tblocks.the_tblocks[tbix];
+				/** @@todo debug: remove me */
+				if (tbix == 0){
+					info("tblock:%p setting inode %p", tblock, inode);
+				}
+				tblock->inode = inode;
+				inode->i_size = tblock->tb_length;
 			}
 		}		
 	}

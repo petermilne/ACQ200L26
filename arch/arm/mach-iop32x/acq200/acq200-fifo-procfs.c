@@ -2699,6 +2699,29 @@ static ssize_t show_DMA_BLOCK_LEN(
 
 static DRIVER_ATTR(DMA_BLOCK_LEN_bytes, S_IRUSR, show_DMA_BLOCK_LEN, 0);
 
+#ifdef PGMCOMOUT
+static ssize_t show_tblocks_in_use(
+	struct device_driver * driver, char * buf)
+{
+        return sprintf(buf, "%d\n", MAX_TBLOCK);
+}
+
+static ssize_t store_tblocks_in_use(
+	struct device_driver * driver, const char * buf, size_t count)
+{
+	int max_tblock;
+	if (sscanf( buf, "%d", &max_tblock) == 1){
+		if (IN_RANGE(max_tblock, 0, acq200_calc_max_tblocks())){
+			MAX_TBLOCK = max_tblock;
+			return strlen(buf);
+		}
+	}
+	return -1;
+}
+static DRIVER_ATTR(tblocks_in_use, S_IRUSR|S_IWUSR,
+		   show_tblocks_in_use, store_tblocks_in_use);
+#endif
+
 
 static DRIVER_ATTR(daq_enable,S_IRUGO|S_IWUGO,show_daq_enable,set_daq_enable);
 static DRIVER_ATTR(debug, S_IRUGO|S_IWUGO, show_debug, store_debug);
@@ -2775,6 +2798,9 @@ int mk_sysfs(struct device_driver *driver)
 	DRIVER_CREATE_FILE(driver, &driver_attr_global_irq_mask);
 	DRIVER_CREATE_FILE(driver, &driver_attr_FIFERR);
 	DRIVER_CREATE_FILE(driver, &driver_attr_cdog_max_jiffies);
+#ifdef PGMCOMOUT
+	DRIVER_CREATE_FILE(driver, &driver_attr_tblocks_in_use);
+#endif
 	DRIVER_CREATE_FILE(driver, &driver_attr_jiffies);
 	DRIVER_CREATE_FILE(driver, &driver_attr_pulse_number);
 

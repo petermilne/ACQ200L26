@@ -234,7 +234,7 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	short *tb_tmp = va_tblock_tmp(DG);
 	
 	
-	unsigned nwords = DG->bigbuf.tblocks.blocklen/sizeof(short);
+	unsigned nwords = tblock->tb_length/sizeof(short);
 	unsigned t_flags = DG->bigbuf.tblocks.t_flags;
 
 	XX_valid = false;

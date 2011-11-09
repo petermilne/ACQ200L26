@@ -104,7 +104,9 @@ int tblock_raw_extractor32(
 int getChannelData(struct TBLOCK* tb, void **base, int channel, int offset)
 {
 /* DO NOT use tb_length : channels are spread over the whole block ! */
-	int bblock_samples = TBLOCK_LEN(DG)/NCHAN/sizeof(short);
+	/* @@todo experimenting */
+	//int bblock_samples = TBLOCK_LEN(DG)/NCHAN/sizeof(short);
+	int bblock_samples = tb->tb_length/NCHAN/sizeof(short);
 	short* bblock_base = (short*)(va_buf(DG) + tb->offset + 
 				channel*bblock_samples*sizeof(short));
 
@@ -260,13 +262,23 @@ void acq200_init_tblock_list(void)
 	}
 
 	for (iblock = 0; iblock != tbl->nblocks; ++iblock){
-		memcpy(&tbl->the_tblocks[iblock], &tb_temp, sizeof(tb_temp));
-		tbl->the_tblocks[iblock].iblock = iblock;
-		tbl->the_tblocks[iblock].offset = iblock * tbl->blocklen;
+		struct TBLOCK *tb_cursor = &tbl->the_tblocks[iblock];
+		tb_temp.inode = tb_cursor->inode;
+		tb_temp.iblock = iblock;
+		tb_temp.offset = iblock * tbl->blocklen;
+		memcpy(tb_cursor, &tb_temp, sizeof(tb_temp));
 	}
 }
 
 
+int acq200_calc_max_tblocks(void)
+{
+	int max_tblock = len_buf(DG)/DG->bigbuf.tblocks.blocklen;
+	if (max_tblock > ABS_MAX_TBLOCKS){
+		max_tblock = ABS_MAX_TBLOCKS;
+	}
+	return max_tblock;
+}
 static void build_tblock_list(void)
 {
 	struct TBLOCKLIST *tbl = &DG->bigbuf.tblocks;
@@ -281,10 +293,8 @@ static void build_tblock_list(void)
 	if (DG->bigbuf.tblocks.blocklen == 0){
 		err("BLOCKLEN == 0");
 	}
-	MAX_TBLOCK = len_buf(DG)/DG->bigbuf.tblocks.blocklen;
-	if (MAX_TBLOCK > ABS_MAX_TBLOCKS){
-		MAX_TBLOCK = ABS_MAX_TBLOCKS;	
-	}
+	MAX_TBLOCK = acq200_calc_max_tblocks();
+
 	DG->bigbuf.tblocks.the_tblocks = 
 		kmalloc(sizeof(struct TBLOCK)*MAX_TBLOCK, GFP_KERNEL);
 
