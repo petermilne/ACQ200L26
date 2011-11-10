@@ -436,10 +436,12 @@ typedef int (*GetChannelData)(
 #define TF_RESULT_IS_RAW	0x0001	/* use raw extract even after tform */
 #define TF_INPLACE		0x0002  /* transform is inplace so no BLT   */
 
+typedef void (*Transform_t)(short *to, short *from, int nwords, int stride);
+
 struct Transformer {
 	char name[16];
 	unsigned t_flags;
-	void (*transform)(short *to, short *from, int nwords, int stride);
+	Transform_t transform;
 	/* stride in words */
 };
 
