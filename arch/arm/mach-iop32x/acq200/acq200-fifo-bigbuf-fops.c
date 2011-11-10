@@ -246,6 +246,7 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	DG->bigbuf.tblocks.transform(tb_tmp, tb_va, nwords, NCHAN);
 	tblock_lock(tblock);
 	if ((t_flags&TF_INPLACE) == 0){
+		nwords = tblock->tb_length/sizeof(short);
 		dbg(1, "blt(%p, %p, %d)", tb_va, tb_tmp, nwords);
 		DG->bigbuf.tblocks.blt(tb_va, tb_tmp, nwords);
 	}

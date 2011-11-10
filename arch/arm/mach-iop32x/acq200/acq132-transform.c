@@ -770,9 +770,8 @@ static void* acq132_deblock(const short * from, int nwords, int ROWS)
 
 extern int ok_to_set_final_tblock_length;
 
-#define DODGY_ENDING 128
 
-static void set_row_off(int tbix, int ROWS, int stride)
+static int set_row_off(int tbix, int ROWS, int stride)
 {
 	struct TBLOCK* tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
 
@@ -782,15 +781,13 @@ static void set_row_off(int tbix, int ROWS, int stride)
 	int row;
 
 	if (ok_to_set_final_tblock_length && tblock->tb_length < tblen){
-		int base_size = max(stride, ROW_SIZE);
+		int base_size = ROWS*ROW_SIZE;
 		int trim = tblock->tb_length%base_size;
 		tblen = tblock->tb_length - trim;
-		tblen += 4*ROW_SIZE;			// hack
-		dbg(1, "trim %d tb_length %d, length now: %d",
-				trim,
-				tblock->tb_length, tblen);
-		tblock->tb_length = min(tblen, TBLOCK_LEN(DG));
-		DMC_WO->post->actual_len -= DODGY_ENDING*sample_size();
+		//tblen += 4*ROW_SIZE;			// hack
+		dbg(1, "base_size:%d trim %d tb_length %d, length now: %d",
+				base_size, trim, tblock->tb_length, tblen);
+		tblock->tb_length = tblen;
 	}
 	rows_size = ROWS*sizeof(short);
 	row_offset = tblen/rows_size;
@@ -805,16 +802,19 @@ static void set_row_off(int tbix, int ROWS, int stride)
 		row_off[row] = row*row_offset;
 		dbg(2, "row_off[%d] = %d", row, row_off[row]);
 	}
+	return tblen/sizeof(short);
 }
 
 static void acq132_transform_esXXX(
 	short *to, short *from, int nwords, int stride,
 	int row_chan, Transform_t transform)
 {
-	int nsamples = nwords/stride;
 	int ROWS = stride/row_chan;
+	int tbix = TBLOCK_INDEX((void*)from - va_buf(DG));
+	int nsamples;
 
-	set_row_off(TBLOCK_INDEX((void*)from - va_buf(DG)), ROWS, stride);
+	nwords = set_row_off(tbix, ROWS, stride);
+	nsamples = nwords/stride;
 
 	dbg(1, "to:tblock:%d from:tblock:%d nwords:%d rows:%d",
 		    TBLOCK_INDEX((void*)to - va_buf(DG)),

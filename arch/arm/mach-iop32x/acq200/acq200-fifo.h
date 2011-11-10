@@ -238,6 +238,7 @@ struct Phase {
 	unsigned ref_offset;               /* prep start ref mapping b */
 	struct timeval prep_start_time;    /* wall clock prep start    */
 	unsigned transformer_private;
+	unsigned dma_overrun_request;		/* go past by this amount */
 };
 #define PHASE_SZ sizeof(struct Phase)
 

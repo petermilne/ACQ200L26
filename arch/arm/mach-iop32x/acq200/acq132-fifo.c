@@ -528,6 +528,10 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 			break;
 		}
 	}
+
+	if (DMC_WO->post->demand_len > 0){
+		DMC_WO->post->dma_overrun_request = MAX_ROWS*ROW_SIZE;
+	}
 }
 
 
