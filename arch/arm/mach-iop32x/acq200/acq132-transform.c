@@ -480,7 +480,6 @@ static void timebase_debug(void)
 	}
 }
 
-#define DQ_ROW_OFF(blk, rows) ((blk*TBLOCK_LEN(DG)/rows)/sizeof(short))
 
 
 int acq132_transform_row_es(
@@ -644,27 +643,13 @@ int acq132_transform_row_es2pQ(
 	return tosam;
 }
 
-
+int row_off[MAX_ROWS];
 
 
 static void acq132_transform_unblocked(
 	short *to, short *from, int nsamples, int ROWS)
 {
-/* keep a stash of NSCAN to vectors */
-#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
-	int row_off[MAX_ROWS];
 	int row;
-
-	if (ROWS > MAX_ROWS){
-		err("rows %d > MAX_ROWS", ROWS);
-		return;
-	}
-
-	G_rows = ROWS;
-
-	for (row = 0; row < ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS);
-	}
 
 	TBG(1, "nsamples:%d to:[%03d] %p  from:[%03d] %p", 
 	    nsamples, 
@@ -682,13 +667,9 @@ static void acq132_transform_unblocked(
 
 
 	for (row = 0; row < ROWS; ++row){
-		row_off[row] += acq132_transform_row_es(
-			to + row_off[row], 
-			from, 
-			nsamples,
-			nsamples
-			);
-		from += nsamples*ROW_CHAN;
+		acq132_transform_row_es(
+			to + row_off[row], from + row_off[row],
+			nsamples, nsamples);
 	}
 
 	TBG(1, "99");
@@ -698,17 +679,7 @@ static void acq132_transform_unblocked(
 static void acq132_transform_unblocked1pQ(
 	short *to, short *from, int nsamples, int ROWS)
 {
-/* keep a stash of NSCAN to vectors */
-#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples) 
-	int row_off[MAX_ROWS];
 	int row;
-
-	if (ROWS > MAX_ROWS){
-		err("rows %d > MAX_ROWS", ROWS);
-		return;
-	}
-
-	G_rows = ROWS;
 
 	TBG(1, "to:%p [%03d] from: %p [%03d] nsamples:%d ROWS:%d",
 	    to, TBLOCK_INDEX((void*)to - va_buf(DG)),
@@ -716,20 +687,12 @@ static void acq132_transform_unblocked1pQ(
 	    nsamples, ROWS);
 
 	for (row = 0; row < ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS);
-		TBG(2, "row_off[%d] = %d", row, row_off[row]);
-	}
-
-	for (row = 0; row < ROWS; ++row){
 		TBG(2, "to:%p + row_off[%d] %p, from %p", 
 		    to, row, to + row_off[row], from);
 
 		acq132_transform_row_es1pQ(
-			to + row_off[row], 
-			from + row_off[row],
-			nsamples,
-			nsamples
-			);
+			to + row_off[row], from + row_off[row],
+			nsamples, nsamples);
 	}
 
 	TBG(1, "99");
@@ -742,8 +705,6 @@ static void acq132_transform_unblocked2pQ(
 	short *to, short *from, int nsamples, int ROWS)
 {
 /* keep a stash of NSCAN to vectors */
-#define ROW_OFF(r)	((r)*ROW_CHAN*nsamples)
-	int row_off[MAX_ROWS];
 	int row;
 
 	if (ROWS > MAX_ROWS){
@@ -759,20 +720,12 @@ static void acq132_transform_unblocked2pQ(
 	    nsamples, ROWS);
 
 	for (row = 0; row < ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS);
-		TBG(2, "row_off[%d] = %d", row, row_off[row]);
-	}
-
-	for (row = 0; row < ROWS; ++row){
 		TBG(2, "to:%p + row_off[%d] %p, from %p",
 		    to, row, to + row_off[row], from);
 
 		acq132_transform_row_es2pQ(
-			to + row_off[row],
-			from + row_off[row],
-			nsamples,
-			nsamples
-			);
+			to + row_off[row], from + row_off[row],
+			nsamples, nsamples);
 	}
 
 	TBG(1, "99");
@@ -781,26 +734,23 @@ static void acq132_transform_unblocked2pQ(
 static void* acq132_deblock(const short * from, int nwords, int ROWS)
 {
 	short* const to = (short*)BB_PTR(g_esm.es_deblock->tblock->offset);
-	int row_off[MAX_ROWS];
 	int row;
 	int first_time = 1;
+	int cursors[MAX_ROWS];
 
 	dbg(1, "00 block: %03d ROWS:%d", TBLOCK_INDEX((void*)from-BB_PTR(0)), ROWS);
 	dbg(1, "to block %03d, to:%p", g_esm.es_deblock->tblock->iblock, to);
-
-	for (row = 0; row != ROWS; ++row){
-		row_off[row] = DQ_ROW_OFF(row, ROWS);	
-		dbg(1+row, "01b:row_off[%d] = %d", row, row_off[row]);
-	}
 	
+	memcpy(cursors, row_off, sizeof(cursors));
+
 	while(nwords > 0){
 		for (row = 0; row != ROWS; ++row){
 
 			dbg(first_time==1? 1: 4, "%d memcpy(%p, %p, %d)",
-			    row, to+row_off[row], from, ROW_SIZE);
+			    row, to+cursors[row], from, ROW_SIZE);
 
-			memcpy(to+row_off[row], from, ROW_SIZE);
-			row_off[row] += ROW_WORDS;
+			memcpy(to+cursors[row], from, ROW_SIZE);
+			cursors[row] += ROW_WORDS;
 			from += ROW_WORDS;
 			nwords -= ROW_WORDS;
 		}
@@ -818,12 +768,53 @@ static void* acq132_deblock(const short * from, int nwords, int ROWS)
 
 }
 
+extern int ok_to_set_final_tblock_length;
+
+#define DODGY_ENDING 128
+
+static void set_row_off(int tbix, int ROWS, int stride)
+{
+	struct TBLOCK* tblock = &DG->bigbuf.tblocks.the_tblocks[tbix];
+
+	int tblen = TBLOCK_LEN(DG);
+	int rows_size;
+	int row_offset;
+	int row;
+
+	if (ok_to_set_final_tblock_length && tblock->tb_length < tblen){
+		int base_size = max(stride, ROW_SIZE);
+		int trim = tblock->tb_length%base_size;
+		tblen = tblock->tb_length - trim;
+		tblen += 4*ROW_SIZE;			// hack
+		dbg(1, "trim %d tb_length %d, length now: %d",
+				trim,
+				tblock->tb_length, tblen);
+		tblock->tb_length = min(tblen, TBLOCK_LEN(DG));
+		DMC_WO->post->actual_len -= DODGY_ENDING*sample_size();
+	}
+	rows_size = ROWS*sizeof(short);
+	row_offset = tblen/rows_size;
+
+	assert(ROWS <= MAX_ROWS);
+	G_rows = ROWS;
+
+	dbg(1, "tbix:%d ok_to_set:%d tblen:%d rows:%d",
+			tbix, ok_to_set_final_tblock_length, tblen, ROWS);
+
+	for (row = 0; row < ROWS; ++row){
+		row_off[row] = row*row_offset;
+		dbg(2, "row_off[%d] = %d", row, row_off[row]);
+	}
+}
+
 static void acq132_transform_esXXX(
 	short *to, short *from, int nwords, int stride,
 	int row_chan, Transform_t transform)
 {
 	int nsamples = nwords/stride;
 	int ROWS = stride/row_chan;
+
+	set_row_off(TBLOCK_INDEX((void*)from - va_buf(DG)), ROWS, stride);
 
 	dbg(1, "to:tblock:%d from:tblock:%d nwords:%d rows:%d",
 		    TBLOCK_INDEX((void*)to - va_buf(DG)),
@@ -833,14 +824,13 @@ static void acq132_transform_esXXX(
 
 	G_current_transform_tbxo = va2tbxo(from);
 
-	transform(to,
-		acq132_deblock(from, nwords, ROWS),
-		nsamples, ROWS);
+	transform(to, acq132_deblock(from, nwords, ROWS), nsamples, ROWS);
 }
+
 static void acq132_transform_es(short *to, short *from, int nwords, int stride)
 {
 	acq132_transform_esXXX(to, from, nwords, stride,
-			ROW_CHAN,acq132_transform_unblocked);
+			ROW_CHAN, acq132_transform_unblocked);
 }
 
 static void acq132_transform_es1pQ(
