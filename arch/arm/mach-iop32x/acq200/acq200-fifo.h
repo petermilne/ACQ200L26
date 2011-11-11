@@ -1274,4 +1274,5 @@ static inline unsigned tbinfo_get_tbcount(unsigned eventn)
 #define TBLOCK_EVENT_SZ		(sizeof(struct TBLOCK_EVENT_INFO)*MAX_TBLOCK)
 
 extern int acq200_calc_max_tblocks(void);
+extern void build_tblock_list(void);
 #endif /* ACQ200_FIFO_H__ */
