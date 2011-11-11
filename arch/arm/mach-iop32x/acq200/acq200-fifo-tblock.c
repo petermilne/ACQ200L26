@@ -279,7 +279,7 @@ int acq200_calc_max_tblocks(void)
 	}
 	return max_tblock;
 }
-static void build_tblock_list(void)
+void build_tblock_list(void)
 {
 	struct TBLOCKLIST *tbl = &DG->bigbuf.tblocks;
 	int kernel_blocklen;
@@ -460,8 +460,6 @@ void acq200_tblock_init_top(void)
 	struct BIGBUF *bb = &DG->bigbuf;
 
 	int iblock;
-
-	build_tblock_list();
 
 	spin_lock_init(&bb->tb_list_lock);
 	INIT_LIST_HEAD(&bb->free_tblocks);
