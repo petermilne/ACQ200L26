@@ -2700,6 +2700,7 @@ static ssize_t show_DMA_BLOCK_LEN(
 static DRIVER_ATTR(DMA_BLOCK_LEN_bytes, S_IRUSR, show_DMA_BLOCK_LEN, 0);
 
 #ifdef PGMCOMOUT
+// doesn't work .. also, wreaks havoc with memory management ..
 static ssize_t show_tblocks_in_use(
 	struct device_driver * driver, char * buf)
 {
@@ -2710,9 +2711,16 @@ static ssize_t store_tblocks_in_use(
 	struct device_driver * driver, const char * buf, size_t count)
 {
 	int max_tblock;
-	if (sscanf( buf, "%d", &max_tblock) == 1){
-		if (IN_RANGE(max_tblock, 0, acq200_calc_max_tblocks())){
+	if (DMC_WO_getState() != ST_STOP){
+		return -EINVAL;
+	}else if (sscanf( buf, "%d", &max_tblock) == 1){
+		int calc_max = acq200_calc_max_tblocks();
+		if (max_tblock > calc_max){
+			max_tblock = calc_max;
+		}
+		if (IN_RANGE(max_tblock, 0, calc_max)){
 			MAX_TBLOCK = max_tblock;
+			acq200_tblock_init_top();
 			return strlen(buf);
 		}
 	}
@@ -2720,8 +2728,8 @@ static ssize_t store_tblocks_in_use(
 }
 static DRIVER_ATTR(tblocks_in_use, S_IRUSR|S_IWUSR,
 		   show_tblocks_in_use, store_tblocks_in_use);
-#endif
 
+#endif
 
 static DRIVER_ATTR(daq_enable,S_IRUGO|S_IWUGO,show_daq_enable,set_daq_enable);
 static DRIVER_ATTR(debug, S_IRUGO|S_IWUGO, show_debug, store_debug);
