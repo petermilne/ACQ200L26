@@ -197,6 +197,9 @@ MODULE_PARM_DESC(ok_to_set_final_tblock_length,
 int oneshot_wait_for_done_timeout_jiffies = 10;
 module_param(oneshot_wait_for_done_timeout_jiffies, int, 0644);
 
+int DMC_TO = HZ;
+module_param(DMC_TO, int, 0644);
+
 static char errbuf[128];
 
 static void preEnable(void);   /* call immediately BEFORE trigger en */
@@ -235,7 +238,7 @@ static struct DMC0 {
 } dmc0;
 
 #define DMC0_RUN_REQUEST 0
-#define DMC_TO	(HZ)
+
 
 
 static void wake_dmc0(void)
