@@ -191,6 +191,11 @@ MODULE_PARM_DESC(acq200_maxchan, "maximum possible channels this arch");
 
 int ok_to_set_final_tblock_length = 1;
 module_param(ok_to_set_final_tblock_length, int, 0644);
+MODULE_PARM_DESC(ok_to_set_final_tblock_length,
+	"set last tblock to actual bytes, speeds short caps");
+
+int oneshot_wait_for_done_timeout_jiffies = 10;
+module_param(oneshot_wait_for_done_timeout_jiffies, int, 0644);
 
 static char errbuf[128];
 
@@ -1000,7 +1005,7 @@ int _dmc_handle_refills_end_of_phase(
 	    phase->demand_len, phase_len(phase));
 
 	if (wo->finished_code){
-		info("double finish, discard");
+		dbg(1, "double finish, discard");
 		return 1;
 	}else if (!bda_fin && wo->now != 0 && !phase_end(wo->now)){
 		share_last_tblock(wo->now, phase);
@@ -2530,7 +2535,12 @@ static int _oneshot_wait_for_done(void)
 			ntimeout = wait_event_interruptible_timeout( 
 				IPC->finished_waitq,
 				wo->error || DG->finished_with_engines,
-				10 );
+				oneshot_wait_for_done_timeout_jiffies);
+			if (wo->error || DG->finished_with_engines){
+				if (ntimeout == 0){
+					info("finished on timeout");
+				}
+			}
 			++DG->stats.busy_pollcat;
 		}
 		
@@ -2552,7 +2562,7 @@ static int _oneshot_wait_for_done(void)
 		if (DMC_WO->triggered && (iloop&(MAXTRY/16 - 1))==0){
 			dbg( 1, "%6d CLOSE DOWN %08x %s %s", 
 			     itry, *FIFSTAT, 
-			     ntimeout==1?"TIMEOUT":"",
+			     ntimeout>0?"TIMEOUT":ntimeout<0?"INTERRUPTED": "",
 			     wo->error? "WO_ERROR":"" );
 		}
 #ifdef ACQ196 
@@ -3970,6 +3980,7 @@ static int __devinit map_local_resource(void)
 #endif
 	init_waitqueue_head(&IPC->finished_waitq);
 
+	build_tblock_list();
 	acq200_tblock_init_top();
 	dig_pits();
 	return bigbuf_len? 0: -ENOMEM;
