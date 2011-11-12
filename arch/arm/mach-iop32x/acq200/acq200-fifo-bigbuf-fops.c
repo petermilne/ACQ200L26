@@ -909,8 +909,10 @@ static ssize_t fifo_AIfs_file_sendfile(struct file *in_file, loff_t *ppos,
 	return desc.written;
 }
 
+
 static struct file_operations fifo_AIfs_bigbuf_data_fops = {
 	.open = acq200_AIfs_fifo_bigbuf_open,
+	.llseek = generic_file_llseek,
 	.read = acq200_fifo_bigbuf_read,
 	.release = acq200_fifo_bigbuf_release,
 /** Experimental : memory mapping and sendfile */
