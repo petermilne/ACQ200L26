@@ -950,9 +950,10 @@ static inline int phase_full(struct Phase *phase)
 	return phase_len(phase) >=
 		phase->demand_len + phase->dma_overrun_request;
 }
-static inline int phase_full_after(struct Phase *phase, int incr)
+
+static inline int phase_needs_data(struct Phase *phase, int incr)
 {
-	return phase_len(phase) >=
+	return phase_len(phase) <
 		phase->demand_len + phase->dma_overrun_request + incr;
 }
 static inline int phase_end(struct Phase *phase)
