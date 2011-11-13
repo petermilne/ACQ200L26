@@ -619,8 +619,7 @@ static int woOnRefill(
 		dbg(1, "%d set phase->start_off phase:%s start_off %d",
 		    __LINE__, phase->name, phase->start_off);
 	}
-	if (phase->actual_len <
-	    phase->demand_len + phase->dma_overrun_request + DMA_BLOCK_LEN){
+	if (phase->actual_len < phase_full_after(phase, DMA_BLOCK_LEN)){
 		phase->actual_len += DMA_BLOCK_LEN;
 	}else{
 		/** event enabled after first lap */

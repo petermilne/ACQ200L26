@@ -3699,6 +3699,9 @@ static int acq200_proc_phases(
 				PPRINTF(phase->orig);
 			}
 		}
+		dbg(1, "%c dma_overrun_request: %d",
+				phase == DMC_WO->now? '*': phase->is_orig? 'o':'_',
+				phase->dma_overrun_request);
 	}
 	return len;
 #undef FPRINTF

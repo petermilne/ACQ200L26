@@ -947,7 +947,13 @@ static inline int phase_num_samples(struct Phase *phase)
 }
 static inline int phase_full(struct Phase *phase)
 {
-	return phase_len(phase) >= phase->demand_len;
+	return phase_len(phase) >=
+		phase->demand_len + phase->dma_overrun_request;
+}
+static inline int phase_full_after(struct Phase *phase, int incr)
+{
+	return phase_len(phase) >=
+		phase->demand_len + phase->dma_overrun_request + incr;
 }
 static inline int phase_end(struct Phase *phase)
 {
