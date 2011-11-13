@@ -2004,6 +2004,7 @@ static void init_phases(void)
 		init_phase(&phases[0], CAPDEF->demand_len, 1);
 		DMC_WO->pre = &null_phase;
 		DMC_WO->post = &phases[0];
+		DMC_WO->post->flags |= PH_FIXED_AT_START;
 	}
 	DTACQ_MACH_ON_SET_MODE(CAPDEF);
 	DMC_WO->now = &phases[0];
