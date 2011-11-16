@@ -1983,6 +1983,7 @@ static void init_phases(void)
 		DMC_WO->post = &null_phase;
 		break;
 	case M_TRIGGERED_CONTINUOUS:
+		ok_to_set_final_tblock_length = 0;
 		init_phase(&phases[0], CAPDEF->demand_prelen,  0);
 		init_phase(&phases[1], CAPDEF->demand_postlen, 1);
 		init_phase(&null_phase, 0, 1);
