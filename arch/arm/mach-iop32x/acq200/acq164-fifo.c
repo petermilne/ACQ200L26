@@ -46,15 +46,6 @@
 #include "acq196-AO.h"
 #include "acq100-offset.h"
 
-/** @todo - so how much _do_ we decimate by ? */
-
-/** actually, we're probably not decimating at all -
- *  Fclk = Fdata * 128 
- */
-#define ACQ164_DECIM	128
-
-#define ACQ200_CLK_HZ	32768000
-
 #define INT_CLK_CALC_ROUNDING 0x80
 //#define BEST_ICSINPUT_HZ 20000000
 #define BEST_ICSINPUT_HZ 1000000
@@ -65,7 +56,8 @@ module_param(int_clk_calcmode, int, 0664);
 int stub_event_adjust = 0;
 module_param(stub_event_adjust, int, 0600);
 
-
+int ACQ200_CLK_HZ = 32768000;
+module_param(ACQ200_CLK_HZ, int, 0644);
 
 int obclock_input_rate = BEST_ICSINPUT_HZ;
 module_param(obclock_input_rate, int, 0600);
