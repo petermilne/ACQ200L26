@@ -75,6 +75,12 @@ module_param(acq164_trigger_debug, int, 0600);
 int ads1278_group_delay = 38;
 module_param(ads1278_group_delay, int, 0600);
 
+int check_clock_lock = 0;
+module_param(check_clock_lock, int, 0600);
+
+int ics527_reset_usec = 2;
+module_param(ics527_reset_usec, int, 0600);
+
 #ifdef PGMCOMOUT
 /* acq132-gated.c */
 extern struct file_operations acq132_gate_pulse_ops;
@@ -1014,13 +1020,15 @@ static void acq164_set_defaults(void)
 
 static unsigned acq164_getClkCounter(void)
 {
-	u32 clk_con = *ACQ164_CLKCON;
 	u32 clk_counter = *ACQ164_CLK_COUNTER;
 
-	if ((clk_con&ACQ164_CLKCON_SCLK_LOCK) == 0){
-		*ACQ164_CLKCON = clk_con ^= ACQ164_CLKCON_SCLK_RESET;
-		dbg(2, "clk_con %08x clk_counter %08x", clk_con, clk_counter);
-		/* pull reset down next tick */
+	if (check_clock_lock){
+		u32 clk_con = *ACQ164_CLKCON;
+		if ((clk_con&ACQ164_CLKCON_SCLK_LOCK) == 0){
+			*ACQ164_CLKCON = clk_con ^= ACQ164_CLKCON_SCLK_RESET;
+			dbg(2, "clk_con %08x clk_counter %08x", clk_con, clk_counter);
+			/* pull reset down next tick */
+		}
 	}
 	return (clk_counter) & ACQ100_CLK_COUNTER_COUNT;
 }
@@ -1165,7 +1173,9 @@ acq164_fifo_exit_module(void)
 
 void acq164_set_obclock(int FDW, int RDW, int R, int Sx)
 {
+	u32 clk_con = *ACQ164_CLKCON;
 	u32 ics527 = 0;
+	*ACQ164_CLKCON = clk_con |= ACQ164_CLKCON_SCLK_RESET;
 	ics527 |= to_mask(ACQ100_ICS527_FDW, FDW);
 	ics527 |= to_mask(ACQ100_ICS527_RDW, RDW);
 //	ics527 |= to_mask(ACQ132_ICS527_CLKDIV, R);
@@ -1174,6 +1184,9 @@ void acq164_set_obclock(int FDW, int RDW, int R, int Sx)
 	*ACQ164_ICS527 = ics527;
 
 	acq200_clk_hz = ob_clock_def.actual * 1000;
+
+	udelay(ics527_reset_usec);
+	*ACQ164_CLKCON = clk_con &= ~ACQ164_CLKCON_SCLK_RESET;
 }
 
 
