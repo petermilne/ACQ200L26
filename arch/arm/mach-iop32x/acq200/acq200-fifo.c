@@ -6,7 +6,6 @@
                                                                                
     This program is free software; you can redistribute it and/or modify
     it under the terms of Version 2 of the GNU General Public License
-    as published by the Free Software Foundation;
                                                                                
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -1198,8 +1197,15 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 	}else{
 		unsigned next_empty = this_empty + DMA_BLOCK_LEN;
 		unsigned tb_off = next_empty - wo->tb_next_empty->offset;
-
-		if (tb_off > DG->bigbuf.tblocks.blocklen){
+#ifdef MODULO_DIV_IS_FAST_NOT
+		if (TBLOCK_OFFSET(next_empty) == 0){
+			dbg(1, "TBLOCK_OFFSET says change %0x6x tboff %06x blocklen %06x",
+					this_empty, tb_off, DG->bigbuf.tblocks.blocklen);
+		 	next_empty = 0;
+		}
+#endif
+		if (tb_off >= DG->bigbuf.tblocks.blocklen){
+			dbg(1, "tb_off says change %06x", this_empty);
 			next_empty = 0;       /* force reservation next time */
 			wo->tb_next_empty = 0;
 		}
