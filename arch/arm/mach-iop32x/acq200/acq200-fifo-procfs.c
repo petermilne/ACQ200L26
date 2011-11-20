@@ -1545,7 +1545,9 @@ static ssize_t store_tblock_len(
 	const char * buf, size_t count)
 {
 	int mtbl;
-	if (sscanf(buf, "%d", &mtbl) && mtbl < acq200_get_max_tblock_len()){
+	if ((sscanf(buf, "0x%x", &mtbl) ||
+	     sscanf(buf, "%d", &mtbl)		) &&
+	     	     mtbl <= acq200_get_max_tblock_len()){
 		DG->bigbuf.tblocks.blocklen = mtbl;
 		return strlen(buf);
 	}else{
