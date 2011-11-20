@@ -180,10 +180,10 @@ MODULE_PARM_DESC(tblock_already_in_phase_is_ok,
 #define DMA_REG(base, boffset) *(volatile u32*)((char*)(base)+(boffset))
 #define DMA_ERROR IOP321_CSR_ERR
 
+int acq200_max_tblock_len = _TBLOCK_LEN;
+module_param(acq200_max_tblock_len, int, 0444);
+MODULE_PARM_DESC(acq200_max_tblock_len, "length of tblock in bytes");
 
-int tblock_len = _TBLOCK_LEN;
-module_param(tblock_len, int, 0444);
-MODULE_PARM_DESC(tblock_len, "length of tblock in bytes");
 
 int acq200_maxchan = MAXCHAN;
 module_param(acq200_maxchan, int, 0444);
@@ -262,7 +262,10 @@ void acq200_setTblockLength(struct TBLOCK *tblock, int len);
 
 static struct pci_mapping int_enable;
 
-
+int acq200_get_max_tblock_len(void)
+{
+	return acq200_max_tblock_len;
+}
 
 static void acq200_global_mask_op(u32 mask, int maskon)
 {
@@ -1190,12 +1193,15 @@ unsigned default_getNextEmpty(struct DMC_WORK_ORDER* wo)
 
 			this_empty = tble->tblock->offset;
 			wo->next_empty = this_empty + DMA_BLOCK_LEN;
+			wo->tb_next_empty = tble->tblock;
 		}
 	}else{
 		unsigned next_empty = this_empty + DMA_BLOCK_LEN;
+		unsigned tb_off = next_empty - wo->tb_next_empty->offset;
 
-		if (TBLOCK_OFFSET(next_empty) == 0){
+		if (tb_off > DG->bigbuf.tblocks.blocklen){
 			next_empty = 0;       /* force reservation next time */
+			wo->tb_next_empty = 0;
 		}
 		wo->next_empty = next_empty;
 	}
@@ -4249,7 +4255,7 @@ static void init_dg(void)
 	INIT_LIST_HEAD(&DMC_WO->phases);
 	memcpy(DG, MYDG, sizeof(struct DevGlobs));
 	
-	DG->bigbuf.tblocks.blocklen = tblock_len;
+	DG->bigbuf.tblocks.blocklen = acq200_max_tblock_len;
 	info("set DG->bigbuf.tblocks.blocklen %d", DG->bigbuf.tblocks.blocklen);
 	DG->ipc = IPC;
 	DG->wo = DMC_WO;

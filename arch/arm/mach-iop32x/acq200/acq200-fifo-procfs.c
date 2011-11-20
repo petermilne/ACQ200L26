@@ -1297,6 +1297,8 @@ static ssize_t store_free_tblocks(
         return strlen(buf);
 }
 
+
+
 int free_block_count(void)
 {
 	struct TblockListElement* tle;
@@ -1537,6 +1539,29 @@ static ssize_t show_post_shot_hook(
 static DEVICE_ATTR(post_shot_hook, S_IRUGO|S_IWUGO,
 		   show_post_shot_hook,store_post_shot_hook);
 
+static ssize_t store_tblock_len(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int mtbl;
+	if (sscanf(buf, "%d", &mtbl) && mtbl < acq200_get_max_tblock_len()){
+		DG->bigbuf.tblocks.blocklen = mtbl;
+		return strlen(buf);
+	}else{
+		return -1;
+	}
+}
+
+static ssize_t show_tblock_len(
+	struct device * dev,
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf(buf,"%d\n", DG->bigbuf.tblocks.blocklen);
+}
+
+static DEVICE_ATTR(tblock_len, S_IRUGO|S_IWUGO, show_tblock_len, store_tblock_len);
  
 
 void mk_dev_sysfs(struct device* dev)
@@ -1609,6 +1634,7 @@ void mk_dev_sysfs(struct device* dev)
 
 	DEVICE_CREATE_FILE(dev, &dev_attr_code_min);
 	DEVICE_CREATE_FILE(dev, &dev_attr_code_max);
+	DEVICE_CREATE_FILE(dev, &dev_attr_tblock_len);
 
 	DEVICE_MK_DEV_SYSFS(dev);
 }

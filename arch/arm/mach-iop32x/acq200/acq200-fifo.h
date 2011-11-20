@@ -312,6 +312,7 @@ struct DMC_WORK_ORDER {
 	int finished_code;  /* 1: OK, negative => fail */
 	int next_empty;
 	int next_load;
+	struct TBLOCK* tb_next_empty;
 	int triggered;
 	int oneshot;
 	int (*trigger_detect)(void);
@@ -1282,4 +1283,7 @@ static inline unsigned tbinfo_get_tbcount(unsigned eventn)
 
 extern int acq200_calc_max_tblocks(void);
 extern void build_tblock_list(void);
+
+extern int acq200_get_max_tblock_len(void);
+
 #endif /* ACQ200_FIFO_H__ */
