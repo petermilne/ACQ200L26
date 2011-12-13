@@ -252,6 +252,7 @@ void acq132_setChannelLUTs(const struct Acq132ChannelLUT_Collection* luts)
 
 EXPORT_SYMBOL_GPL(acq132_setChannelLUTs);
 EXPORT_SYMBOL_GPL(acq200_lookup_lchan);
+EXPORT_SYMBOL_GPL(acq200_lookup_pchan);
 EXPORT_SYMBOL_GPL(acq132_default_plut);
 EXPORT_SYMBOL_GPL(acq132_rewire);
 

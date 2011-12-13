@@ -103,3 +103,5 @@ int acq200_lookup_lchan(int pchan)
 	return -1;
 }
 
+EXPORT_SYMBOL_GPL(acq200_lookup_pchan);
+EXPORT_SYMBOL_GPL(acq200_lookup_lchan);
