@@ -19,7 +19,7 @@
 /* ------------------------------------------------------------------------- */
 
 #define ACQ164
-
+#include "acq200-fifo-local.h"
 #define NCHANNELSBLOCK 32
 
 
@@ -64,17 +64,6 @@ static	const int __plut[] = {
 #define __PLUT_ELEMS (sizeof(__plut)/sizeof(int))
 
 static const int *plut = __plut;
-static int nlut = __PLUT_ELEMS;
-
-
-static int hw_fudge(int lchan)
-{
-	switch(lchan){
-	default:
-		return lchan;
-	}
-}
-
 
 #define BLOCK_SHR	5
 #define BLOCK_MASK	((1<<BLOCK_SHR)-1)
