@@ -106,6 +106,10 @@ int simulated_additional_slaves = 0;
 module_param(simulated_additional_slaves, int, 0444);
 MODULE_PARM_DESC(simulated_additional_slaves, "add loading by repeating slave");
 
+int max_real_slaves = 100;	
+module_param(max_real_slaves, int, 0444);
+MODULE_PARM_DESC(max_real_slaves, "limit actual #slaves in use");
+
 /** Globals .. keep to a minimum! */
 char acq100_gather_driver_name[] = "acq100_gather";
 char acq100_gather_driver_string[] = "D-TACQ gather driver";
@@ -181,6 +185,7 @@ struct Acq200Device *getDevice(int idev)
 void get_regions(void)
 {
 	int idev;
+	int nslaves = 0;
 
 	info("self: %08x block:%d numblocks:%d",
 	     *IOP321_IATVR2, control_block, control_numblocks);
@@ -198,10 +203,12 @@ void get_regions(void)
 		if (device->ram.pa == 0){
 			continue;	   /* non participating card */
 		}
-		addSource(device->ram.pa, device->ram.len, 
+		if (++nslaves < max_real_slaves){
+			addSource(device->ram.pa, device->ram.len, 
 			  device->ram.name, DMA_DCR_PCI_MR);
-		info("device %s pa: 0x%08lx len: %d",
-		     device->ram.name, device->ram.pa, device->ram.len);
+			info("device %s pa: 0x%08lx len: %d",
+			     device->ram.name, device->ram.pa, device->ram.len);
+		}
 	}		
 
 	if (target_rtm_t > 0){
