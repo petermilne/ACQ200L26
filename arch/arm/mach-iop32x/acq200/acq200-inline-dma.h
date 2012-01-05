@@ -54,6 +54,9 @@ struct DmaChannel {
 #define DMA_DONE(dmac, stat) \
         (((stat = DMA_STA(dmac)) & IOP321_CSR_CAF) == 0)
 
+#define DMA_BUSY(dmac, stat) \
+	(((stat = DMA_STA(dmac)) & IOP321_CSR_CAF) != 0)
+
 #define EOX (IOP321_CSR_EOCIF|IOP321_CSR_EOTIF)
 
 static inline void dma_copy_chain(
