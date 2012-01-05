@@ -31,7 +31,8 @@ module_param(control_tboffset, int, 0444);
 int control_numblocks = 0;
 module_param(control_numblocks, int, 0444);
 
-
+int set_lowlat = 0;
+module_param(set_lowlat, int, 0644);
 
 static struct pci_mapping control_target;
 static struct pci_mapping t0;		/* times at start */
@@ -221,6 +222,11 @@ static void init_endstops_control_target(void)
 	if (control_wanted){
 		_init_endstops_control_target();
 		DMC_WO->handleEmpties = dmc_handle_empties_prebuilt;
+		if (set_lowlat){
+			acq196_syscon_set_all(ACQ196_SYSCON_LOWLAT);
+		}else{
+			acq196_syscon_clr_all(ACQ196_SYSCON_LOWLAT);
+		}
 	}else{
 		init_endstops(INIT_ENDSTOPS);
 		
