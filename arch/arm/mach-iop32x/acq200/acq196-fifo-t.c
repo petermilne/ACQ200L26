@@ -1,4 +1,4 @@
-/** customise for acq196t - Thomson 4 sample special ..*/
+/** customise for acq196t - Thomson N sample special ..*/
 
 static void init_endstops_control_target(void);
 static void init_control_target(void);
@@ -24,6 +24,9 @@ module_param(control_block, int, 0644);
 
 int control_tbix = -1;
 module_param(control_tbix, int, 0444);
+
+int control_tboffset = -1;
+module_param(control_tboffset, int, 0444);
 
 int control_numblocks = 0;
 module_param(control_numblocks, int, 0444);
@@ -144,6 +147,7 @@ static void init_control_target(void)
 	control_target.va = 
 		(void*)((u32)(va_block + control_size-1) & mask);
 	control_tbix = control_mem->tblock->iblock;
+	control_tboffset = control_target.pa - pa_block;
 	fill_control_target();
 
 	*IOP321_IALR2 = mask;

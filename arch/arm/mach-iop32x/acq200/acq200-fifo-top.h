@@ -52,7 +52,7 @@
 #elif defined(ACQ196T)
 #warning "BUILDING ACQ196T"
 
-#define DMA_BLOCK_LEN	(96*2*4)
+#define DMA_BLOCK_LEN	(96*2*3)	/* ES + 2 samples */
 #define ISR_ADDS_ENDSTOP 0
 
 #else
