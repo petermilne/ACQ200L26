@@ -85,9 +85,15 @@ int acq200_get_cpci_slot(struct pci_dev * pci_dev)
 	u32 devfn =  pci_dev->devfn;
 	int slot = -1;
 
+
+	int pslot = PCI_SLOT(devfn);
+	
 	if (devfn >= 72 && devfn <= 120){
 		slot = 9 - (devfn/8 -8);			
 	}
+
+	info("devfn %d slot %d  pslot:%d", devfn, slot, pslot);
+
 	return slot;	
 }
 
