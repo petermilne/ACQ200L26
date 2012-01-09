@@ -34,6 +34,9 @@ module_param(control_numblocks, int, 0444);
 int set_lowlat = 0;
 module_param(set_lowlat, int, 0644);
 
+int odd_word_hole_hack = 0;
+module_param(odd_word_hole_hack, int, 0644);
+
 static struct pci_mapping control_target;
 static struct pci_mapping t0;		/* times at start */
 static struct pci_mapping t1;		/* times at end   */
@@ -162,6 +165,36 @@ static void init_control_target(void)
 	acq196_t_create_proc_entries();	
 }
 
+/** hack to avoid the "oddword hole" fault *..
+ *  Assume ES,S0,S1. Copy S0+2 to S1 then we have
+ *  ES[96]
+ *  S0[0,1,2,3,4,5,6...96]  1,3,5 hosed by fault
+ *  S1[1,2,3,4,5,6,7...95]  2,4,6 hosed by fault
+ */
+#define SAMPLE_LEN	192
+
+static inline void mk_local_to_local_offset_hack(
+	struct PrebuiltChain *pbc,
+	int ichain,
+	u32 pa)
+{
+	struct iop321_dma_desc* dmad = acq200_dmad_alloc();
+	unsigned S0 = pa + SAMPLE_LEN;
+	unsigned S1 = pa + 2*SAMPLE_LEN;
+
+	mk_link(pbc, ichain, dmad, 'X');
+	pbc->local_to_local = ichain;
+
+	dmad->MM_SRC = S0+sizeof(short);
+	dmad->PUAD = 0;
+	dmad->MM_DST = S1;
+	dmad->BC = DMA_BLOCK_LEN-sizeof(short);
+	dmad->DC = DMA_DCR_MEM2MEM;
+}
+
+
+#define MK_LOCAL_TO_LOCAL_OFFSET_HACK(pbc, ichain, pa) \
+	mk_local_to_local_offset_hack(pbc, ichain++, pa)
 
 static void _init_endstops_control_target(void)
 /** init endstops, including control_target chains */
@@ -205,6 +238,10 @@ static void _init_endstops_control_target(void)
 		MK_GTSR_SNAP(pbc, ichain, TSP(t0, iblock));
 		MK_FIFO_TO_LOCAL(pbc, ichain);
 		MK_LOCAL_TO_LOCAL(pbc, ichain, control_pa(iblock));
+		if (odd_word_hole_hack){
+			MK_LOCAL_TO_LOCAL_OFFSET_HACK(
+					pbc, ichain, control_pa(iblock));
+		}
 		MK_ENDSTOP(pbc, ichain, endstop);
 
 		pbc->length = ichain;
