@@ -238,7 +238,9 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	short *tb_tmp = va_tblock_tmp(DG);
 	
 	
-	unsigned nwords = tblock->tb_length/sizeof(short);
+	unsigned nwords =  (transform_partial_block_ok?
+				tblock->tb_length: acq200_get_max_tblock_len())
+				/sizeof(short);
 	unsigned t_flags = DG->bigbuf.tblocks.t_flags;
 
 	XX_valid = false;
@@ -250,9 +252,6 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	DG->bigbuf.tblocks.transform(tb_tmp, tb_va, nwords, NCHAN);
 	tblock_lock(tblock);
 	if ((t_flags&TF_INPLACE) == 0){
-		if (transform_partial_block_ok){
-			nwords = tblock->tb_length/sizeof(short);
-		}
 		dbg(1, "blt(%p, %p, %d)", tb_va, tb_tmp, nwords);
 		DG->bigbuf.tblocks.blt(tb_va, tb_tmp, nwords);
 	}
