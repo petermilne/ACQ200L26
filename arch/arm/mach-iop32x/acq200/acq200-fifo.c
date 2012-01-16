@@ -189,7 +189,7 @@ int acq200_maxchan = MAXCHAN;
 module_param(acq200_maxchan, int, 0444);
 MODULE_PARM_DESC(acq200_maxchan, "maximum possible channels this arch");
 
-int ok_to_set_final_tblock_length = 1;
+int ok_to_set_final_tblock_length = 0;
 module_param(ok_to_set_final_tblock_length, int, 0644);
 MODULE_PARM_DESC(ok_to_set_final_tblock_length,
 	"set last tblock to actual bytes, speeds short caps");

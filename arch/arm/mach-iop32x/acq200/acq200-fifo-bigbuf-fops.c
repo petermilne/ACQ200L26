@@ -69,10 +69,7 @@ int tblock_ev_noclear = 1;
 module_param(tblock_ev_noclear, int, 0644);
 MODULE_PARM_DESC(tblock_ev_noclear, "DEBUG ONLY");
 
-int transform_partial_block_ok = 0;
-module_param(transform_partial_block_ok, int, 0644);
-MODULE_PARM_DESC(transform_partial_block_ok, "TESTING: speed up transform if only partial block EXPERIMENTAL: ACQ132 OK, others not");
-
+extern int ok_to_set_final_tblock_length;	/* speed up measure. buggy */
 extern int acq200_tblock_debug;		/* @@todo desperate debug measure */
 
 struct FunctionBuf {
@@ -238,7 +235,7 @@ int acq200_fifo_bigbuf_transform(int blocknum)
 	short *tb_tmp = va_tblock_tmp(DG);
 	
 	
-	unsigned nwords =  (transform_partial_block_ok?
+	unsigned nwords =  (ok_to_set_final_tblock_length?
 				tblock->tb_length: acq200_get_max_tblock_len())
 				/sizeof(short);
 	unsigned t_flags = DG->bigbuf.tblocks.t_flags;
