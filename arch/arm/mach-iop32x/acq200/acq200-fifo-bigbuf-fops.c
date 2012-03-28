@@ -1870,7 +1870,7 @@ static ssize_t status2_tb_read (
 	/* phase_sample_start: allows clients to sync to samples,
          * in case of late joining, or missed tblocks 
          */
-	rc = snprintf(lbuf, len, "%03d %d\n", 
+	rc = snprintf(lbuf, len, "%03d %u\n",
 		      tle->tblock->iblock, tle->phase_sample_start);
 
 	if (tbc->backlog){
