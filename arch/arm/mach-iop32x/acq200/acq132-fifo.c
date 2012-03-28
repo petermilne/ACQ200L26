@@ -488,6 +488,7 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);	
 		break;
 	case M_SOFT_CONTINUOUS:
+#if 0 /* M_SOFT_CONTINUOUS ... want regular RGM to work .. */
 	/* gear up for multi-event mode ... if no events, there's no harm .. */
 		dbg(1, "M_SOFT_CONTINUOUS");
 		DMC_WO->looking_for_pit = 1;
@@ -495,6 +496,7 @@ static void acq132_mach_on_set_mode(struct CAPDEF* capdef)
 		acq132_adc_set_all(ACQ132_ADC_CTRL_OFFSET,
 			ACQ132_ADC_CTRL_PREPOST|ACQ132_ADC_CTRL_SIGEN);
 		break;
+#endif
 	default:	
 		dbg(1, "mode %d %s", capdef->mode, 
 			acq132_getRGM()?"RGM":	acq132_is_DR()?"DR": "");

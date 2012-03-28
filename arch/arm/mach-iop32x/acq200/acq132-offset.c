@@ -71,6 +71,15 @@ static const int acq132_default_plut11[] = {
 	[ 7] = 13, [ 8] = 29,
 };
 
+static const int acq132_default_plut_808[] = {
+/* index: memory order 1:32
+ * value: nameplate order 1:32
+ */
+	[ 1] =  1, [ 2] = 17, /* BANK_D MASK_1B */
+	[ 3] =  3, [ 4] = 19, /* BANK_D MASK_1 */
+};
+
+
 #define FULL_LUT 0
 
 static struct Acq132ChannelLUT default_luts[] = {
@@ -84,6 +93,7 @@ static struct Acq132ChannelLUT default_luts[] = {
 	{	0x55555555, 16, acq132_default_plut55,	"DCBA"	},
 	{	0x11111111,  8, acq132_default_plut11,  "DCBA"	},
 	{       0x00110011,  4, acq132_default_plut11,  "DC"	},
+	{	0x00050005,  4, acq132_default_plut_808,"D"     },
 };
 
 static struct Acq132ChannelLUT_Collection acq132_default_LUTs = {
