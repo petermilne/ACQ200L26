@@ -560,6 +560,28 @@ static ssize_t show_version(
 static DRIVER_ATTR(version,S_IRUGO,show_version,0);
 
 
+extern int iop32x_pci_bus_is_pcix(void);
+
+static ssize_t show_pci_bus_type(
+	struct device *dev,
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+	return sprintf(buf, "%s\n", iop32x_pci_bus_is_pcix()? "PCI-X": "PCI");
+}
+
+static DEVICE_ATTR(pci_bus_type, S_IRUGO, show_pci_bus_type, 0);
+
+static ssize_t show_pci_bus_type_pcix(
+	struct device *dev,
+	struct device_attribute *attr,
+	char * buf
+	)
+{
+	return sprintf(buf, "%d\n", iop32x_pci_bus_is_pcix());
+}
+static DEVICE_ATTR(pci_bus_type_pcix, S_IRUGO, show_pci_bus_type_pcix, 0);
 
 
 extern int iop32x_pci_bus_speed(void);
@@ -606,6 +628,8 @@ static void mk_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_dmad_counts);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pci_bus_speed);
 	DEVICE_CREATE_FILE(dev, &dev_attr_pbi_bus_speed);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pci_bus_type);
+	DEVICE_CREATE_FILE(dev, &dev_attr_pci_bus_type_pcix);
 
 	DRIVER_CREATE_FILE(dev->driver, &driver_attr_version);
 }

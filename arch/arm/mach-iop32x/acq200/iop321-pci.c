@@ -328,24 +328,28 @@ iop321_pci_abort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 #define IOP3XX_PCSR_P_M66EN	(1<<10)
 #define IOP3XX_PCSR_P_REQ64	(1<<8)
 
-static int id_bus_speed(char ** id)
+static int id_bus_speed(char ** id, int* is_pcix)
 {
 	u32 pcsr = *IOP3XX_PCSR;
 	char *_id;
 	int hz;
+	int _is_pcix = 0;
 	
 	switch(pcsr&IOP3XX_PCSR_PCIX){
 	case IOP3XX_PCSR_PCIX066:
 		hz = 66666000;
 		_id = "PCI-X 66MHz";
+		_is_pcix = 1;
 		break;
 	case IOP3XX_PCSR_PCIX100:
 		hz = 99999000;
 		_id = "PCI-X 100MHz";
+		_is_pcix = 1;
 		break;
 	case IOP3XX_PCSR_PCIX133:
 		hz = 133333200;
 		_id = "PCI-X 133MHz";
+		_is_pcix = 1;
 		break;
 	default:
 		if (pcsr&IOP3XX_PCSR_P_M66EN){
@@ -360,11 +364,14 @@ static int id_bus_speed(char ** id)
 	if (id){
 		*id = _id;
 	}	
+	if (is_pcix){
+		*is_pcix = _is_pcix;
+	}
 	return hz;
 }
 int iop32x_pci_bus_speed(void)
 {
-	return id_bus_speed(0);
+	return id_bus_speed(0, 0);
 }
 
 
@@ -381,13 +388,21 @@ int iop32x_pbi_bus_speed(void)
 		return -1;
 	}
 }
+
+extern int iop32x_pci_bus_is_pcix(void)
+{
+	int is_pcix;
+	id_bus_speed(0, &is_pcix);
+	return is_pcix;
+}
+
 void iop32x_check_pci_bus_speed(void)
 {
 	u32 pcsr = *IOP3XX_PCSR;
 	char *width = (pcsr&IOP3XX_PCSR_P_REQ64)==0? "64 bit": "32 bit";
 	char *id;
 	
-	id_bus_speed(&id);
+	id_bus_speed(&id, 0);
 
 	printk("PCI:iop3xx PCSR:%08x %s %s\n",  pcsr, id, width);
 }
@@ -421,3 +436,4 @@ void iop321_init(void)
 EXPORT_SYMBOL_GPL(iop32x_pci_bus_speed);
 EXPORT_SYMBOL_GPL(iop32x_pbi_bus_speed);
 EXPORT_SYMBOL_GPL(iop32x_check_pci_bus_speed);
+EXPORT_SYMBOL_GPL(iop32x_pci_bus_is_pcix);
