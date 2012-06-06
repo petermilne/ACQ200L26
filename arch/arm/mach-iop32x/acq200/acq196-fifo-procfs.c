@@ -159,6 +159,98 @@ static ssize_t store_RGM(
 
 static DEVICE_ATTR(RepeatingGateMode, S_IRUGO|S_IWUGO, show_RGM, store_RGM);
 
+static ssize_t show_FSF(
+	struct device * dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	u32 syscon = *ACQ196_SYSCON_ADC;
+	int nacc = (syscon&ACQ196_SYSCON_FSF_ACC) >> ACQ196_SYSCON_FSF_ACC_BIT;
+	int shr = (syscon&ACQ196_SYSCON_FSF_SHR);
+
+	if (nacc != 0){
+		nacc += 1;
+		switch(shr){
+		case ACQ196_SYSCON_FSF_SHR_2:	shr = 2; break;
+		case ACQ196_SYSCON_FSF_SHR_3:	shr = 3; break;
+		case ACQ196_SYSCON_FSF_SHR_4:	shr = 4; break;
+		case ACQ196_SYSCON_FSF_SHR_5:	shr = 5; break;
+		}
+	}else{
+		shr = 0;
+	}
+
+
+	return sprintf(buf, "%u %u\n", nacc, shr);
+}
+
+#define AUTO_SHR	-37
+
+int acq196_set_fsf(unsigned nacc, unsigned shr)
+{
+	u32 syscon = *ACQ196_SYSCON_ADC;
+	syscon &= ~ (ACQ196_SYSCON_FSF_ACC|ACQ196_SYSCON_FSF_SHR);
+
+	if (nacc != 0){
+		u32 nacc_bits;
+		u32 shr_bits;
+
+		if (nacc < 1 || nacc > 32){
+			err("nacc %u out of range 1..32", nacc);
+			return -1;
+		}
+		nacc_bits = (nacc-1) << ACQ196_SYSCON_FSF_ACC_BIT;
+		if (shr == AUTO_SHR){
+			if (nacc > 16){
+				shr = 5;
+			}else if (nacc > 8){
+				shr = 4;
+			}else if (nacc > 4){
+				shr = 3;
+			}else{
+				shr = 2;
+			}
+		}
+		switch(shr){
+		case 5:	shr_bits = ACQ196_SYSCON_FSF_SHR_5; break;
+		case 4: shr_bits = ACQ196_SYSCON_FSF_SHR_4; break;
+		case 3: shr_bits = ACQ196_SYSCON_FSF_SHR_3; break;
+		case 2: shr_bits = ACQ196_SYSCON_FSF_SHR_2; break;
+		default:
+			err("shr %u out of range 2..5", shr);
+			return -2;
+		}
+		syscon |= nacc_bits | shr_bits;
+	}
+
+	*ACQ196_SYSCON_ADC = syscon;
+	return 0;
+}
+static ssize_t store_FSF(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned nacc;
+	unsigned shr = AUTO_SHR;
+
+	switch (sscanf(buf, "%u %u", &nacc, &shr)){
+	case 1:
+	case 2:
+		if (nacc == 0 || nacc == 1){
+			acq196_set_fsf(0, 0);
+			return 0;
+		}else{
+			return acq196_set_fsf(nacc, shr) == 0? 0: -EPERM;
+		}
+	default:
+		return -EPERM;
+	}
+}
+
+static DEVICE_ATTR(FS_Filter, S_IRUGO|S_IWUGO, show_FSF, store_FSF);
+
+
 
 static ssize_t show_slow_clock(
 	struct device * dev, 
@@ -519,6 +611,7 @@ static void acq196_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FIRK_GROUP(dev);
 #endif
 	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
+	DEVICE_CREATE_FILE(dev, &dev_attr_FS_Filter);
 }
 
 void acq200_setChannelMask(unsigned mask)
