@@ -233,19 +233,24 @@ static ssize_t store_FSF(
 {
 	unsigned nacc;
 	unsigned shr = AUTO_SHR;
+	int rc = strlen(buf);
 
 	switch (sscanf(buf, "%u %u", &nacc, &shr)){
 	case 1:
 	case 2:
 		if (nacc == 0 || nacc == 1){
 			acq196_set_fsf(0, 0);
-			return 0;
 		}else{
-			return acq196_set_fsf(nacc, shr) == 0? 0: -EPERM;
+			if (acq196_set_fsf(nacc, shr)){
+				rc = -EPERM;
+			}
 		}
+		break;
 	default:
-		return -EPERM;
+		rc = -EPERM;
 	}
+
+	return rc;
 }
 
 static DEVICE_ATTR(FS_Filter, S_IRUGO|S_IWUGO, show_FSF, store_FSF);
