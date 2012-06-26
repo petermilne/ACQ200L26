@@ -25,7 +25,6 @@
 #define USE_GTSR             0
 #define COUNT_CLEARS_ON_TRIG 1
 #define AVOID_HOT_UNDERRUN   0
-#define USES_CLKDLY          1
 #define USE_DBG              0
 #define CHECK_DAC_DMA_ERRORS 0
 #define SYNC2V               1
@@ -237,9 +236,6 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #endif
 #if USE_DBG
 "USE DEBUG "
-#endif
-#if USES_CLKDLY
-"USES_CLKDLY "
 #endif
 #if CHECK_DAC_DMA_ERRORS
 "CHECK_DAC_DMA_ERRORS "
@@ -1262,15 +1258,8 @@ static u32 service_tlatch(u32 tl)
 #define UPDATE_TINST(tinst) SERVICE_TIMER(tinst)
 #define UPDATE_TLATCH(tlatch) SERVICE_TLATCH(tlatch)
 
-#if USES_CLKDLY
 #define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
-#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDLY)
-/* because it will be ready by the time we come to service it */
-#else
-#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE)
-#define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
-#endif
-
+#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDET)
 
 static int aisample_clocked(u32 fifstat) {
 	u32 sps = sync2v_samples_per_cycle;

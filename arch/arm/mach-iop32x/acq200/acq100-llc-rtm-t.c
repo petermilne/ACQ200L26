@@ -151,14 +151,8 @@ char acq100_llc_copyright[] = "Copyright (c) 2004-2011 D-TACQ Solutions Ltd";
 /** size of fifo extension for sync2v */
 #define SCRATCHPAD_SIZE (32*sizeof(short))
 
-#if USES_CLKDLY
 #define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
-#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDLY)
-/* because it will be ready by the time we come to service it */
-#else
-#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE)
-#define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
-#endif
+#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDET)
 
 #define HOTSAM(fifstat)  (((fifstat)&ACQ196_FIFSTAT_HOTPOINT)*(1<<2)*2)
 
