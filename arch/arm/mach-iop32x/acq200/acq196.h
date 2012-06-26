@@ -159,10 +159,6 @@
 #define ACQ196_SYSCON_DAC_2CHAN     0x01000000
 #define ACQ196_SYSCON_DAC_WAVE_MODE 0x00800000
 
-
-#define ACQ196_SYSCON_CLKDLY_SHIFT 24
-#define ACQ196_SYSCON_LATIMER_SHIFT ACQ196_SYSCON_CLKDLY_SHIFT
-
 #define ACQ196_SYSCON_FSF_ACC	0x7c000000	/* Final Stage Filter - N */
 #define ACQ196_SYSCON_FSF_SHR	0x03000000      /* Final Stage Filter - SHR */
 #define ACQ196_SYSCON_SIM_MODE  0x00800000
@@ -359,26 +355,6 @@ static inline void stop_capture(void)
 	disable_acq();
 	disable_fifo();
 }
-
-
-
-static inline void acq196_set_adc_clkdly(u8 clkdly)
-{
-	u32 syscon_adc = *ACQ196_SYSCON_ADC;
-
-	syscon_adc &= ~(0xff << ACQ196_SYSCON_CLKDLY_SHIFT);
-	syscon_adc |=  (clkdly << ACQ196_SYSCON_CLKDLY_SHIFT);
-	*ACQ196_SYSCON_ADC = syscon_adc;
-}
-
-static inline u8 acq196_get_adc_clkdly(void)
-{
-	return *ACQ196_SYSCON_ADC >> ACQ196_SYSCON_CLKDLY_SHIFT;
-}
-
-
-
-
 
 static inline void __dac_reset(void) {
 	acq196_fifcon_set_all(ACQ196_FIFCON_DAC_RESET);

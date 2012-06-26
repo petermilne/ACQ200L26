@@ -2337,32 +2337,6 @@ static ssize_t show_dac_lowlat(
 static DEVICE_ATTR(dac_lowlat, S_IWUGO|S_IRUGO, 
 		   show_dac_lowlat, set_dac_lowlat);
 
-
-static ssize_t set_adc_clkdly(
-	struct device *dev, 
-	struct device_attribute *attr,
-	const char * buf, size_t count)
-{
-	int clkdly;
-
-	sscanf(buf, "%d", &clkdly);
-	acq196_set_adc_clkdly(clkdly);
-	return strlen(buf);
-}
-
-static ssize_t show_adc_clkdly(
-	struct device *dev, 
-	struct device_attribute *attr,
-	char * buf)
-{
-	int clkdly = acq196_get_adc_clkdly();
-        return sprintf(buf, "%d\n", clkdly);
-}
-
-static DEVICE_ATTR(adc_clkdly, S_IWUGO|S_IRUGO, 
-		   show_adc_clkdly, set_adc_clkdly);
-
-
 static ssize_t set_dma_poll_holdoff(
 	struct device *dev, 
 	struct device_attribute *attr,
@@ -2500,7 +2474,6 @@ static int mk_llc_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_status);
 	DEVICE_CREATE_FILE(dev, &dev_attr_channel_mask);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dac_lowlat);
-	DEVICE_CREATE_FILE(dev, &dev_attr_adc_clkdly);
 	DEVICE_CREATE_FILE(dev, &dev_attr_dma_poll_holdoff);
 	DEVICE_CREATE_FILE(dev, &dev_attr_show_dma);
 	DEVICE_CREATE_FILE(dev, &dev_attr_timer0_count);
@@ -2557,7 +2530,6 @@ static int acq100_llc_probe(struct device *dev)
 	dg.llcv2_init_buf = kmalloc(BLEN, GFP_KERNEL); 
 	mk_llc_sysfs(dev);
 	mk_llc_procfs(dev);
-	acq196_set_adc_clkdly(100);
 	return 0;
 }
 
