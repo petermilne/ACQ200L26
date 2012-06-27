@@ -208,8 +208,8 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1083
-#define VERID "BUILD 1083"
+#define BUILD 1085
+#define VERID "BUILD 1085"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -496,25 +496,33 @@ static int llc_onEntryScm(int entry_code)
 	return 0;
 }
 
+static void createAO_tmp(void)
+{
+	/* allocate ao32 (VO) temp area regardless of whether there are
+	 * AO32 or not (used in host_wd_action() and do64 loopback
+	 */
+	dg.settings.ao32.tmp = kmalloc(AO32_TMP_MAXLEN, GFP_KERNEL);
+	dg.settings.ao32.tmp_pa = dma_map_single(
+			NULL, dg.settings.ao32.tmp, 
+			AO32_TMP_MAXLEN, PCI_DMA_BIDIRECTIONAL);
+	dbg(1, "tmp %p tmp_pa 0x%08x ao32_count %d",
+			dg.settings.ao32.tmp, 
+			dg.settings.ao32.tmp_pa, dg.settings.ao32.count);
+}
+
 static void pullAO32_targets(u32 *buf)
 {
 	int ii = 0;
-	
-	for (; ii < LLCV2_INIT_AO32_MAX && 
-		     buf[LLCV2_INIT_AO32PA0+ii] != 0; ++ii){
+
+	for (; ii < LLCV2_INIT_AO32_MAX &&
+		buf[LLCV2_INIT_AO32PA0+ii] != 0; ++ii){
 		dg.settings.ao32.pa[ii] = buf[LLCV2_INIT_AO32PA0+ii];
 		dbg(2, "ao32.%d at 0x%08x", ii, dg.settings.ao32.pa[ii]);
 	}
-
-	if ((dg.settings.ao32.count = ii)){
-		dg.settings.ao32.tmp = kmalloc(AO32_TMP_MAXLEN, GFP_KERNEL);
-		dg.settings.ao32.tmp_pa = dma_map_single(
-			NULL, dg.settings.ao32.tmp, 
-			AO32_TMP_MAXLEN, PCI_DMA_BIDIRECTIONAL);
-		dbg(1, "tmp %p tmp_pa 0x%08x ao32_count %d", 
-			dg.settings.ao32.tmp, 
-		    dg.settings.ao32.tmp_pa, dg.settings.ao32.count);
-	}
+	dg.settings.ao32.count = ii;
+	dbg(1, "tmp %p tmp_pa 0x%08x ao32_count %d",
+			dg.settings.ao32.tmp,
+			dg.settings.ao32.tmp_pa, dg.settings.ao32.count);
 }
 #define BLEN (max(LLCV2_INIT_LAST,LLCV2_INIT_AO32_LAST)*sizeof(u32))
 
@@ -540,6 +548,7 @@ static int checkLLCV2_INIT(void)
 		dma_unmap_single(NULL, dmabuf, BLEN, PCI_DMA_FROMDEVICE);
 
 		dg.settings.ao32.count = 0;
+		createAO_tmp();
 
 		switch(buf[LLCV2_INIT_MARKER]){
 		case LLCV2_INIT_MAGIC_AO32:
@@ -1086,7 +1095,7 @@ static void llPreamble2V(void)
 	if (dg.settings.AO_src){
 		int ao_head = ai_dma.nchain;
 
-		if (dg.settings.ao32.count){
+		if (dg.settings.ao32.count || host_wd_mask != 0){
 			initAIdma_AO32();	/* does AO16 also */
 		}else{
 			initAIdma_AO16();
@@ -1610,6 +1619,8 @@ onFifoNotEmpty: {
  *
  *
  **********************************************************************************************/
+
+/* !!! KLUDGE alert: why does host_wd come from ao32+LLC_SYNC2V_WD */
 
 static void host_wd_action(void)
 {
