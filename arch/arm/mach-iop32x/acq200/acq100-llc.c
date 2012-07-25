@@ -208,8 +208,8 @@ module_param(pbi_cycle_steal, int, 0664);
 #endif
 
 /** increment BUILD and VERID each build */
-#define BUILD 1085
-#define VERID "BUILD 1085"
+#define BUILD 1086
+#define VERID "BUILD 1086"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -1004,8 +1004,7 @@ static void llPreamble2V(void)
 	int ireg;
 	
 
-	dma_cleanup(&ai_dma);
-	dma_cleanup(&ao_dma);                 /** not used, clean up anyway */
+	dma_cleanup(&ai_dma);	/* LEAVE ao_dma alone! - it's a copy */
 
 	for (ireg = 0; ireg != 16; ++ireg){
 		u32 marker;
