@@ -131,7 +131,7 @@
 #define RTMT_D_FCR_SIM_THROTTLE_SHL 8
 #define RTMT_D_FCR_SIM_THROTTLE_MSK 0xf		/* 0x0 : /1, 0x1 : /2 .. etc */
 #define RTMT_D_FCR_SIM_MODE	(1<<7)		/* 1: Simulate on source=ctr */
-#define RTMT_D_FCR_PCIE_DATAON	(1<<6)		/* 1: request data frm ACQ */
+#define RTMT_D_FCR_PCIE_DATAON	(1<<6)		/* 1: request data frm ACQ 0: IOP-PUSH */
 #define RTMT_D_FCR_LOWLAT	(1<<5)
 /* unused 4-1 */
 #define RTMT_D_FCR_DMA_SINGLE_RECYCLE	(1<<1)	/* 1: reuse #1 DMA descr forever */
@@ -150,7 +150,7 @@
 
 
 
-
+#define RTMT_C_REVID_HAS_TEMAC		(1<<23)
 
 
 

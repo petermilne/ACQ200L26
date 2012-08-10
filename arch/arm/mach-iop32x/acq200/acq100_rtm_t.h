@@ -55,7 +55,7 @@ static inline void rtm_t_relinquish_dual(void)
 
 
 
-int __init	acq100_rtm_t_uart_init(void);
+int __init	acq100_rtm_t_uart_init(int new_irq);
 void __exit	acq100_rtm_t_uart_exit(void);
 
 void __init create_sfp_knobs(struct device *dev);

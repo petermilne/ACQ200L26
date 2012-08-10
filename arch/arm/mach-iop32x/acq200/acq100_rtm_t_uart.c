@@ -29,6 +29,7 @@
 #define EXPORT_SYMTAB
 #include <linux/module.h>
 #endif
+#include <linux/moduleparam.h>
 
 #include <asm/arch-iop32x/iop321.h>
 #include "acqX00-port.h"
@@ -37,6 +38,13 @@
 
 #define RTM_T_UART_2		(ACQ200_UART+0x100)
 #define RTM_T_UART_2_IRQ	IRQ_ACQ100_ETH
+#define RTM_T_UART_2_NEW_IRQ	IRQ_ACQ100_UART
+
+
+int force_slip_newirq;
+module_param(force_slip_newirq, int, 0444);
+
+
 
 static struct plat_serial8250_port acqX00_serial_platform_port[] = {
 	{
@@ -85,8 +93,11 @@ static struct platform_device acq100_rtm_t_serial_device = {
 
 
 
-int __init acq100_rtm_t_uart_init(void)
+int __init acq100_rtm_t_uart_init(int new_irq)
 {
+	if (force_slip_newirq || new_irq){
+		acqX00_serial_platform_port[0].irq = RTM_T_UART_2_NEW_IRQ;
+	}
 	return platform_device_register(&acq100_rtm_t_serial_device);
 }
 

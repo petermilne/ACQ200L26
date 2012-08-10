@@ -36,7 +36,7 @@
 
 #include "acq100_rtm_t.h"
 
-#define REVID	"acq100_rtm_t B1002"
+#define REVID	"acq100_rtm_t B1005"
 
 int rtm_t_debug;
 module_param(rtm_t_debug, int , 0644);
@@ -169,20 +169,21 @@ static int __init  rtm_t_probe(struct device *dev)
 		err("BIT test failed");
 		return -1;
 	}else{
+		u32 revid = *RTMT_REG(RTMT_C_REVID);
 		info("RTM-T found, FPGA version %08x id %08x",
-		     *RTMT_REG(RTMT_C_REVID), FPGA_ID);	
-	}
+		     revid, FPGA_ID);
 
-	mk_rtm_t_sysfs(dev);
+		mk_rtm_t_sysfs(dev);
 
-	rc = acq100_rtm_t_uart_init();
-	if (rc != 0){
-		goto uart_fail;
-	}
-	rc = rtm_t_spi_master_init(dev);
+		rc = acq100_rtm_t_uart_init((revid&RTMT_C_REVID_HAS_TEMAC) != 0);
+		if (rc != 0){
+			goto uart_fail;
+		}
+		rc = rtm_t_spi_master_init(dev);
 
-	if (rtm_t_masters_data){
-		acq100_redirect();
+		if (rtm_t_masters_data){
+			acq100_redirect();
+		}
 	}
 	return rc;
 
