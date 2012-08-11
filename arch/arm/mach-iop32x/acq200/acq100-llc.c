@@ -72,6 +72,10 @@
  * - IO_GAP : inserts a programmable GAP between AI and AO to allow an external
  *	CPU to process Ai data and output to AO in the same cycle.
  *	IO_GAP is tunable: 0: disabled, 1..TBLOCK_LEN (6M) delay
+ * - AI_DELAY : inserts a programmable DELAY before AI.
+ *      In a multi-card system, forces one ACQ to delay to avoid congestion
+ *      with two-card action.
+ *      Ideally, SB will go first with VI[S], then MB will do VI[M], VO
  * - DO64_READBACK: insert lower 32 bits AO32#1 DO64 value into  VI
  *      aim is to provide a tuning aid that enables a host program 
  *	to confirm that the last VO made the cut on previous cycle
@@ -187,7 +191,6 @@ module_param(DI_offset, int, 0644);
 
 
 
-
 int acq100_llc_sync2V_AO_len = 0;
 module_param(acq100_llc_sync2V_AO_len, int, 0664);
 
@@ -207,9 +210,19 @@ int pbi_cycle_steal = 0;
 module_param(pbi_cycle_steal, int, 0664);
 #endif
 
+#define USE_MAX_SAMPLES_IGNORE	0
+#define USE_MAX_SAMPLES_INTEN	1 /* enable interrupts after MAX_SAMPLES. */
+#define USE_MAX_SAMPLES_DISABLE 2 /* disable acquisition. 		  */
+#define USE_MAX_SAMPLES_QUIT	3 /* quit LLC (may break client           */
+int use_max_samples = 0;
+module_param(use_max_samples, int, 0644);
+
+int MAX_SAMPLES = 0;
+module_param(MAX_SAMPLES, int, 0644);
+
 /** increment BUILD and VERID each build */
-#define BUILD 1086
-#define VERID "BUILD 1086"
+#define BUILD 1091
+#define VERID "BUILD 1091"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -351,6 +364,7 @@ static struct LlcDevGlobs {
 
 		unsigned alt_VI_target;
 		unsigned io_gap;
+		unsigned ai_delay;
 		unsigned do64_readback;
 
 		struct WDT_CONTROL {
@@ -421,25 +435,31 @@ static unsigned get_sample_size(unsigned mask)
 	return nblocks * 32 * 2;
 }
 
+static int __ints_disabled;
 
 int llc_intsDisable(void)
 {
 	MASK_ITERATOR_INIT(it, dg.imask);
 
+	if (__ints_disabled == 1) return 0;
+
 	while ( mit_hasNext( &it ) ){
 		disable_irq_nosync( mit_getNext( &it ) );
 	}
-
+	__ints_disabled = 1;
 	return 0;
 }
 int llc_intsEnable(void)
 {
 	MASK_ITERATOR_INIT(it, dg.imask);
 
+	if (__ints_disabled == 0) return 0;
+
 	while ( mit_hasNext( &it ) ){
 		enable_irq( mit_getNext( &it ) );
 	}
 
+	__ints_disabled = 0;
 	return 0;
 }
 
@@ -1029,6 +1049,16 @@ static void llPreamble2V(void)
 		    ireg, &ACQ196_LL_AI_SCRATCH[ireg], marker);
 	}
 
+	if (dg.settings.ai_delay){
+		struct iop321_dma_desc *delay_dmad = acq200_dmad_alloc();
+		delay_dmad->NDA = 0;
+		delay_dmad->PDA = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[5]);
+		delay_dmad->PUAD = dg.settings.PUAD;
+		delay_dmad->LAD = PA_TBLOCK(&DG->bigbuf.tblocks.the_tblocks[6]);
+		delay_dmad->BC = dg.settings.ai_delay;
+		delay_dmad->DC = DMA_DCR_MEM2MEM;
+		dma_append_chain(&ai_dma, delay_dmad, "ai-delay");
+	}
 	if (dg.settings.alt_VI_target){
 		struct iop321_dma_desc *ai_dmad = acq200_dmad_alloc();
 		struct iop321_dma_desc *vi_dmad = acq200_dmad_alloc();
@@ -1764,6 +1794,22 @@ void llc_loop_sync2V(int entry_code)
 			}
 			iter1 = dg.status.iter;
 
+
+			if (use_max_samples != USE_MAX_SAMPLES_IGNORE &&
+					dg.status.sample_count > MAX_SAMPLES){
+				switch(use_max_samples){
+				case USE_MAX_SAMPLES_QUIT:
+					dg.emergency_stop = 1; /* fall thru */
+				case USE_MAX_SAMPLES_DISABLE:
+					disable_acq();		/* fall thru */
+				case USE_MAX_SAMPLES_INTEN:
+					llc_intsEnable();
+				}
+				err("use_max_samples:%d dg.status.sample_count %d",
+					use_max_samples, dg.status.sample_count);
+				use_max_samples = 0;
+				continue;
+			}
 			DMA_ARM(ai_dma);
 
 			/** @todo check overruns */
@@ -2098,6 +2144,24 @@ static ssize_t show_io_gap(
 }
 
 static DEVICE_ATTR(IO_GAP, S_IWUGO|S_IRUGO, show_io_gap, set_io_gap);
+
+static ssize_t set_ai_delay(
+	struct device *dev,
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	sscanf(buf, "%d", &dg.settings.ai_delay);
+	return strlen(buf);
+}
+static ssize_t show_ai_delay(
+	struct device *dev,
+	struct device_attribute *attr,
+	char * buf)
+{
+        return sprintf(buf, "%d\n", dg.settings.ai_delay);
+}
+
+static DEVICE_ATTR(AI_DELAY, S_IWUGO|S_IRUGO, show_ai_delay, set_ai_delay);
 
 static ssize_t set_do64_readback(
 	struct device *dev, 
@@ -2480,6 +2544,7 @@ static int mk_llc_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_soft_trigger);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IODD);
 	DEVICE_CREATE_FILE(dev, &dev_attr_IO_GAP);
+	DEVICE_CREATE_FILE(dev, &dev_attr_AI_DELAY);
 	DEVICE_CREATE_FILE(dev, &dev_attr_DO64_READBACK);
 	DEVICE_CREATE_FILE(dev, &dev_attr_sync_output);
 	DEVICE_CREATE_FILE(dev, &dev_attr_alt_VI_target);
