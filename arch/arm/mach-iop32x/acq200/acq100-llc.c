@@ -34,6 +34,7 @@
 #define CYCLE_STEAL	     1
 #define AO32CPCI	     1
 #define WDT		     1
+#define HOT_START_AGGRESSIVE 1
 
 /** @file acq100-llc.c acq1xxx low latency control kernel module.
  *  DMA should fire on HOT_NE, and it should be IMPOSSIBLE to get a 
@@ -221,8 +222,8 @@ int MAX_SAMPLES = 0;
 module_param(MAX_SAMPLES, int, 0644);
 
 /** increment BUILD and VERID each build */
-#define BUILD 1091
-#define VERID "BUILD 1091"
+#define BUILD 1094
+#define VERID "BUILD 1094"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -253,6 +254,7 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #if CHECK_DAC_DMA_ERRORS
 "CHECK_DAC_DMA_ERRORS "
 #endif
+"\n"
 #if SYNC2V
 "** SYNC2V ** "
 #endif
@@ -270,6 +272,11 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #endif
 #if WDT
 "WDT "
+#endif
+#if HOT_START_AGGRESSIVE
+"HOT_START_AGGRESSIVE "
+#else
+"!HOT_START_AGGRESSIVE "
 #endif
 "\n";
 
@@ -449,6 +456,7 @@ int llc_intsDisable(void)
 	__ints_disabled = 1;
 	return 0;
 }
+
 int llc_intsEnable(void)
 {
 	MASK_ITERATOR_INIT(it, dg.imask);
@@ -481,9 +489,10 @@ static void set_fifo_ne_mask(unsigned cmask)
 static int llc_onEntryEcm(int entry_code)
 /** customisation for ECM mode. */
 {
+	u32 clkcon = *ACQ196_CLKCON;
+	clkcon |= ACQ196_CLKCON_LLSYNC;
+	*ACQ196_CLKCON = clkcon;
 	*ACQ200_CLKDAT = dg.prams.divisor;
-
-	*ACQ196_CLKCON = ACQ196_CLKCON_LLSYNC;
 
 	activateSignal(CAPDEF->int_clk_src);
 	activateSignal(CAPDEF->mas_clk);
@@ -1729,15 +1738,23 @@ void llc_loop_sync2V(int entry_code)
 				if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
 					SERVICE_TLATCH(tlat32);
 					I_SCRATCH_TLAT32 = tlat32;
+#ifndef HOT_START_AGGRESSIVE
+					if (acq100_llc_sync2V >=
+					    ACQ100_LLC_SYNC2V_DIDOSTA ){
+						I_SCRATCH_ITER = dg.status.iter;
+						I_SCRATCH_TINST = *IOP321_GTSR;
+						I_SCRATCH_SC = dg.status.sample_count;
+		    				I_SCRATCH_FSTA = fifstat;
+					}
+#endif
 				}
+
 			}
-/* we assume it doesn't matter if this stuff makes this transfer or not.. 
- * We set CLKDLY short to give time for something useful ..
- */
+
 		hot_start:
 			DMAC_GO(ai_dma, fifstat);
 			/* @critical ENDS */
-
+#ifdef HOT_START_AGGRESSIVE
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
 				if (acq100_llc_sync2V >=
 				    ACQ100_LLC_SYNC2V_DIDOSTA ){
@@ -1747,7 +1764,7 @@ void llc_loop_sync2V(int entry_code)
 	    				I_SCRATCH_FSTA = fifstat;
 				}
 			}
-			
+#endif
 
 			if (++dg.status.sample_count == 1){
 				dg.status.iter = 1;
