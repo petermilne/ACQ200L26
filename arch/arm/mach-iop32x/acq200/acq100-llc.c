@@ -29,12 +29,11 @@
 #define CHECK_DAC_DMA_ERRORS 0
 #define SYNC2V               1
 #define DMA_POLL_HOLDOFF     1
-#define FIFO_ONESAM          1
+#define FIFO_ONESAM          0
 #define DI_IN_1              0
 #define CYCLE_STEAL	     1
 #define AO32CPCI	     1
 #define WDT		     1
-#define HOT_START_AGGRESSIVE 1
 
 /** @file acq100-llc.c acq1xxx low latency control kernel module.
  *  DMA should fire on HOT_NE, and it should be IMPOSSIBLE to get a 
@@ -167,6 +166,10 @@ module_param(sync2v_samples_per_cycle, int, 0644);
 int host_wd_mask = 0;
 module_param(host_wd_mask, int, 0644);
 
+int use_adc_clkdet = 0;
+module_param(use_adc_clkdet, int, 0644);
+
+u32 fifo_clocked;
 int DI_offset =
 #if DI_IN_1
 		1;			/** workaround for old FPGA bug */
@@ -175,8 +178,15 @@ int DI_offset =
 #endif
 module_param(DI_offset, int, 0644);
 
+#define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
+#define FIFO_CLOCKED0  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDET)
+#define FIFO_CLOCKED1	FIFO_NE
+#define AIFIFO_NOT_EMPTY(fifstat)     (((fifstat)&FIFO_NE) != 0)
+#define COLDFIFO_EMPTY(fifstat)       (((fifstat)&dg.coldfifo_ne_mask)==0)
+
 /* SYNC2V SCRATCHPAD */
 
+#define I_SCRATCH_HWTLAT ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLATCH];
 #define I_SCRATCH_TLAT32 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLAT32]
 #define I_SCRATCH_TINST	 ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_TLAT32]
 #define I_SCRATCH_ITER ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_ITER]
@@ -222,8 +232,8 @@ int MAX_SAMPLES = 0;
 module_param(MAX_SAMPLES, int, 0644);
 
 /** increment BUILD and VERID each build */
-#define BUILD 1094
-#define VERID "BUILD 1094"
+#define BUILD 1106
+#define VERID "BUILD 1106"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -273,11 +283,7 @@ char acq100_llc_driver_version[] = VERID " "__DATE__ " Features:\n"
 #if WDT
 "WDT "
 #endif
-#if HOT_START_AGGRESSIVE
-"HOT_START_AGGRESSIVE "
-#else
-"!HOT_START_AGGRESSIVE "
-#endif
+"32 bit HW TLATCH"
 "\n";
 
 #define DBG dbg
@@ -634,6 +640,14 @@ static int llc_onEntry(int entry_code)
 	dg.hb_mask = acq200mu_get_hb_mask();
 	
 
+	if (use_adc_clkdet){
+		fifo_clocked = FIFO_CLOCKED0;
+	}else{
+		fifo_clocked = FIFO_CLOCKED1;
+	}
+	info("fifo_clocked mask: 0x%08x %s",
+			fifo_clocked, use_adc_clkdet? "CLKDET": "NE");
+
 	/**
 	 * store FPGA state
 	 */
@@ -649,6 +663,14 @@ static int llc_onEntry(int entry_code)
 		return -1;
 	}
 
+	{
+		u32 fs = *ACQ196_FIFSTAT;
+		if (AIFIFO_NOT_EMPTY(fs)){
+			err("FIFO_NOT_EMPTY before trig: %08x", fs);
+			REPORT_ERROR("FIFO_NOT_EMPTY before trig: %08x", fs);
+			return -1;
+		}
+	}
 	activateSignal(CAPDEF->trig);
 
 	return 0;
@@ -1305,13 +1327,11 @@ static u32 service_tlatch(u32 tl)
 #define UPDATE_TINST(tinst) SERVICE_TIMER(tinst)
 #define UPDATE_TLATCH(tlatch) SERVICE_TLATCH(tlatch)
 
-#define FIFO_NE       (ACQ196_FIFSTAT_HOT_NE)
-#define FIFO_CLOCKED  (ACQ196_FIFSTAT_HOT_NE|ACQ196_FIFSTAT_ADC_CLKDET)
 
 static int aisample_clocked(u32 fifstat) {
 	u32 sps = sync2v_samples_per_cycle;
 	if (sps == 1){
-		return (fifstat & FIFO_CLOCKED) != 0;
+		return (fifstat & fifo_clocked) != 0;
 	}else{
 /* tide mark is in 64 byte units. Convert sps to same units
  * if 1 block of 3 is present, start the transfer (fill faster than empty)
@@ -1326,8 +1346,6 @@ static int aisample_clocked(u32 fifstat) {
 	}
 }
 #define AISAMPLE_CLOCKED(fifstat)     aisample_clocked(fifstat)
-#define AIFIFO_NOT_EMPTY(fifstat)     (((fifstat)&FIFO_NE) != 0)
-#define COLDFIFO_EMPTY(fifstat)       (((fifstat)&dg.coldfifo_ne_mask)==0)
 
 #define AO_DATA_WAITING(mfa)          (((mfa) = acq200mu_get_ib()) != 0)
 
@@ -1717,8 +1735,6 @@ void llc_loop_sync2V(int entry_code)
 		getNumChan(CHANNEL_MASK) == 32? 2:
 		getNumChan(CHANNEL_MASK) == 64? 3: 4;
 #endif		
-	u32 tlat32 = 0;
-
 
 	DBG(1, "ENTER %d", entry_code);
 	dg.status.sample_count = 0;
@@ -1732,40 +1748,9 @@ void llc_loop_sync2V(int entry_code)
 
 		if (AISAMPLE_CLOCKED(fifstat) != 0){
 			/* @todo HOUSKEEPING - were we fast enough? */
-
-			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
-				I_SCRATCH_DI32 = getDI32();
-				if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
-					SERVICE_TLATCH(tlat32);
-					I_SCRATCH_TLAT32 = tlat32;
-#ifndef HOT_START_AGGRESSIVE
-					if (acq100_llc_sync2V >=
-					    ACQ100_LLC_SYNC2V_DIDOSTA ){
-						I_SCRATCH_ITER = dg.status.iter;
-						I_SCRATCH_TINST = *IOP321_GTSR;
-						I_SCRATCH_SC = dg.status.sample_count;
-		    				I_SCRATCH_FSTA = fifstat;
-					}
-#endif
-				}
-
-			}
-
 		hot_start:
 			DMAC_GO(ai_dma, fifstat);
 			/* @critical ENDS */
-#ifdef HOT_START_AGGRESSIVE
-			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
-				if (acq100_llc_sync2V >=
-				    ACQ100_LLC_SYNC2V_DIDOSTA ){
-					I_SCRATCH_ITER = dg.status.iter;
-					I_SCRATCH_TINST = *IOP321_GTSR;
-					I_SCRATCH_SC = dg.status.sample_count;
-	    				I_SCRATCH_FSTA = fifstat;
-				}
-			}
-#endif
-
 			if (++dg.status.sample_count == 1){
 				dg.status.iter = 1;
 			}
@@ -1786,13 +1771,27 @@ void llc_loop_sync2V(int entry_code)
 					DMA_STA(ai_dma));
 			}
 
-			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
-				setDO32(O_SCRATCH_DO32);
-
-				if (host_wd_mask){
-					host_wd_action();
+			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
+				I_SCRATCH_DI32 = getDI32();
+				if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
+					setDO32(O_SCRATCH_DO32);
+					if (host_wd_mask){
+						host_wd_action();
+					}
+					if (acq100_llc_sync2V >=
+					    ACQ100_LLC_SYNC2V_DIDOSTA ){
+						I_SCRATCH_ITER = dg.status.iter;
+						I_SCRATCH_TINST = *IOP321_GTSR;
+						I_SCRATCH_SC = dg.status.sample_count;
+		    				I_SCRATCH_FSTA = fifstat;
+					}
+				}
+				/** housekeeping - error if zero polls */
+				if (dg.status.iter - iter1 < 1){
+					I_SCRATCH_LASTE	= dg.status.sample_count;
 				}
 			}
+
 			if (dg.settings.do64_readback == 2){
 				u32* va = (u32*)((void*)dg.settings.ao32.tmp+AO32_VECLEN);
 				unsigned pa = dg.settings.ao32.tmp_pa+AO32_VECLEN-sizeof(u32);
@@ -1805,10 +1804,7 @@ void llc_loop_sync2V(int entry_code)
 				*IOP321_ODR |= BP_INT_LLC_DMA_DONE;
 			}
 
-			/** housekeeping - error if zero polls */
-			if (dg.status.iter - iter1 < 1){
-				I_SCRATCH_LASTE	= dg.status.sample_count;
-			}
+
 			iter1 = dg.status.iter;
 
 
