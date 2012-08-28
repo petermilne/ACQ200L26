@@ -215,7 +215,7 @@ acq196m-objs := acq196-fifo-m.o acq196-fiq-m.o \
 	$(ACQ2XX_FIFO_COMMON)
 
 acq196c-objs := acq196-fifo-c.o acq196-fiq-c.o \
-	acq196-fifo-procfs.o acq196-offset.o acq196-AO.o \
+	acq196-fifo-procfs-c.o acq196-offset.o acq196-AO.o \
 	$(ACQ2XX_FIFO_COMMON)
 
 acq196f-objs := acq196-fifo-f.o acq196-fiq-f.o \

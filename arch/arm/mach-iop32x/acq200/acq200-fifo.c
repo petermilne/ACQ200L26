@@ -111,6 +111,9 @@ extern void acq200_set_user_led(int led4, int on);
 #define DTACQ_MACH_ON_SET_MODE(mode)
 #endif
 
+#ifndef DO_INIT_ENDSTOPS
+#define DO_INIT_ENDSTOPS(count)	init_endstops(count)
+#endif
 
 int acq200_timeout = 10000;
 

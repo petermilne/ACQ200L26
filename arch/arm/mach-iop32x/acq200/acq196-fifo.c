@@ -634,12 +634,7 @@ static int acq200_fpga_fifo_read_open (struct inode *inode, struct file *file)
 	enable_regular_operation();
 
 	clear_buffers();
-#ifdef ACQ196T
-	init_endstops_control_target();
-#else
-	init_endstops(INIT_ENDSTOPS);
-#endif
-
+	DO_INIT_ENDSTOPS(INIT_ENDSTOPS);
 	fifo_open( PCI_DMA_FROMDEVICE );
 
 /* and start the capture */

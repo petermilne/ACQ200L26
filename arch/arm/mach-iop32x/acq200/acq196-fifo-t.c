@@ -1,11 +1,12 @@
 /** customise for acq196t - Thomson N sample special ..*/
 
-static void init_endstops_control_target(void);
+static void init_endstops_control_target(int count);
 static void init_control_target(void);
 
 
 #define DTACQ_MACH_DRIVER_INIT(dev) init_control_target()
 #define DEVICE_CREATE_PROC_ENTRIES(root) pbc_create_proc_entries(root)
+#define DO_INIT_ENDSTOPS(count) init_endstops_control_target(count)
 
 #define ACQ196T
 #include "acq196-fifo.c"
@@ -253,7 +254,7 @@ static void _init_endstops_control_target(void)
 	DG->empty_fill_threshold = control_numblocks/2;
 }
 
-static void init_endstops_control_target(void)
+static void init_endstops_control_target(int count)
 /** init endstops, including control_target chains */
 {
 	if (control_wanted){
@@ -265,7 +266,7 @@ static void init_endstops_control_target(void)
 			acq196_syscon_clr_all(ACQ196_SYSCON_LOWLAT);
 		}
 	}else{
-		init_endstops(INIT_ENDSTOPS);
+		init_endstops(count);
 		
 	}
 }
