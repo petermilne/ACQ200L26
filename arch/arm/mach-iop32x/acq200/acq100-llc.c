@@ -166,7 +166,7 @@ module_param(sync2v_samples_per_cycle, int, 0644);
 int host_wd_mask = 0;
 module_param(host_wd_mask, int, 0644);
 
-int use_adc_clkdet = 0;
+int use_adc_clkdet = 1;
 module_param(use_adc_clkdet, int, 0644);
 
 u32 fifo_clocked;
@@ -209,7 +209,7 @@ module_param(acq100_llc_sync2V_AO_len, int, 0664);
 int acq100_mem2mem = 0;
 module_param(acq100_mem2mem, int, 0664);
 
-int acq100_dropACQEN_on_exit;
+int acq100_dropACQEN_on_exit = 1;
 module_param(acq100_dropACQEN_on_exit, int, 0664);
 
 /* writes initial values to AO, DO on LLC entry (Sync2V only) */
@@ -232,8 +232,8 @@ int MAX_SAMPLES = 0;
 module_param(MAX_SAMPLES, int, 0644);
 
 /** increment BUILD and VERID each build */
-#define BUILD 1106
-#define VERID "BUILD 1106"
+#define BUILD 1107
+#define VERID "BUILD 1107"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
