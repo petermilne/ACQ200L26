@@ -27,6 +27,8 @@
 #include "acq200-fifo.h"
 #include "acq216.h"
 
+unsigned transient_len_bits = 16;
+module_param(transient_len_bits, int, 0644);
 
 
 static const char* report_fifo_flags(u32 flags);
@@ -383,10 +385,11 @@ static ssize_t store_translen(
 	const char * buf, size_t count)
 {
 	int translen;
+	unsigned maxlen = (1<<transient_len_bits)-1;
 
 	if (sscanf(buf, "%d", &translen) == 1){
 		if (translen){
-			if (translen > 0xffff) translen = 0xffff;
+			if (translen > maxlen) translen = maxlen;
 			*ACQ216_TRANSLEN = translen;
 			*ACQ200_SYSCON |= ACQ200_SYSCON_TRANSMODE;
 		}else{
