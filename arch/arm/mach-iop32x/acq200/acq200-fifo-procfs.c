@@ -50,6 +50,9 @@ module_param(histo_log2_scaling, int, 0644);
 int exhaustive_event_search = 0;
 module_param(exhaustive_event_search, int, 0644);
 
+int app_reserve_tb = 0;
+module_param(app_reserve_tb, int, 0444);
+
 static int calc_process_us(void)
 {
 	unsigned long long delta_ticks = 
@@ -3410,8 +3413,38 @@ static int acq200_proc_tblock_cursor(
 #undef PRINTF
 }
 
+#define MAXRES	16
 
+TBLE* reserved_tblocks[MAXRES];
 
+void reserve_app_tblocks(void)
+{
+	int ii;
+	app_reserve_tb = min(app_reserve_tb, MAXRES);
+
+	for (ii = 0; ii < app_reserve_tb; ++ii){
+		reserved_tblocks[ii] = acq200_reserveFreeTblock();
+		assert(reserved_tblocks[ii]);
+	}
+}
+static int acq200_proc_tblocks_reserved(
+	char *buf, char **start, off_t offset, int len,
+        int* eof, void* data )
+{
+#define PRINTF(fmt, args...) len += sprintf(buf+len, fmt, ## args)
+	int ii;
+	len = 0;
+
+	for (ii = 0; ii < MAXRES; ++ii){
+		struct TblockListElement* tle = reserved_tblocks[ii];
+		if (tle == 0) break;
+		PRINTF("%03d 0x%08x %d\n",
+				tle->tblock->iblock,
+				pa_buf(DG) + tle->tblock->offset,
+				tle->tblock->tb_length);
+	}
+	return len;
+}
 static int acq200_proc_free_tblocks(
 	char *buf, char **start, off_t offset, int len,
                 int* eof, void* data )
@@ -4102,6 +4135,7 @@ void create_proc_entries(void)
 	CPRE("tbmap", acq200_proc_tblocks_brief);
 	CPRE("tblocks_free", acq200_proc_free_tblocks);
 	CPRE("tblocks_empty", acq200_proc_empty_tblocks);
+
 	CPRE("capdef", acq200_proc_capdef);
 	CPRE("phases", acq200_proc_phases);
 	CPRE("phase_tblocks", acq200_proc_phase_tblocks);
@@ -4112,6 +4146,8 @@ void create_proc_entries(void)
 	CPRE("bda", acq200_proc_bda);
 	create_proc_status_entries();
 
+	reserve_app_tblocks();
+	CPRE("tblocks_app_reserve", acq200_proc_tblocks_reserved);
 	DEVICE_CREATE_PROC_ENTRIES(proc_acq200);
 #undef CPRE
 }

@@ -2417,7 +2417,7 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.ops = &dma_tblock_event_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
-	src.name = "tblock_tpl";	/* tblock pa len */
+	src.name = "tbstat_tpl";	/* tblock pa len */
 	src.ops = &dma_tbstatus_tpl_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
