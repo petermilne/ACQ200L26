@@ -159,7 +159,7 @@
 /* not used				0x00000040 */
 #define ACQ164_CLKCON_OCS_MASK		0x00000030
 #define ACQ164_CLKCON_CS_RISING		0x00000008
-/* not used				0x00000004 */
+#define ACQ164_CLKCON_CS_EXT_MASTER	0x00000004  /* use clk on DIx, no IDX */
 #define ACQ164_CLKCON_CS_MASK		0x00000003
 
 #define ACQ164_CLKCON_ALL \
@@ -261,14 +261,14 @@ extern struct OB_CLOCK_DEF ob_clock_def;
 
 static inline void acq164_set_nacc(int nacc)
 {
-	CLAMP(nacc, 1, 64);
-	*ACQ164_OSR = nacc;
+	CLAMP(nacc, 1, 256);
+	*ACQ164_OSR = nacc - 1;
 }
 
 static inline int acq164_get_nacc(void)
 {
 	int nacc = *ACQ164_OSR & ACQ164_OSR_MASK;
-	return nacc == 0? 1: nacc;
+	return nacc+1;
 }
 
 
