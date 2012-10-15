@@ -1627,6 +1627,45 @@ static ssize_t status_tb_read (
 	return rc;
 }
 
+static ssize_t status_tb_tpl_read (
+	struct file *file, char *buf, size_t len, loff_t *offset)
+/** output last tblock as string data.
+ * TB is NOT marked as in_phase (busy).
+ */
+{
+	struct TblockConsumer *tbc = DCI_TBC(file);
+	struct TblockListElement *tle;
+	char lbuf[80];
+	int rc;
+
+	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
+
+	if (list_empty(&tbc->tle_q)){
+		return -EINTR;
+	}
+
+	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
+	list_del(&tle->list);
+
+	if (len < 8){
+		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
+	}else{
+		rc = snprintf(lbuf, min(sizeof(lbuf), len), "%03d 0x%08x %d\n",
+			tle->tblock->iblock,
+			pa_buf(DG) + tle->tblock->offset,
+			tle->tblock->tb_length);
+	}
+	tbc->c.tle = tle;
+
+	if (tbc->backlog){
+		--tbc->backlog;
+	}
+
+
+	COPY_TO_USER(buf, lbuf, rc);
+	return rc;
+}
+
 /* threshold to include left,right TBLOCKS */
 #define BORDERLINE		0x100000
 #define TB_NOT_BORDERLINE	999
@@ -2298,6 +2337,13 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
+	static struct file_operations dma_tbstatus_tpl_ops = {
+		.open = dma_tb_open,
+		.read = status_tb_tpl_read,
+		.write = status_tb_write,
+		.release = dma_tb_release,
+		.poll = tb_poll
+	};
 
 	static struct file_operations dma_tblock_event_ops = {
 		.open = dma_tblock_event_open,
@@ -2346,6 +2392,7 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	src.ops = &dma_tb_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
+
 	/* the rest are all RW to allow buffer reserve/recycle */      
 	/* NB: tbstat2 doesn't actually reserver, W is chucked */
 	src.mode = S_IRUGO|S_IWUGO;
@@ -2368,6 +2415,10 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 
 	src.name = "tblock_event_table";
 	src.ops = &dma_tblock_event_ops;
+	tcount = updateFiles(&S_DFD, &src, 0, tcount);
+
+	src.name = "tblock_tpl";	/* tblock pa len */
+	src.ops = &dma_tbstatus_tpl_ops;
 	tcount = updateFiles(&S_DFD, &src, 0, tcount);
 
 	tcount = updateFiles(&S_DFD, &backstop, 0, tcount);
