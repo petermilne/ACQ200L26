@@ -175,7 +175,7 @@ static char role_text[32];
 #define ROLE_SOLO	"SOLO"
 #define ROLE_MASTER	"MASTER"
 #define ROLE_SLAVE	"SLAVE"
-
+#define ROLE_EXT_MAS    "EXT_MASTER"
 #define SLEN(str)	strlen(str)
 
 #define CLKCON_
@@ -196,6 +196,13 @@ static ssize_t store_clock_role(
 	int len = 0;
 	if (strncmp(buf, ROLE_SOLO, (len = SLEN(ROLE_SOLO))) == 0){
 		set = 0;
+	}else if (strncmp(buf, ROLE_EXT_MAS, (len = SLEN(ROLE_EXT_MAS))) == 0){
+		u32 ics = ACQ164_CLKCON_CS_MASK|ACQ164_CLKCON_CS_RISING;
+		ics &= *ACQ164_CLKCON;
+		set =	(ACQ164_CLKCON_D1 << ACQ164_CLKCON_OCS_SHIFT)|
+			(ACQ164_CLKCON_D2 << ACQ164_CLKCON_OIND_SHIFT)|
+			ACQ164_CLKCON_CS_EXT_MASTER | ics;
+		dbg(1, "ics:%08x set:%08x", ics, set);
 	}else if (strncmp(buf, ROLE_MASTER, (len = SLEN(ROLE_MASTER))) == 0){
 		set =	(ACQ164_CLKCON_D1 << ACQ164_CLKCON_OCS_SHIFT)|
 			(ACQ164_CLKCON_D2 << ACQ164_CLKCON_IND_SHIFT)|
