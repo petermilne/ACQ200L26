@@ -43,7 +43,9 @@
 #define ACQ164_TCR_IMMEDIATE	FPGA_REG(0x44)		/* same as 196? */
 #define ACQ164_TCR_LATCH	FPGA_REG(0x48)		/* same as 196? */
 #define ACQ164_RGATE		FPGA_REG(0x50)		/* same as 196? */
-#define ACQ164_CLK_COUNTER	FPGA_REG(0x54)	/* same as 132 */
+#define ACQ164_CLK_COUNTER	FPGA_REG(0x54)		/* same as 132 */
+#define ACQ164_GPG		FPGA_REG(0x5c)
+#define ACQ164_RGM		ACQ164_GPG
 
 #define ACQ164_FIFO_OFFSET     0x00100000
 
@@ -187,9 +189,17 @@
 
 #define ACQ164_OSR_MASK	0x00ff		/* Over Sampling Register 0=1x */
 
+#define ACQ164_RGM_GATE_DIO		0xe0000000
+#define ACQ164_RGM_GATE_DIO_SHL		29
+#define ACQ164_RGM_ENABLE		0x10000000
+
 
 #ifndef __ASSEMBLER__
 
+
+static inline int acq164_isRGM() {
+	return *ACQ164_RGM & ACQ164_RGM_ENABLE != 0;
+}
 static inline u32 acq164_syscon_set(u32 flags) {
 	return *ACQ164_SYSCON |= flags;
 }

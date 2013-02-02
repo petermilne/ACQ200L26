@@ -22,7 +22,7 @@
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID							\
-	"$Id: acq164-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1012\n"
+	"$Id: acq164-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1013\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -334,32 +334,10 @@ void acq132_setRGM(int enable)
 
 static void acq164_mach_on_set_mode(struct CAPDEF* capdef)
 {
-#ifdef PGMCOMOUT
-	switch(capdef->mode){
-	case M_TRIGGERED_CONTINUOUS:
-
-		dbg(1, "M_TRIGGERED_CONTINUOUS");
-
-		deactivateSignal(capdef->gate_src);
-		activateSignal(capdef->ev[0]);
-		break;
-	default:	
-		dbg(1, "mode %d %s", capdef->mode, acq132_getRGM()?"RGM":"");
-
-		deactivateSignal(capdef->ev[0]);
-		if (acq132_getRGM()){
-			DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
-			activateSignal(capdef->gate_src);
-			/** @todo */
-		}else{
-			deactivateSignal(capdef->gate_src);
-			/** @todo */
-		}
-		break;
+	if (acq164_isRGM()){
+		DMC_WO->looking_for_pit = NOLOOK_FOR_PIT;
 	}
-#endif
 }
-
 
 static struct DevGlobs acq164_dg = {
 	.btype = BTYPE_ACQ164,

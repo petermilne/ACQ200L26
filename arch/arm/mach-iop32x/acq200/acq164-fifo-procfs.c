@@ -435,6 +435,48 @@ static ssize_t show_ClkCounter(
 
 static DEVICE_ATTR(ClkCounter, S_IRUGO, show_ClkCounter, 0);
 
+static ssize_t show_RGM(
+	struct device * dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	unsigned rgm_word = *ACQ164_RGM;
+	unsigned dio = (rgm_word&ACQ164_RGM_GATE_DIO)>> ACQ164_RGM_GATE_DIO_SHL;
+
+	if (rgm_word & ACQ164_RGM_ENABLE){
+		return sprintf(buf, "%d DI%d\n", 1, dio);
+	}else{
+		return sprintf(buf, "0\n");
+	}
+}
+
+static ssize_t store_RGM(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned mode;
+	unsigned dio;
+	unsigned rgm_word = *ACQ164_RGM;
+
+	rgm_word &= ~(ACQ164_RGM_GATE_DIO|ACQ164_RGM_ENABLE);
+
+	switch(sscanf(buf, "%u DI%u", &mode, &dio)){
+	case 2:
+		 rgm_word |= dio << ACQ164_RGM_GATE_DIO_SHL;
+		 if (mode != 0){
+			 rgm_word |= ACQ164_RGM_ENABLE;
+		 }	/* fall thru */
+	case 1:
+		*ACQ164_RGM = rgm_word;
+		return count;
+	default:
+		return -EPERM;
+	}
+}
+
+static DEVICE_ATTR(RepeatingGateMode, S_IRUGO|S_IWUGO, show_RGM, store_RGM);
+
 
 static void acq164_mk_dev_sysfs(struct device *dev)
 {
@@ -452,7 +494,8 @@ static void acq164_mk_dev_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_index_src);
 	DEVICE_CREATE_FILE(dev, &dev_attr_index_mas);
 	DEVICE_CREATE_FILE(dev, &dev_attr_adc_mode);
-	DEVICE_CREATE_FILE(dev, &dev_attr_nacc);	
+	DEVICE_CREATE_FILE(dev, &dev_attr_nacc);
+	DEVICE_CREATE_FILE(dev, &dev_attr_RepeatingGateMode);
 }
 
 
@@ -519,7 +562,8 @@ static struct REGS_LUT {
 		REGS_LUT_ENTRY(ACQ164_TCR_IMMEDIATE),
 		REGS_LUT_ENTRY(ACQ164_TCR_LATCH),
 		REGS_LUT_ENTRY(ACQ164_RGATE),
-		REGS_LUT_ENTRY(ACQ164_CLK_COUNTER)
+		REGS_LUT_ENTRY(ACQ164_CLK_COUNTER),
+		REGS_LUT_ENTRY(ACQ164_GPG)
 	};
 
 #define REGS_LUT_ENTRIES (sizeof(regs_lut)/sizeof (struct REGS_LUT))
@@ -548,6 +592,7 @@ int acq200_dumpregs_diag(char* buf, int len)
 	APPEND(ACQ164_TCR_LATCH);
 	APPEND(ACQ164_RGATE);
 	APPEND(ACQ164_CLK_COUNTER);
+	APPEND(ACQ164_GPG);
 
 	return bp-buf;
 }
