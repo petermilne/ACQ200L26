@@ -1645,7 +1645,6 @@ static ssize_t status_tb_tpl_read (
 	}
 
 	tle = TBLE_LIST_ENTRY(tbc->tle_q.next);
-	list_del(&tle->list);
 
 	if (len < 8){
 		rc = snprintf(lbuf, len, "%3d\n", tle->tblock->iblock);
@@ -1660,7 +1659,14 @@ static ssize_t status_tb_tpl_read (
 	if (tbc->backlog){
 		--tbc->backlog;
 	}
+	spin_lock(&DG->tbc_regular.lock);
 
+	if ((DCI(file)->flags&DCI_FLAGS_NORELEASE_ON_READ) == 0){
+		acq200_phase_release_tblock_entry(tle);
+	}else{
+		list_move_tail(&tle->list, DCI_LIST(file));
+	}
+	spin_unlock(&DG->tbc_regular.lock);
 
 	COPY_TO_USER(buf, lbuf, rc);
 	return rc;
@@ -1892,12 +1898,6 @@ static ssize_t status2_tb_read (
 	char lbuf[80];
 	int rc;
 
-	if (tbc->c.tle){
-		spin_lock(&DG->tbc_regular.lock);
-		acq200_phase_release_tblock_entry(tbc->c.tle);
-		spin_unlock(&DG->tbc_regular.lock);	
-	}
-		
 	wait_event_interruptible(tbc->waitq, !list_empty(&tbc->tle_q));
 
 	if (list_empty(&tbc->tle_q)){
@@ -2340,7 +2340,6 @@ static int dma_fs_fill_super (struct super_block *sb, void *data, int silent)
 	static struct file_operations dma_tbstatus_tpl_ops = {
 		.open = dma_tb_open,
 		.read = status_tb_tpl_read,
-		.write = status_tb_write,
 		.release = dma_tb_release,
 		.poll = tb_poll
 	};
