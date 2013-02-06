@@ -976,6 +976,20 @@ static int acq200_decode_mac( char* str, unsigned char the_mac[] )
 		}
 	}
 	
+/* some u-boot prams use a 3 digit decimal number 100..254 ..
+ * this is _definately_ decimal!
+ */
+	{
+		char* c1 = str;
+		char* c2;
+		for ( ; *c1 != '\0' && (c2 = strchr(c1, ':')); c1 = c2+1){
+			if (c2 - c1 > 2){
+				is_hex_def = 0;
+				break;
+			}
+		}
+	}
+
 	if (!is_hex_def){
 		replace_count = sscanf(str, DECFMT,
 			&dmac[0], &dmac[1], &dmac[2],
