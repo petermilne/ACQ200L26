@@ -1054,7 +1054,7 @@ static int __init init_sn(char *str)
 			}
 		}else{
 			/* all acq196 >= 200 and all acq132, acq164 */
-			if (sn >= 30200){
+			if (sn > 30231){
 				is_hex_def = 1;
 			}
 		}
