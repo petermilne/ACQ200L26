@@ -151,6 +151,7 @@
 
 
 #define RTMT_C_REVID_HAS_TEMAC		(1<<23)
+#define RTMT_C_REVID_HAS_FUART		(1<<24)
 
 
 

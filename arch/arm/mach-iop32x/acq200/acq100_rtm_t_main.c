@@ -36,7 +36,7 @@
 
 #include "acq100_rtm_t.h"
 
-#define REVID	"acq100_rtm_t B1005"
+#define REVID	"acq100_rtm_t B1006"
 
 int rtm_t_debug;
 module_param(rtm_t_debug, int , 0644);
@@ -178,6 +178,11 @@ static int __init  rtm_t_probe(struct device *dev)
 		rc = acq100_rtm_t_uart_init((revid&RTMT_C_REVID_HAS_TEMAC) != 0);
 		if (rc != 0){
 			goto uart_fail;
+		}
+		if ((revid&RTMT_C_REVID_HAS_FUART) != 0){
+			*IOP321_PBBAR3 = 0xaa000000;
+			info("FUART capability %08x detected, setting PBBAR3 %08x",
+					RTMT_C_REVID_HAS_FUART, *IOP321_PBBAR3);
 		}
 		rc = rtm_t_spi_master_init(dev);
 
