@@ -36,7 +36,7 @@
 
 #include "acq100_rtm_t.h"
 
-#define REVID	"acq100_rtm_t B1006"
+#define REVID	"acq100_rtm_t B1007"
 
 int rtm_t_debug;
 module_param(rtm_t_debug, int , 0644);
@@ -46,7 +46,7 @@ module_param(rtm_t_masters_data, int, 0444);
 MODULE_PARM_DESC(rtm_t_masters_data, "1: normal RTM-T, 0: IOP push");
 
 
-static void __init acq100_redirect(void)
+static void acq100_redirect(void)
 {
 	struct resource mumem;
 
@@ -56,7 +56,7 @@ static void __init acq100_redirect(void)
 	info("set fifo.pa to %x, set SYSCON_DAC_RTM", DG->fpga.fifo.pa);
 }
 
-static void __exit acq100_restore(void)
+static void acq100_restore(void)
 {
 
 	DG->fpga.fifo.pa = ACQ200_FPGA_P+ACQ196_FIFO_OFFSET;
@@ -108,7 +108,41 @@ static ssize_t show_cable_connected(
 }
 
 static DEVICE_ATTR(cable_connected, S_IRUGO, show_cable_connected, 0);
-  
+
+
+/* Change of master at run time
+ * forces action on value change, unlike simple parameter.
+ * keep parameter rtm_t_masters_data for back compatibility.
+ */
+static ssize_t store_rtm_t_masters_data(
+	struct device * dev,
+	struct device_attribute *attr,
+	const char * buf, size_t count)
+{
+	int enable;
+
+	if (sscanf(buf, "%d", &enable) == 1){
+		if (enable){
+			acq100_redirect();
+		}else{
+			acq100_restore();
+		}
+		rtm_t_masters_data = enable != 0;
+	}
+        return strlen(buf);
+}
+
+static ssize_t show_rtm_t_masters_data(
+	struct device * dev,
+	struct device_attribute *attr,
+	char * buf)
+{
+	return sprintf(buf, "%d\n", rtm_t_masters_data);
+}
+
+static DEVICE_ATTR(rtm_t_masters_data, S_IRUGO|S_IWUGO,
+		show_rtm_t_masters_data, store_rtm_t_masters_data);
+
 static void mk_rtm_t_sysfs(struct device *dev)
 {
 	create_sfp_knobs(dev);
@@ -118,6 +152,7 @@ static void mk_rtm_t_sysfs(struct device *dev)
 	DEVICE_CREATE_FILE(dev, &dev_attr_mboxH2);
 
 	DEVICE_CREATE_FILE(dev, &dev_attr_cable_connected);	
+	DEVICE_CREATE_FILE(dev, &dev_attr_rtm_t_masters_data);
 }
 
 static inline int is_magic(u32 mtest)
