@@ -231,9 +231,12 @@ module_param(use_max_samples, int, 0644);
 int MAX_SAMPLES = 0;
 module_param(MAX_SAMPLES, int, 0644);
 
+int no_DO32 = 1;		/* DO NOT update DO32, attempt WDT fix */
+module_param(no_DO32, int, 0644);
+
 /** increment BUILD and VERID each build */
-#define BUILD 1107
-#define VERID "BUILD 1107"
+#define BUILD 1108
+#define VERID "BUILD 1108"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -1774,7 +1777,9 @@ void llc_loop_sync2V(int entry_code)
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
 				I_SCRATCH_DI32 = getDI32();
 				if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
-					setDO32(O_SCRATCH_DO32);
+					if (!no_DO32){
+						setDO32(O_SCRATCH_DO32);
+					}
 					if (host_wd_mask){
 						host_wd_action();
 					}
