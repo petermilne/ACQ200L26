@@ -195,6 +195,11 @@ module_param(DI_offset, int, 0644);
 #define I_SCRATCH_DI32 ACQ196_LL_AI_SCRATCH[DI_offset]
 #define I_SCRATCH_LASTE ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_LASTE]
 #define I_SCRATCH_DORB  ACQ196_LL_AI_SCRATCH[LLC_SYNC2V_IN_DO64]
+
+/** FIFO write:
+ *  0x00..0x20 hot copies to AO16
+ *  0x20..0x24 is IOP-readable here:
+ *  */
 #define O_SCRATCH_DO32  ACQ196_LL_AO_SCRATCH[0]
 
 #define PA_SCRATCH(off_words) \
@@ -231,12 +236,9 @@ module_param(use_max_samples, int, 0644);
 int MAX_SAMPLES = 0;
 module_param(MAX_SAMPLES, int, 0644);
 
-int no_DO32 = 1;		/* DO NOT update DO32, attempt WDT fix */
-module_param(no_DO32, int, 0644);
-
 /** increment BUILD and VERID each build */
-#define BUILD 1108
-#define VERID "BUILD 1108"
+#define BUILD 1109
+#define VERID "BUILD 1109"
 
 char acq100_llc_driver_name[] = "acq100-llc";
 char acq100_llc_driver_string[] = "D-TACQ Low Latency Control Device";
@@ -769,10 +771,9 @@ static void initAIdma_AO16(void)
 	ao_dmad->PUAD = dg.settings.PUAD;
 	ao_dmad->LAD = DG->fpga.fifo.pa;
 	ao_dmad->BC = acq100_llc_sync2V_AO_len == 0?
-		AO_BC + AO_SCRATCHPAD_SIZE:
-		acq100_llc_sync2V_AO_len;
+		AO_BC + AO_SCRATCHPAD_SIZE: acq100_llc_sync2V_AO_len;
 	ao_dmad->DC = DMA_DCR_PCI_MR;
-	dma_append_chain(&ai_dma, ao_dmad, "AO");
+	dma_append_chain(&ai_dma, ao_dmad, "AO16/DO32");
 
 	if (acq100_mem2mem){
 		ao_dmad->PDA = pa_buf(DG) + 0x100000;
@@ -808,9 +809,10 @@ static void initAIdma_AO32(void)
 		ao_dmad->MM_SRC = dg.settings.ao32.tmp_pa;
 		ao_dmad->PUAD = dg.settings.PUAD;
 		ao_dmad->MM_DST = DG->fpga.fifo.pa;
-		ao_dmad->BC = AO_BC;
+		ao_dmad->BC = acq100_llc_sync2V_AO_len == 0?
+			AO_BC + AO_SCRATCHPAD_SIZE: acq100_llc_sync2V_AO_len;
 		ao_dmad->DC = DMA_DCR_MEM2MEM;
-		dma_append_chain(&ai_dma, ao_dmad, "AO16");
+		dma_append_chain(&ai_dma, ao_dmad, "AO16/DO32");
 
 		for (ii = 0, ao32_offset = LLC_SYNC2V_AO32*sizeof(u32); 
 		     ii < dg.settings.ao32.count; ++ii, 
@@ -1777,9 +1779,7 @@ void llc_loop_sync2V(int entry_code)
 			if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DI){
 				I_SCRATCH_DI32 = getDI32();
 				if (acq100_llc_sync2V >= ACQ100_LLC_SYNC2V_DIDO){
-					if (!no_DO32){
-						setDO32(O_SCRATCH_DO32);
-					}
+					setDO32(O_SCRATCH_DO32);
 					if (host_wd_mask){
 						host_wd_action();
 					}
