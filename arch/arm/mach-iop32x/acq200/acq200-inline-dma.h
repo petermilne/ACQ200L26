@@ -148,15 +148,23 @@ static inline void dma_append_chain_recycle(
 	++channel->nchain;
 }
 
-static inline struct DmaChannel* dma_allocate_fill_channel(void)
+static inline struct DmaChannel* dma_allocate_fill_channel(int chan)
 {
 	struct DmaChannel* channel =
 		kzalloc(sizeof(struct DmaChannel), GFP_KERNEL);
 	int ii;
 
+	channel->id = chan;
+	channel->regs = chan==0? IOP321_DMA0_CCR: IOP321_DMA1_CCR;
+
 	for (ii = 0; ii < MAXCHAIN; ++ii){
 		channel->dmad[ii] = acq200_dmad_alloc();
-		memset(channel->dmad[ii], 0, sizeof(struct iop321_dma_desc));
+		channel->dmad[ii]->NDA =
+		channel->dmad[ii]->PDA =
+		channel->dmad[ii]->PUAD =
+		channel->dmad[ii]->LAD =
+		channel->dmad[ii]->BC =
+		channel->dmad[ii]->DC = 0;
 	}
 
 	return channel;

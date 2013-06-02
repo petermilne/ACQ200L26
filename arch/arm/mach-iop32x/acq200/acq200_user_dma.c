@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------- */
-/* file acq200_user_dma.c                                                                 */
+/* file acq200_user_dma.c                                                    */
 /* ------------------------------------------------------------------------- */
 /*   Copyright (C) 2011 Peter Milne, D-TACQ Solutions Ltd
  *                      <Peter dot Milne at D hyphen TACQ dot com>
@@ -86,6 +86,8 @@
 
 #include "acq200_user_dma.h"
 
+#include "acq200-fifo.h"
+
 #define acq200_user_dma_driver_name "acq200_user_dma"
 #define acq200_user_dma_version "B1000"
 #define acq200_user_dma_copyright "Copyright (c) 2013 D-TACQ Solutions Ltd"
@@ -99,24 +101,32 @@ module_param(debug, int, 0644);
 int dry_run = 1;
 module_param(dry_run, int, 0644);
 
+/* provide tblock pa's for convenience .. */
+int pa_000;
+module_param(pa_000, int, 0444);
+int pa_001;
+module_param(pa_001, int, 0444);
+
 #define DMACHAN(filp)  ((struct DmaChannel*)(filp)->private_data)
 
-static int print_chain(struct DmaChannel* channel, char* buf)
+static int print_chain(struct DmaChannel* channel)
 {
 	int ic;
 	int len = 0;
 	struct iop321_dma_desc* desc = channel->dmad[0];
+	char buf[128];
 
 	len += sprintf(buf+len, "[  ] %8s %8s %8s %8s %8s %8s\n",
 		       "NDA", "PDA/MMSRC", "PUAD", "LAD/MMDST", "BC", "DC");
 
 	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
-		len += sprintf(buf+len,
+		len += sprintf(buf,
 			       "[%2d] %08x %08x %08x %08x %08x %08x %s\n",
 			       ic,
 			       desc->NDA, desc->PDA, desc->PUAD,
 			       desc->LAD, desc->BC, desc->DC,
 			       channel->description[ic]);
+		printk(buf);
 	}
 	return len;
 }
@@ -138,10 +148,8 @@ static void actuallyFireDma(struct DmaChannel* channel)
 }
 static void maybeFireDma(struct DmaChannel* channel)
 {
-	char buf[256];
 	if (debug){
-		print_chain(channel, buf);
-		printk(buf);
+		print_chain(channel);
 	}
 	if (!dry_run){
 		actuallyFireDma(channel);
@@ -149,10 +157,15 @@ static void maybeFireDma(struct DmaChannel* channel)
 }
 static int acq200_user_dma_open(struct inode *inode, struct file *file)
 {
-	file->private_data = dma_allocate_fill_channel();
+	file->private_data = dma_allocate_fill_channel(1);
 	return 0;
 }
 
+/*
+ * pick off user data as blocks of u32[4], this is a full DMA instruction
+ * Q each instruction. If not chained, fire immediately and reset nchain
+ * return number of bytes written in normal way.0
+ */
 ssize_t acq200_user_dma_write(
 	struct file *file, const char *buf, size_t count, loff_t *f_pos)
 {
@@ -177,7 +190,7 @@ ssize_t acq200_user_dma_write(
 			dmad->BC = tmp[ACQ200_USER_DMA_BC];
 			dmad->DC = tmp[ACQ200_USER_DMA_DC]&ACQ200_USER_DMA_DC_MASK;
 			dma_append_chain_recycle(channel, "UDMA");
-			if (!make_chain || channel->nchain > MAXCHAIN -1){
+			if (!make_chain || channel->nchain > MAXCHAIN-1){
 				maybeFireDma(channel);
 				channel->nchain = 0;
 			}
@@ -242,6 +255,9 @@ static struct platform_device acq200_user_dma_device = {
 int __init acq200_user_dma_init_module(void)
 {
 	int rc;
+
+	pa_000 = pa_buf(DG);
+	pa_001 = pa_000 + TBLOCK_LEN(DG);
 
 	info("%s %s %s\n%s",
 			acq200_user_dma_driver_name,

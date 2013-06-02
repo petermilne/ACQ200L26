@@ -40,4 +40,6 @@
 
 #define ACQ200_USER_DMA_WRITE_LEN	(4*sizeof(u32))
 
+typedef unsigned DMADEF[4];
+
 #endif /* ACQ200_USER_DMA_H_ */
