@@ -71,6 +71,8 @@
 #endif
 #include <linux/module.h>
 
+#define MAXCHAIN 16
+#include "acq200-inline-dma.h"
 
 #include "acq200.h"
 #include "acq200-common.h"
@@ -82,6 +84,8 @@
 
 #include "acq200_hostdrv.h"
 
+#include "acq200_user_dma.h"
+
 #define acq200_user_dma_driver_name "acq200_user_dma"
 #define acq200_user_dma_version "B1000"
 #define acq200_user_dma_copyright "Copyright (c) 2013 D-TACQ Solutions Ltd"
@@ -89,13 +93,113 @@
 int acq200_user_dma_major = 0;
 module_param(acq200_user_dma_major, int, 0444);
 
+int debug = 1;
+module_param(debug, int, 0644);
+
+int dry_run = 1;
+module_param(dry_run, int, 0644);
+
+#define DMACHAN(filp)  ((struct DmaChannel*)(filp)->private_data)
+
+static int print_chain(struct DmaChannel* channel, char* buf)
+{
+	int ic;
+	int len = 0;
+	struct iop321_dma_desc* desc = channel->dmad[0];
+
+	len += sprintf(buf+len, "[  ] %8s %8s %8s %8s %8s %8s\n",
+		       "NDA", "PDA/MMSRC", "PUAD", "LAD/MMDST", "BC", "DC");
+
+	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
+		len += sprintf(buf+len,
+			       "[%2d] %08x %08x %08x %08x %08x %08x %s\n",
+			       ic,
+			       desc->NDA, desc->PDA, desc->PUAD,
+			       desc->LAD, desc->BC, desc->DC,
+			       channel->description[ic]);
+	}
+	return len;
+}
+
+static void actuallyFireDma(struct DmaChannel* channel)
+{
+	u32 stat;
+	int pollcat = 0;
+	DMA_ARM(*channel);
+	DMA_FIRE(*channel);
+
+	while(!DMA_DONE(*channel, stat)){
+		yield();
+		++pollcat;
+	}
+	if (debug){
+		T("pollcat:%d", pollcat);
+	}
+}
+static void maybeFireDma(struct DmaChannel* channel)
+{
+	char buf[256];
+	if (debug){
+		print_chain(channel, buf);
+		printk(buf);
+	}
+	if (!dry_run){
+		actuallyFireDma(channel);
+	}
+}
+static int acq200_user_dma_open(struct inode *inode, struct file *file)
+{
+	file->private_data = dma_allocate_fill_channel();
+	return 0;
+}
+
+ssize_t acq200_user_dma_write(
+	struct file *file, const char *buf, size_t count, loff_t *f_pos)
+{
+	struct DmaChannel* channel = DMACHAN(file);
+	u32 tmp[4];
+	int cursor = 0;
+
+	if (*f_pos == 0){
+		channel->nchain = 0;
+	}
+
+	for (cursor = 0; count >= cursor + ACQ200_USER_DMA_WRITE_LEN;
+			cursor += ACQ200_USER_DMA_WRITE_LEN) {
+		if (copy_from_user(tmp, buf+cursor, ACQ200_USER_DMA_WRITE_LEN)){
+			return -EFAULT;
+		}else{
+			struct iop321_dma_desc* dmad = channel->dmad[channel->nchain];
+			int make_chain = tmp[ACQ200_USER_DMA_DC]&ACQ200_USER_DMA_DC_CHAIN;
+
+			dmad->PDA = tmp[ACQ200_USER_DMA_PDA];
+			dmad->LAD = tmp[ACQ200_USER_DMA_LAD];
+			dmad->BC = tmp[ACQ200_USER_DMA_BC];
+			dmad->DC = tmp[ACQ200_USER_DMA_DC]&ACQ200_USER_DMA_DC_MASK;
+			dma_append_chain_recycle(channel, "UDMA");
+			if (!make_chain || channel->nchain > MAXCHAIN -1){
+				maybeFireDma(channel);
+				channel->nchain = 0;
+			}
+		}
+		*f_pos += ACQ200_USER_DMA_WRITE_LEN;
+	}
+
+	return cursor;
+}
+
+static int acq200_user_dma_release(struct inode *inode, struct file *file)
+{
+	dma_free_channel(DMACHAN(file));
+	return 0;
+}
+
 static int acq200_user_dma_probe(struct device * dev)
 {
 	static struct file_operations acq200_user_dma_fops = {
-			/*
-		open: acq200_user_dma_open,
-		release: acq200_user_dma_release
-		*/
+		.open	 = acq200_user_dma_open,
+		.release = acq200_user_dma_release,
+		.write   = acq200_user_dma_write
 	};
 
 	int rc;

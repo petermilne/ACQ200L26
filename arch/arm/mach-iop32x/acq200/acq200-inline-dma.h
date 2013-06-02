@@ -22,6 +22,7 @@
 #ifndef __ACQ200_INLINE_DMA_H__
 #define __ACQ200_INLINE_DMA_H__
 
+#include "acq200-dmac.h"
 #include <asm/arch/iop321-dma.h>
 #ifndef MAXCHAIN
 #define MAXCHAIN 8
@@ -127,6 +128,49 @@ static inline void dma_append_chain(
 	channel->dmad[nchain] = dmad;
 	channel->description[nchain] = description;
 	++channel->nchain;
+}
+
+static inline void dma_append_chain_recycle(
+	struct DmaChannel* channel,
+	const char *description)
+/* DMAD's are already present .. */
+{
+	int nchain = channel->nchain;
+
+	if (nchain >= MAXCHAIN) BUG();
+
+	if (nchain){
+		channel->dmad[nchain-1]->NDA = channel->dmad[nchain]->pa;
+	}
+
+	channel->dmad[nchain]->NDA = 0;
+	channel->description[nchain] = description;
+	++channel->nchain;
+}
+
+static inline struct DmaChannel* dma_allocate_fill_channel(void)
+{
+	struct DmaChannel* channel =
+		kzalloc(sizeof(struct DmaChannel), GFP_KERNEL);
+	int ii;
+
+	for (ii = 0; ii < MAXCHAIN; ++ii){
+		channel->dmad[ii] = acq200_dmad_alloc();
+		memset(channel->dmad[ii], 0, sizeof(struct iop321_dma_desc));
+	}
+
+	return channel;
+}
+
+void dma_free_channel(struct DmaChannel* channel)
+{
+	int ii;
+	for (ii = 0; ii < MAXCHAIN; ++ii){
+		if (channel->dmad[ii]){
+			acq200_dmad_free(channel->dmad[ii]);
+		}
+	}
+	kfree(channel);
 }
 
 #define DEFINE_DMA_CHANNEL(name, ch)		\
