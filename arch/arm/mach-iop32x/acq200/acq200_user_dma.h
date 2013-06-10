@@ -36,6 +36,8 @@
 #define ACQ200_USER_DMA_DC	3
 
 #define ACQ200_USER_DMA_DC_CHAIN	0x80000000
+#define ACQ200_USER_DMA_DC_CACHE_FLUSH	0x40000000 /* tell driver to flush this data */
+#define ACQ200_USER_DMA_DC_CACHE_INVAL  0x20000000 /* tell driver to invalidate this region before returning it */
 #define ACQ200_USER_DMA_DC_MASK		0x0000ffff
 
 #define ACQ200_USER_DMA_WRITE_LEN	(4*sizeof(u32))

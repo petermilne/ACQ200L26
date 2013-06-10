@@ -131,6 +131,23 @@ static int print_chain(struct DmaChannel* channel)
 	return len;
 }
 
+static int invalidate_chain_user_req(struct DmaChannel* channel)
+{
+	int ic;
+	int len = 0;
+	struct iop321_dma_desc* desc = channel->dmad[0];
+	char buf[128];
+
+	len += sprintf(buf+len, "[  ] %8s %8s %8s %8s %8s %8s\n",
+		       "NDA", "PDA/MMSRC", "PUAD", "LAD/MMDST", "BC", "DC");
+
+	for (ic = 0; ic < channel->nchain; ++ic, ++desc){
+		if ((unsigned)desc->clidat&ACQ200_USER_DMA_DC_CACHE_INVAL){
+			pci_dma_sync_single_for_cpu(NULL, desc->LAD, desc->BC, DMA_FROM_DEVICE);
+		}
+	}
+	return len;
+}
 static void actuallyFireDma(struct DmaChannel* channel)
 {
 	u32 stat;
@@ -177,6 +194,8 @@ ssize_t acq200_user_dma_write(
 		channel->nchain = 0;
 	}
 
+
+
 	for (cursor = 0; count >= cursor + ACQ200_USER_DMA_WRITE_LEN;
 			cursor += ACQ200_USER_DMA_WRITE_LEN) {
 		if (copy_from_user(tmp, buf+cursor, ACQ200_USER_DMA_WRITE_LEN)){
@@ -189,7 +208,14 @@ ssize_t acq200_user_dma_write(
 			dmad->LAD = tmp[ACQ200_USER_DMA_LAD];
 			dmad->BC = tmp[ACQ200_USER_DMA_BC];
 			dmad->DC = tmp[ACQ200_USER_DMA_DC]&ACQ200_USER_DMA_DC_MASK;
+			dmad->clidat = (void*)tmp[ACQ200_USER_DMA_DC];
 			dma_append_chain_recycle(channel, "UDMA");
+
+			/** flush outbound caches */
+			if (tmp[ACQ200_USER_DMA_DC]&ACQ200_USER_DMA_DC_CACHE_FLUSH){
+				pci_dma_sync_single_for_device(
+						NULL, dmad->LAD, dmad->BC, DMA_TO_DEVICE);
+			}
 			if (!make_chain || channel->nchain > MAXCHAIN-1){
 				maybeFireDma(channel);
 				channel->nchain = 0;
@@ -197,6 +223,9 @@ ssize_t acq200_user_dma_write(
 		}
 		*f_pos += ACQ200_USER_DMA_WRITE_LEN;
 	}
+
+	/* now invalidate inbound caches */
+	invalidate_chain_user_req(channel);
 
 	return cursor;
 }
