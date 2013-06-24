@@ -198,7 +198,7 @@
 
 
 static inline int acq164_isRGM() {
-	return *ACQ164_RGM & ACQ164_RGM_ENABLE != 0;
+	return (*ACQ164_RGM & ACQ164_RGM_ENABLE) != 0;
 }
 static inline u32 acq164_syscon_set(u32 flags) {
 	return *ACQ164_SYSCON |= flags;
