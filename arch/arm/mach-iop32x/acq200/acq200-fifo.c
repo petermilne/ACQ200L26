@@ -2552,7 +2552,7 @@ static int _oneshot_wait_for_done(void)
 				oneshot_wait_for_done_timeout_jiffies);
 			if (wo->error || DG->finished_with_engines){
 				if (ntimeout == 0){
-					info("finished on timeout");
+					dbg(1, "finished on timeout");
 				}
 			}
 			++DG->stats.busy_pollcat;
