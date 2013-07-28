@@ -105,6 +105,10 @@ int stop_on_event=1;
 module_param(stop_on_event, int, 0644);
 MODULE_PARM_DESC(stop_on_event, "force processing stop on first event");
 
+int stub_stop_work = 1;
+module_param(stub_stop_work, int, 0644);
+
+
 #define TD_SZ (sizeof(struct tree_descr))
 #define MY_FILES_SZ(numchan) ((1+(numchan)+1+5+1)*TD_SZ)
 
@@ -405,9 +409,11 @@ static void start_work(void *clidata)
 }
 static void stop_work(void)
 {
-	dbg(1, "01");
-	acq200_delRefillClient(&mean_work_client);
-	dbg(1, "99");            
+	if (!stub_stop_work){
+		dbg(1, "01");
+		acq200_delRefillClient(&mean_work_client);
+		dbg(1, "99");
+	}
 }
 
 static void stop_work_hook(void* unused)
