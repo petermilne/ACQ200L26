@@ -22,7 +22,7 @@
 #define ACQ_IS_INPUT 1
 
 #define MODEL_VERID							\
-	"$Id: acq164-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1013\n"
+	"$Id: acq164-fifo.c,v 1.13 2006/10/04 11:14:12 pgm Exp $ B1016\n"
 
 #define FPGA_INT   IRQ_ACQ100_FPGA
 #define FPGA_INT_MASK (1<<FPGA_INT)
@@ -743,6 +743,9 @@ static const char* ACQ164_CLKDO3_MENU[] = {
 static const char *ACQ164_DO345_MENU[] = {
 	"none", "DO3", "DO4", "DO5", 0
 };
+static const char *ACQ164_DI345_MENU[] = {
+	"none", "DI3", "DI4", "DI5", 0
+};
 
 static int acq164_commitClkXX(
 		struct Signal* signal, int shl)
@@ -779,6 +782,7 @@ static int acq164_commitIndexMas(struct Signal* signal)
 	return acq164_commitClkXX(signal, ACQ164_CLKCON_OIND_SHIFT);
 }
 
+
 static int _acq164_commitEvX(
 	struct Signal* signal, 
 	volatile u32* reg,
@@ -800,11 +804,8 @@ static int _acq164_commitEvX(
 	return 0;
 }
 
-static inline int acq164_commitSyncTrig(struct Signal *signal)
-{
-	return _acq164_commitEvX(
-		signal, ACQ164_SYSCON, ACQ164_SYSCON_OTR_SHIFT);
-}
+
+
 static inline int acq164_commitEv0(struct Signal* signal)
 {
 	return _acq164_commitEvX(
@@ -821,6 +822,34 @@ static inline int acq164_commitTrg(struct Signal* signal)
 		signal, ACQ164_SYSCON, ACQ164_SYSCON_TRG_SHIFT);
 }
 
+static int _acq164_commitTrigXXX(
+	struct Signal* signal,
+	volatile u32* reg,
+	int shift)
+{
+	u32 syscon = *reg;
+
+	syscon &= ~(0x3 << shift);
+
+	if (signal->is_active){
+		u32 linecode = signal->px[SIG_LINE].ix;
+		syscon |= linecode << shift;
+	}
+
+	*reg = syscon;
+	return 0;
+}
+static inline int acq164_commitSyncTrigMas(struct Signal *signal)
+{
+	return _acq164_commitTrigXXX(
+		signal, ACQ164_SYSCON, ACQ164_SYSCON_OTR_SHIFT);
+}
+
+static inline int acq164_commitSyncTrigSrc(struct Signal *signal)
+{
+	return _acq164_commitTrigXXX(
+		signal, ACQ164_SYSCON, ACQ164_SYSCON_ITR_SHIFT);
+}
 static int acq164_commitAOTrg(struct Signal* signal)
 {
 	return _acq164_commitEvX(
@@ -920,9 +949,12 @@ static struct CAPDEF* acq164_createCapdef(void)
 	capdef->ao_trig = createSignal(
 		"ao_trig", SIG(EVS), 3, SIG(EDG), 0, acq164_commitAOTrg);
 
+	capdef->sync_trig_src = createSignal(
+		"sync_trig_src", ACQ164_DI345_MENU, 0, 0, 0,
+		acq164_commitSyncTrigSrc);
 	capdef->sync_trig_mas = createSignal(
-		"sync_trig_mas", ACQ164_DO345_MENU,0, 0,0,
-		acq164_commitSyncTrig);
+		"sync_trig_mas", ACQ164_DO345_MENU, 0, 0, 0,
+		acq164_commitSyncTrigMas);
 	/* @todo - ext clk is int_clk_src ? */
 	capdef->ext_clk = createSignal(
 		"ext_clk", ACQ164_CLKDI3_MENU, 0, SIG(EDG), 0,
