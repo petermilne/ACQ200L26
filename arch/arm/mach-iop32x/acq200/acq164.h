@@ -130,8 +130,8 @@
 
 #define ACQ196_SYSCON_EC_SHIFT  5
 
-
-#define ACQ164_SYSCON_OTR_SHIFT	24
+#define ACQ164_SYSCON_ITR_SHIFT 26	/* Sync Trigger INPUT Select */
+#define ACQ164_SYSCON_OTR_SHIFT	24	/* Sync Trigger OUTPUT Select */
 
 #define ACQ164_SYSCON_OTR_DIS	0x0
 #define ACQ164_SYSCON_OTR_DO3	0x1
@@ -197,7 +197,7 @@
 #ifndef __ASSEMBLER__
 
 
-static inline int acq164_isRGM() {
+static inline int acq164_isRGM(void) {
 	return (*ACQ164_RGM & ACQ164_RGM_ENABLE) != 0;
 }
 static inline u32 acq164_syscon_set(u32 flags) {
