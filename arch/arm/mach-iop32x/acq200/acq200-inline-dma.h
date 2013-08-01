@@ -170,7 +170,7 @@ static inline struct DmaChannel* dma_allocate_fill_channel(int chan)
 	return channel;
 }
 
-void dma_free_channel(struct DmaChannel* channel)
+static inline void dma_free_channel(struct DmaChannel* channel)
 {
 	int ii;
 	for (ii = 0; ii < MAXCHAIN; ++ii){
